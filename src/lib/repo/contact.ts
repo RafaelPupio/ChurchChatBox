@@ -20,8 +20,29 @@ export async function findOrCreateContact(
     return { contact: existing[0], isFirstContact: false };
   }
 
-  const [created] = await db.insert(contact).values({ churchId, phone, name }).returning();
-  return { contact: created, isFirstContact: true };
+  const [created] = await db
+    .insert(contact)
+    .values({ churchId, phone, name })
+    .onConflictDoNothing({ target: [contact.churchId, contact.phone] })
+    .returning();
+
+  if (created) {
+    return { contact: created, isFirstContact: true };
+  }
+
+  // Lost the race: another invocation created this contact between our SELECT and
+  // INSERT. Re-fetch it — they are no longer a first contact.
+  const [raced] = await db
+    .select()
+    .from(contact)
+    .where(and(eq(contact.churchId, churchId), eq(contact.phone, phone)))
+    .limit(1);
+
+  if (!raced) {
+    throw new Error(`Contact race condition: could not find contact after conflicted insert for churchId=${churchId}, phone=${phone}`);
+  }
+
+  return { contact: raced, isFirstContact: false };
 }
 
 export async function updateContactMode(contactId: string, mode: ContactMode): Promise<void> {
