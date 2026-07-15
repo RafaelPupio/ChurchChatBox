@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   LIST_ROW_TITLE_MAX,
+  MenuEmptyError,
   MenuTooLongError,
   buildImagePayload,
   buildListPayload,
@@ -62,6 +63,15 @@ describe('buildListPayload', () => {
     }));
     expect(() => buildListPayload('5511999', 'B', 'C', eleven)).toThrow(/10/);
     expect(() => buildListPayload('5511999', 'B', 'C', eleven)).toThrow(MenuTooLongError);
+  });
+
+  it('throws a MenuEmptyError instead of silently returning a zero-row payload', () => {
+    const none: MenuItemView[] = [
+      { id: 'x', position: 1, label: 'Hidden', bodyText: '', imageUrl: null, isActive: false, kind: 'content' },
+    ];
+    expect(() => buildListPayload('5511999', 'B', 'C', none)).toThrow(MenuEmptyError);
+    // Also true for a wholly empty items array (unseeded church).
+    expect(() => buildListPayload('5511999', 'B', 'C', [])).toThrow(MenuEmptyError);
   });
 });
 
@@ -147,6 +157,20 @@ describe('sendReply — menu send fallback', () => {
 
     // Must not have retried with the numbered fallback — a single failed call only.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the body text only, and warns, when there are zero active items', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await sendReply(creds, '5511999', menuReply, config, []);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.type).toBe('text');
+    expect(body.text.body).toBe('CABECALHO');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 });
 

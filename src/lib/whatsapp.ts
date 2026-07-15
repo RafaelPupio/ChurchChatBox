@@ -11,6 +11,12 @@ export const LIST_ROW_TITLE_MAX = 24;
  *  so sendReply can catch it specifically and fall back to the numbered text. */
 export class MenuTooLongError extends Error {}
 
+/** Thrown by buildListPayload when there are zero active items. Meta requires
+ *  interactive lists to carry 1–10 rows; a zero-row payload would 400 at Graph.
+ *  Distinct from MenuTooLongError so sendReply can route each case to the right
+ *  fallback (numbered text vs. plain body text). */
+export class MenuEmptyError extends Error {}
+
 export function buildTextPayload(to: string, body: string) {
   return { messaging_product: 'whatsapp', to, type: 'text', text: { body } };
 }
@@ -37,6 +43,13 @@ export function truncateRowTitle(label: string): string {
 
 export function buildListPayload(to: string, bodyText: string, buttonLabel: string, items: MenuItemView[]) {
   const active = activeItemsSorted(items);
+
+  if (active.length === 0) {
+    throw new MenuEmptyError(
+      'No active menu items; WhatsApp interactive lists require at least 1 row. ' +
+        'Seed the menu or unhide an item in the panel.',
+    );
+  }
 
   if (active.length > WHATSAPP_LIST_MAX_ROWS) {
     throw new MenuTooLongError(
@@ -110,6 +123,14 @@ async function post(creds: WhatsAppCredentials, payload: object): Promise<void> 
   }
 }
 
+/** Sends a plain text message. The one non-menu entry point other code (e.g. the
+ *  webhook's failure apology) should use instead of hand-rolling a fetch call —
+ *  this is the only module allowed to talk to the Graph API, and going through
+ *  `post()` guarantees a non-2xx response throws instead of failing silently. */
+export async function sendText(creds: WhatsAppCredentials, to: string, body: string): Promise<void> {
+  await post(creds, buildTextPayload(to, body));
+}
+
 export async function sendReply(
   creds: WhatsAppCredentials,
   to: string,
@@ -127,18 +148,29 @@ export async function sendReply(
     return;
   }
 
-  // Interactive list first; fall back to the numbered text built from the same rows.
-  // The catch is intentionally narrow: MenuTooLongError is a local, expected failure
-  // (>10 active items) where the numbered fallback is the right answer. Any other
-  // error — e.g. a Graph API failure from `post()` (bad token, rate limit, network
-  // blip) — must NOT trigger a retry here. Retrying with the same credentials would
-  // likely fail identically, would bury the real error behind a misleading log, and
-  // could double-send if Meta already queued the first message. Let it propagate;
-  // the webhook layer already catches errors and sends the church's configured
-  // error_text to the member. Do not widen this catch back to `Error`.
+  // Interactive list first; fall back for the two local, expected conditions where
+  // Graph would otherwise 400: MenuTooLongError (>10 active items — send the
+  // numbered text built from the same rows) and MenuEmptyError (0 active items —
+  // send just the body text, since a numbered list of nothing is nonsensical).
+  // Any other error — e.g. a Graph API failure from `post()` (bad token, rate
+  // limit, network blip) — must NOT trigger a retry here. Retrying with the same
+  // credentials would likely fail identically, would bury the real error behind a
+  // misleading log, and could double-send if Meta already queued the first
+  // message. Let it propagate; the webhook layer already catches errors and sends
+  // the church's configured error_text to the member. Do not widen this catch back
+  // to `Error`.
   try {
     await post(creds, buildListPayload(to, reply.bodyText, config.menuButtonLabel, items));
   } catch (error) {
+    if (error instanceof MenuEmptyError) {
+      console.error(
+        'Menu has zero active items — sending body text only instead of an interactive list. ' +
+          'Seed the menu or unhide an item in the panel.',
+        error,
+      );
+      await post(creds, buildTextPayload(to, reply.bodyText));
+      return;
+    }
     if (!(error instanceof MenuTooLongError)) throw error;
     console.error('Menu exceeds the interactive list limit; sending numbered text instead', error);
     await post(creds, buildNumberedTextPayload(to, reply.bodyText, items));

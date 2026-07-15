@@ -31,12 +31,20 @@ describe('parseInbound', () => {
     });
   });
 
-  it('parses an interactive list reply', () => {
+  it('parses an interactive list reply, carrying the title through', () => {
     const result = parseInbound(envelope({
       id: 'wamid.2', from: '5511999', type: 'interactive',
       interactive: { type: 'list_reply', list_reply: { id: 'horarios', title: '⛪ Horários' } },
     }));
-    expect(result?.message).toEqual({ kind: 'list_reply', itemId: 'horarios' });
+    expect(result?.message).toEqual({ kind: 'list_reply', itemId: 'horarios', title: '⛪ Horários' });
+  });
+
+  it('falls back to the item id as the title when Meta omits it', () => {
+    const result = parseInbound(envelope({
+      id: 'wamid.2b', from: '5511999', type: 'interactive',
+      interactive: { type: 'list_reply', list_reply: { id: 'horarios' } },
+    }));
+    expect(result?.message).toEqual({ kind: 'list_reply', itemId: 'horarios', title: 'horarios' });
   });
 
   it.each(['audio', 'sticker', 'image', 'video', 'document', 'location'])('marks %s as unsupported', (type) => {

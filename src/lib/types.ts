@@ -30,7 +30,11 @@ export interface ChurchConfig {
 
 export type InboundMessage =
   | { kind: 'text'; text: string }
-  | { kind: 'list_reply'; itemId: string }
+  // `title` is optional so existing construction sites (router tests, etc.) that
+  // only care about itemId keep compiling. parseInbound always populates it (with
+  // a sensible fallback) so nothing is lost when persisting message history — see
+  // Finding 4. The router must never read it; it selects by itemId only.
+  | { kind: 'list_reply'; itemId: string; title?: string }
   | { kind: 'unsupported' };
 
 export type Reply =

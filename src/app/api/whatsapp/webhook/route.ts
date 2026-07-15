@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseInbound } from '@/lib/inbound';
 import { route } from '@/lib/menu-router';
-import { buildTextPayload, GRAPH_API_VERSION, sendReply, verifySignature } from '@/lib/whatsapp';
+import { effectiveMode } from '@/lib/contact-mode';
+import { sendReply, sendText, verifySignature } from '@/lib/whatsapp';
 import { findChurchByPhoneNumberId, toChurchConfig, type ChurchRecord } from '@/lib/repo/church';
 import { loadMenuItems } from '@/lib/repo/menu';
 import { findOrCreateContact, touchLastInbound, updateContactMode } from '@/lib/repo/contact';
@@ -75,25 +76,45 @@ export async function POST(request: NextRequest) {
     const { contact, isFirstContact } = await findOrCreateContact(churchRecord.id, inbound.from, inbound.name);
 
     // Dedupe: false means Meta re-delivered a message we already answered.
+    // For a list tap, store the row's title (not the bare id) so the future admin
+    // inbox can render real history instead of a blank bubble — see Finding 4.
     const isNew = await recordInboundMessage({
       churchId: churchRecord.id,
       contactId: contact.id,
       waMessageId: inbound.waMessageId,
-      body: inbound.message.kind === 'text' ? inbound.message.text : null,
+      body:
+        inbound.message.kind === 'text'
+          ? inbound.message.text
+          : inbound.message.kind === 'list_reply'
+            ? (inbound.message.title ?? null)
+            : null,
     });
     if (!isNew) return NextResponse.json({ ok: true });
 
     await touchLastInbound(contact.id);
 
-    const items = await loadMenuItems(churchRecord.id);
-    const result = route({ config, items, mode: contact.mode, message: inbound.message, isFirstContact });
+    // Staff have 24h to pick up a `human` handoff (see contact-mode.ts). Compute
+    // the effective mode here, at the edge — the router stays pure and must never
+    // learn about wall-clock time — and route on THAT, not the possibly-stale
+    // stored mode.
+    const mode = effectiveMode(contact.mode, contact.modeChangedAt, new Date());
 
-    if (result.prayerRequestText) {
-      await savePrayerRequest(churchRecord.id, contact.id, result.prayerRequestText);
+    // If the 24h window already lapsed, persist the reversion right away. This is
+    // independent of whether today's reply succeeds below: the timeout already
+    // happened, so the correction is true regardless of this message's outcome.
+    // Persisting it now also means the contact isn't re-evaluated as stale forever.
+    if (mode !== contact.mode) {
+      await updateContactMode(contact.id, mode);
     }
 
-    if (result.nextMode !== contact.mode) {
-      await updateContactMode(contact.id, result.nextMode);
+    const items = await loadMenuItems(churchRecord.id);
+    const result = route({ config, items, mode, message: inbound.message, isFirstContact });
+
+    // Deliberately BEFORE the send loop: a saved prayer whose confirmation later
+    // fails to send is recoverable (staff can still see it); a prayer that was
+    // never saved because a send failed first would be lost forever.
+    if (result.prayerRequestText) {
+      await savePrayerRequest(churchRecord.id, contact.id, result.prayerRequestText);
     }
 
     for (const reply of result.replies) {
@@ -103,6 +124,17 @@ export async function POST(request: NextRequest) {
         contactId: contact.id,
         body: reply.type === 'menu' ? reply.bodyText : reply.body,
       });
+    }
+
+    // Deliberately AFTER the send loop, and compared against the effective mode
+    // (not the stale stored one): if sendReply throws partway through, the mode
+    // transition this result implies (e.g. "human" for a handoff, or
+    // "awaiting_prayer" for a prompt) must not be committed. Otherwise a member
+    // could be silenced without ever receiving the "someone will help you"
+    // message, or have their next ordinary message silently swallowed as a
+    // prayer request nobody prompted them for.
+    if (result.nextMode !== mode) {
+      await updateContactMode(contact.id, result.nextMode);
     }
   } catch (error) {
     // Fail toward the human, never toward silence.
@@ -127,12 +159,9 @@ async function notifyFailure(verified: { church: ChurchRecord; to: string }): Pr
   const { church: churchRecord, to } = verified;
   if (!churchRecord.accessToken || !churchRecord.phoneNumberId) return;
 
-  await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${churchRecord.phoneNumberId}/messages`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${churchRecord.accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(buildTextPayload(to, churchRecord.errorText)),
-  });
+  // Goes through whatsapp.ts's sendText — the only module allowed to talk to the
+  // Graph API — so a non-2xx response (bad token, rate limit, ...) throws instead
+  // of failing silently, and the caller's .catch() logs it.
+  const creds = { phoneNumberId: churchRecord.phoneNumberId, accessToken: churchRecord.accessToken };
+  await sendText(creds, to, churchRecord.errorText);
 }
