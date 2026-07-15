@@ -36,10 +36,17 @@ export function route(input: RouterInput): RouterResult {
     }
 
     if (mode === 'awaiting_prayer') {
+      const trimmed = message.text.trim();
+      if (!trimmed) {
+        return {
+          replies: [{ type: 'text', body: config.prayerPromptText }],
+          nextMode: 'awaiting_prayer',
+        };
+      }
       return {
         replies: [{ type: 'text', body: config.prayerThanksText }],
         nextMode: 'bot',
-        prayerRequestText: message.text.trim(),
+        prayerRequestText: trimmed,
       };
     }
 

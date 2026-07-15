@@ -127,4 +127,26 @@ describe('route — prayer flow', () => {
     expect(result.replies[0]).toEqual({ type: 'text', body: 'CULTOS' });
     expect(result.nextMode).toBe('bot');
   });
+
+  it.each(['', '   ', '\t', '\n'])('re-prompts instead of capturing whitespace-only input %j', (text) => {
+    const result = route({
+      ...base,
+      mode: 'awaiting_prayer',
+      message: { kind: 'text', text },
+    });
+    expect(result.prayerRequestText).toBeUndefined();
+    expect(result.replies).toEqual([{ type: 'text', body: 'ESCREVA_PEDIDO' }]);
+    expect(result.nextMode).toBe('awaiting_prayer');
+  });
+
+  it('regression: captures non-empty prayer with surrounding whitespace trimmed', () => {
+    const result = route({
+      ...base,
+      mode: 'awaiting_prayer',
+      message: { kind: 'text', text: '  Orem pela cura  ' },
+    });
+    expect(result.prayerRequestText).toBe('Orem pela cura');
+    expect(result.replies).toEqual([{ type: 'text', body: 'RECEBEMOS' }]);
+    expect(result.nextMode).toBe('bot');
+  });
 });
