@@ -32,28 +32,40 @@ const MENU_SEED = [
 ];
 
 async function seed() {
+  // Step 1: Ensure church exists (idempotent)
+  let churchRow = null;
   const existing = await db.select().from(church).limit(1);
 
   if (existing.length > 0) {
-    console.log(`Church already seeded (${existing[0].name}) — nothing to do.`);
-    return;
+    churchRow = existing[0];
+    console.log(`Using existing church: ${churchRow.name}`);
+  } else {
+    const [created] = await db.insert(church).values(CHURCH_DEFAULTS).returning();
+    churchRow = created;
+    console.log(`Created church: ${churchRow.name} (id: ${churchRow.id})`);
   }
 
-  const [created] = await db.insert(church).values(CHURCH_DEFAULTS).returning();
-  console.log(`Created church ${created.id}`);
+  // Step 2: Check and ensure menu items (independently idempotent)
+  const menuItems = await db.select().from(menuItem).where(eq(menuItem.churchId, churchRow.id));
 
-  await db.insert(menuItem).values(
-    MENU_SEED.map((item) => ({ ...item, churchId: created.id })),
-  );
-  console.log(`Inserted ${MENU_SEED.length} menu items`);
+  if (menuItems.length === 0) {
+    // Menu is missing or incomplete from a prior partial failure — insert all items
+    await db.insert(menuItem).values(
+      MENU_SEED.map((item) => ({ ...item, churchId: churchRow.id })),
+    );
+    console.log(`Inserted ${MENU_SEED.length} menu items`);
+  } else {
+    // Menu exists; respect any staff edits
+    console.log(`Church already has ${menuItems.length} menu items — no changes made`);
+  }
 
-  const rows = await db.select().from(menuItem).where(eq(menuItem.churchId, created.id));
-  console.log(`Verified ${rows.length} rows in the menu.`);
+  // Final summary
+  const finalMenuCount = menuItems.length === 0 ? MENU_SEED.length : menuItems.length;
+  console.log(`Seed complete: church "${churchRow.name}" with ${finalMenuCount} menu items`);
 }
 
 seed()
-  .then(() => process.exit(0))
   .catch((error) => {
     console.error(error);
-    process.exit(1);
+    process.exitCode = 1;
   });
