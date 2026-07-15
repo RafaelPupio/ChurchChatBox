@@ -31,6 +31,12 @@ const MENU_SEED = [
   { position: 9, label: '💬 Falar com Atendente', kind: 'human' as const, bodyText: '' },
 ];
 
+// Church and menu are checked independently on purpose. The neon-http driver has
+// no transaction support, so these two inserts cannot be atomic: if the menu
+// insert fails, the church row survives with zero menu rows. A guard that only
+// looked for the church would then report "already seeded" forever and never
+// repair it, leaving members staring at an empty menu. Checking each separately
+// means a rerun finishes the job.
 async function seed() {
   // Step 1: Ensure church exists (idempotent)
   let churchRow = null;
