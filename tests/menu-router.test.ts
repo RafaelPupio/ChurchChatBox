@@ -88,3 +88,43 @@ describe('route — content items', () => {
     }
   );
 });
+
+describe('route — prayer flow', () => {
+  it('prompts for the request when the prayer item is tapped', () => {
+    const result = route({ ...base, message: { kind: 'list_reply', itemId: 'oracao' } });
+    expect(result.replies).toEqual([{ type: 'text', body: 'ESCREVA_PEDIDO' }]);
+    expect(result.nextMode).toBe('awaiting_prayer');
+    expect(result.prayerRequestText).toBeUndefined();
+  });
+
+  it('captures the next message as the request and thanks the sender', () => {
+    const result = route({
+      ...base,
+      mode: 'awaiting_prayer',
+      message: { kind: 'text', text: '  Orem pela minha mãe  ' },
+    });
+    expect(result.prayerRequestText).toBe('Orem pela minha mãe');
+    expect(result.replies).toEqual([{ type: 'text', body: 'RECEBEMOS' }]);
+    expect(result.nextMode).toBe('bot');
+  });
+
+  it('saves a request even when it looks like a menu number', () => {
+    const result = route({ ...base, mode: 'awaiting_prayer', message: { kind: 'text', text: '1' } });
+    expect(result.prayerRequestText).toBe('1');
+    expect(result.nextMode).toBe('bot');
+  });
+
+  it('cancels the prayer when an escape word is typed', () => {
+    const result = route({ ...base, mode: 'awaiting_prayer', message: { kind: 'text', text: 'menu' } });
+    expect(result.prayerRequestText).toBeUndefined();
+    expect(result.replies).toEqual([{ type: 'menu', bodyText: 'CABECALHO' }]);
+    expect(result.nextMode).toBe('bot');
+  });
+
+  it('cancels the prayer when a menu item is tapped instead', () => {
+    const result = route({ ...base, mode: 'awaiting_prayer', message: { kind: 'list_reply', itemId: 'horarios' } });
+    expect(result.prayerRequestText).toBeUndefined();
+    expect(result.replies[0]).toEqual({ type: 'text', body: 'CULTOS' });
+    expect(result.nextMode).toBe('bot');
+  });
+});

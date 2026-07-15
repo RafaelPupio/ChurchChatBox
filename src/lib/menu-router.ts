@@ -35,6 +35,14 @@ export function route(input: RouterInput): RouterResult {
       return { replies: [menuReply(config.menuHeaderText)], nextMode: 'bot' };
     }
 
+    if (mode === 'awaiting_prayer') {
+      return {
+        replies: [{ type: 'text', body: config.prayerThanksText }],
+        nextMode: 'bot',
+        prayerRequestText: message.text.trim(),
+      };
+    }
+
     if (/^\d+$/.test(text)) {
       const index = Number(text);
       if (index >= 1 && index <= active.length) {
