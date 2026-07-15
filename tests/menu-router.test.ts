@@ -150,3 +150,40 @@ describe('route — prayer flow', () => {
     expect(result.nextMode).toBe('bot');
   });
 });
+
+describe('route — human handoff', () => {
+  it('announces the handoff and switches to human mode', () => {
+    const result = route({ ...base, message: { kind: 'list_reply', itemId: 'atendente' } });
+    expect(result.replies).toEqual([{ type: 'text', body: 'UM_MOMENTO' }]);
+    expect(result.nextMode).toBe('human');
+  });
+
+  it.each([
+    { kind: 'text' as const, text: 'oi' },
+    { kind: 'text' as const, text: 'menu' },
+    { kind: 'list_reply' as const, itemId: 'horarios' },
+    { kind: 'unsupported' as const },
+  ])('stays completely silent in human mode for %j', (message) => {
+    const result = route({ ...base, mode: 'human', message });
+    expect(result.replies).toEqual([]);
+    expect(result.nextMode).toBe('human');
+    expect(result.prayerRequestText).toBeUndefined();
+  });
+});
+
+describe('route — unsupported media', () => {
+  it('explains and re-offers the menu', () => {
+    const result = route({ ...base, message: { kind: 'unsupported' } });
+    expect(result.replies).toEqual([
+      { type: 'text', body: 'SO_TEXTO' },
+      { type: 'menu', bodyText: 'CABECALHO' },
+    ]);
+    expect(result.nextMode).toBe('bot');
+  });
+
+  it('does not capture media as a prayer request', () => {
+    const result = route({ ...base, mode: 'awaiting_prayer', message: { kind: 'unsupported' } });
+    expect(result.prayerRequestText).toBeUndefined();
+    expect(result.nextMode).toBe('awaiting_prayer');
+  });
+});

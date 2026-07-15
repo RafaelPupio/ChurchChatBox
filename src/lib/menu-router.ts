@@ -22,6 +22,21 @@ function contentReplies(item: MenuItemView, menuHeaderText: string): Reply[] {
 export function route(input: RouterInput): RouterResult {
   const { config, items, mode, message, isFirstContact } = input;
 
+  // Human mode: the bot is silent. Staff own this conversation until they end it.
+  if (mode === 'human') {
+    return { replies: [], nextMode: 'human' };
+  }
+
+  if (message.kind === 'unsupported') {
+    return {
+      replies: [
+        { type: 'text', body: config.unsupportedMediaText },
+        menuReply(config.menuHeaderText),
+      ],
+      nextMode: mode === 'awaiting_prayer' ? 'awaiting_prayer' : 'bot',
+    };
+  }
+
   const active = activeItemsSorted(items);
 
   let selected: MenuItemView | undefined;
