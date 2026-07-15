@@ -78,4 +78,13 @@ describe('route — content items', () => {
     const result = route({ ...base, message: { kind: 'text', text: '99' } });
     expect(result.replies).toEqual([{ type: 'menu', bodyText: 'NAO_ENTENDI' }]);
   });
+
+  it.each(['+1', '0x1', '1e0', '1.5', '-1', ' ', '', 'Infinity', 'NaN'])(
+    'rejects non-canonical numeric form %j and falls back to menu',
+    (text) => {
+      const result = route({ ...base, message: { kind: 'text', text } });
+      expect(result.replies).toEqual([{ type: 'menu', bodyText: 'NAO_ENTENDI' }]);
+      expect(result.nextMode).toBe('bot');
+    }
+  );
 });

@@ -35,9 +35,11 @@ export function route(input: RouterInput): RouterResult {
       return { replies: [menuReply(config.menuHeaderText)], nextMode: 'bot' };
     }
 
-    const index = Number(text);
-    if (Number.isInteger(index) && index >= 1 && index <= active.length) {
-      selected = active[index - 1];
+    if (/^\d+$/.test(text)) {
+      const index = Number(text);
+      if (index >= 1 && index <= active.length) {
+        selected = active[index - 1];
+      }
     }
   }
 
