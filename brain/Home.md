@@ -1,0 +1,42 @@
+# ⛪💬 Secretária Virtual Brain
+
+The project's second brain. **Start here.** Every note is small on purpose — read only what the task needs.
+
+## Quick status
+- **Stage:** design approved, **no code yet** — see [[Launch Roadmap]]
+- **What it is:** a WhatsApp automated secretary for a church, answering in **Brazilian Portuguese** from a dedicated church number
+- **Next milestone:** implementation plan → scaffold the Next.js app
+- **Cost target:** R$ 0/month (Vercel + Neon + Blob free tiers; Meta is free for user-initiated chats)
+
+## Map of content
+### Project
+- [[Overview]] — what this is, who it's for, the one-church-now/product-later shape
+- [[Launch Roadmap]] — the stages and where we are
+- [[Decisions Log]] — every big choice and *why*
+
+### Architecture
+- [[App Structure]] — the one Next.js app, its modules and boundaries
+- [[Data Model]] — tables, and why the menu is data instead of code
+- [[Bot Flow]] — what the bot says and when, message by message
+
+### Operations
+- [[Meta WhatsApp Setup]] — the Cloud API bureaucracy, in order
+- [[Hosting & Deploy]] — Vercel + Neon + Blob, and the free-tier fine print
+- [[Troubleshooting]] — every gremlin we meet and its fix
+
+### Product
+- [[Menu Inventory]] — the 9 menu rows and the 10-row ceiling
+- [[Backlog]] — the longer wishlist
+
+### Learning
+- [[Concepts Explained]] — plain-language explanations of the tech
+
+## The one rule that shapes everything
+**Nothing user-facing is hardcoded.** Every Portuguese string the bot can say — and the menu structure itself — lives in the database and is editable in the admin panel. Portuguese defaults ship as *seed rows*, not constants. If you find yourself typing a Portuguese string into a code path that reaches a member, stop: it belongs in `church` or `menu_item`. See [[Data Model]].
+
+## Conventions
+- Notes are **evergreen**: update in place, don't append forever.
+- New decision? Add a line to [[Decisions Log]].
+- New gotcha? Add it to [[Troubleshooting]] the day it happens.
+- The brain is in English; the *product* is in Portuguese. Don't mix them up.
+- Source of truth for the full design: [[Overview]] links the committed spec.
