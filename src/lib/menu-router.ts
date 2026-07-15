@@ -35,8 +35,14 @@ export function route(input: RouterInput): RouterResult {
       return { replies: [menuReply(config.menuHeaderText)], nextMode: 'bot' };
     }
 
+    // Checked before numeric selection: in this state the member was asked to
+    // write, so a prayer reading "1" is a prayer, not a menu choice.
     if (mode === 'awaiting_prayer') {
       const trimmed = message.text.trim();
+
+      // Never capture an empty prayer. The webhook only saves when
+      // prayerRequestText is truthy, so '' would thank the member for a prayer
+      // that was silently discarded. Re-prompt instead.
       if (!trimmed) {
         return {
           replies: [{ type: 'text', body: config.prayerPromptText }],
@@ -50,6 +56,8 @@ export function route(input: RouterInput): RouterResult {
       };
     }
 
+    // Canonical digits only. Bare Number() coerces '+1', '0x1' and '1e0' to 1,
+    // which would silently select the first menu item.
     if (/^\d+$/.test(text)) {
       const index = Number(text);
       if (index >= 1 && index <= active.length) {
