@@ -3,9 +3,10 @@
 The project's second brain. **Start here.** Every note is small on purpose — read only what the task needs.
 
 ## Quick status
-- **Stage:** design approved, **no code yet** — see [[Launch Roadmap]]
+- **Stage:** bot core **code-complete on branch `feat/bot-core`**, 84 tests green — see [[Launch Roadmap]]
 - **What it is:** a WhatsApp automated secretary for a church, answering in **Brazilian Portuguese** from a dedicated church number
-- **Next milestone:** implementation plan → scaffold the Next.js app
+- **Next milestone:** Rafael creates a free Neon database → migrate + seed → test on Meta's free test number
+- **⚠️ Never executed:** schema, seed, repos, and the webhook POST path have never touched a real database or a real Meta callback. The first real run is the test.
 - **Cost target:** R$ 0/month (Vercel + Neon + Blob free tiers; Meta is free for user-initiated chats)
 
 ## Map of content
