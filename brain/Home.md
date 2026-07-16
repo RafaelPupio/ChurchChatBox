@@ -21,6 +21,7 @@ The project's second brain. **Start here.** Every note is small on purpose — r
 - [[Bot Flow]] — what the bot says and when, message by message
 
 ### Operations
+- [[Launch Checklist]] — every step from code-complete to live, marked by who does it
 - [[Meta WhatsApp Setup]] — the Cloud API bureaucracy, in order
 - [[Hosting & Deploy]] — Vercel + Neon + Blob, and the free-tier fine print
 - [[Troubleshooting]] — every gremlin we meet and its fix
