@@ -19,5 +19,7 @@ export async function updateChurch(
   churchId: string,
   fields: Partial<typeof church.$inferInsert>,
 ): Promise<void> {
-  await db.update(church).set(fields).where(eq(church.id, churchId));
+  // Strip id so a caller can never repoint the church row's primary key via .set().
+  const { id: _id, ...safeFields } = fields;
+  await db.update(church).set(safeFields).where(eq(church.id, churchId));
 }

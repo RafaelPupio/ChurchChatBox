@@ -507,7 +507,9 @@ export async function updateChurch(
   churchId: string,
   fields: Partial<typeof church.$inferInsert>,
 ): Promise<void> {
-  await db.update(church).set(fields).where(eq(church.id, churchId));
+  // Strip id so a caller can never repoint the church row's primary key via .set().
+  const { id: _id, ...safeFields } = fields;
+  await db.update(church).set(safeFields).where(eq(church.id, churchId));
 }
 ```
 
@@ -978,7 +980,11 @@ export async function updateMenuItem(
   churchId: string,
   fields: Partial<typeof menuItem.$inferInsert>,
 ): Promise<void> {
-  await db.update(menuItem).set(fields).where(and(eq(menuItem.id, id), eq(menuItem.churchId, churchId)));
+  // Strip id/churchId from the payload: the WHERE guards which row is touched, this
+  // guards what it is set to — so a caller can never repoint an item to another
+  // church or change its id via .set().
+  const { id: _id, churchId: _churchId, ...safeFields } = fields;
+  await db.update(menuItem).set(safeFields).where(and(eq(menuItem.id, id), eq(menuItem.churchId, churchId)));
 }
 
 export async function countActiveMenuItems(churchId: string): Promise<number> {
