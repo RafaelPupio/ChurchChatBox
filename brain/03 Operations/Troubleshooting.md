@@ -43,5 +43,13 @@ These were all found reviewing the bot-core branch. They're recorded because eac
 
 **Emoji labels could render broken.** `.slice(0, 24)` cuts UTF-16 code units, and every label here starts with an emoji — a cut inside a surrogate pair renders as a broken glyph. Now grapheme-safe.
 
+## Caught reviewing the admin panel (Plan A), before it ran
+
+**A too-long menu button label silently bricks the whole menu.** Meta caps the interactive-list *button* at **20 characters**. The Configurações screen used to save `menuButtonLabel` with only a non-empty check, and the field invites editing ("Rótulo do botão do menu (ex.: Ver opções)"). An admin types "Toque para ver as opções" (24 chars), the panel says *"Salvo! ✓"*, and from then on **every** menu the bot sends fails with a Graph 400 → the webhook serves `errorText` instead of the menu. The bot's core feature dies with zero feedback in the panel. The default "Ver opções" (10 chars) passes every automated gate, so nothing downstream catches it — this is the exact "nothing catches it before it reaches a real church" class. Fixed: `validateButtonLabel` caps it at 20, and `validateChurchText` caps the other bot texts at 1024 (Meta's list `body.text` limit). **If the bot suddenly answers everything with the instability message, check the button label length first.**
+
+**A content menu item with no text and no image would make the bot send an empty message** (a Graph 400, same failure family). The panel blocks it: a `content` item needs a non-empty body OR an image before it saves (`validateMenuItemContent`).
+
+**Every by-id edit is church-scoped.** With one church it looks like overkill, but `updateMenuItem`/`deleteAdmin` filter on both id AND `church_id` so church #2 can never edit church #1's rows by guessing an id.
+
 ## Real gremlins (append as they happen)
-*(none yet — nothing has run against a real database or a real Meta callback)*
+*(none yet — nothing has run against a real database, a real Meta callback, or a real browser login)*
