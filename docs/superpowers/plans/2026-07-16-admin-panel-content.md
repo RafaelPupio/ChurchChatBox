@@ -96,10 +96,13 @@ export function canActivateAnotherItem(activeCount: number): boolean;         //
 export function positionsFromOrder(orderedIds: string[]): { id: string; position: number }[]; // 1-indexed
 
 // src/lib/validation.ts
+export const MENU_BUTTON_MAX = 20;                                           // Meta's interactive-list button (action.button) cap
+export const CHURCH_TEXT_MAX = 1024;                                         // tightest bot-text destination limit (list body.text)
 export function requireNonEmpty(value: string): boolean;
 export function validateLabel(label: string): string | null;                 // pt-BR error, or null if valid
 export function validateMenuItemContent(kind: import('@/lib/types').MenuItemKind, bodyText: string, imageUrl: string | null): string | null;
-export function validateChurchText(value: string): string | null;
+export function validateChurchText(value: string): string | null;            // blank OR over CHURCH_TEXT_MAX (1024) chars
+export function validateButtonLabel(value: string): string | null;           // blank OR over MENU_BUTTON_MAX (20) chars
 
 // src/app/api/blob/upload/route.ts — token route for client-direct Blob uploads
 export function POST(request: Request): Promise<Response>;                    // authorizes uploads via session; the browser calls @vercel/blob/client `upload()` and only the returned URL passes through the form
@@ -504,7 +507,9 @@ export async function updateChurch(
   churchId: string,
   fields: Partial<typeof church.$inferInsert>,
 ): Promise<void> {
-  await db.update(church).set(fields).where(eq(church.id, churchId));
+  // Strip id so a caller can never repoint the church row's primary key via .set().
+  const { id: _id, ...safeFields } = fields;
+  await db.update(church).set(safeFields).where(eq(church.id, churchId));
 }
 ```
 
@@ -864,12 +869,29 @@ export function positionsFromOrder(orderedIds: string[]): { id: string; position
 ```ts
 import type { MenuItemKind } from './types';
 
+/** Meta's interactive-list button (`action.button`) caps at 20 characters. */
+export const MENU_BUTTON_MAX = 20;
+/** Safe for every bot-text destination: list `body.text` caps at 1024, plain
+ *  text messages at 4096 — 1024 is the tightest limit any of these values hits. */
+export const CHURCH_TEXT_MAX = 1024;
+
 export function requireNonEmpty(value: string): boolean {
   return value.trim().length > 0;
 }
 
 export function validateLabel(label: string): string | null {
   return requireNonEmpty(label) ? null : 'O rótulo não pode ficar em branco.';
+}
+
+/** The WhatsApp interactive-list button label. A value over Meta's 20-char cap
+ *  makes every menu send fail (Graph 400), silently killing the bot's core
+ *  feature — so this is stricter than the generic bot-text validator. */
+export function validateButtonLabel(value: string): string | null {
+  if (!requireNonEmpty(value)) return 'O rótulo do botão não pode ficar em branco.';
+  if (value.trim().length > MENU_BUTTON_MAX) {
+    return `O rótulo do botão deve ter no máximo ${MENU_BUTTON_MAX} caracteres.`;
+  }
+  return null;
 }
 
 /** A content item with neither body nor image would make the bot send an empty
@@ -885,7 +907,11 @@ export function validateMenuItemContent(
 }
 
 export function validateChurchText(value: string): string | null {
-  return requireNonEmpty(value) ? null : 'Este texto não pode ficar em branco.';
+  if (!requireNonEmpty(value)) return 'Este texto não pode ficar em branco.';
+  if (value.length > CHURCH_TEXT_MAX) {
+    return `Este texto é muito longo (máximo ${CHURCH_TEXT_MAX} caracteres).`;
+  }
+  return null;
 }
 ```
 
@@ -954,7 +980,11 @@ export async function updateMenuItem(
   churchId: string,
   fields: Partial<typeof menuItem.$inferInsert>,
 ): Promise<void> {
-  await db.update(menuItem).set(fields).where(and(eq(menuItem.id, id), eq(menuItem.churchId, churchId)));
+  // Strip id/churchId from the payload: the WHERE guards which row is touched, this
+  // guards what it is set to — so a caller can never repoint an item to another
+  // church or change its id via .set().
+  const { id: _id, churchId: _churchId, ...safeFields } = fields;
+  await db.update(menuItem).set(safeFields).where(and(eq(menuItem.id, id), eq(menuItem.churchId, churchId)));
 }
 
 export async function countActiveMenuItems(churchId: string): Promise<number> {
@@ -1367,6 +1397,7 @@ export function ItemForm({
 }) {
   const [state, formAction, pending] = useActionState(action, initial);
   const [imageUrl, setImageUrl] = useState<string>(values.imageUrl ?? '');
+  const [removed, setRemoved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
@@ -1380,6 +1411,7 @@ export function ItemForm({
       // passes through a Server Action, so there is no 1 MB body cap.
       const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob/upload' });
       setImageUrl(blob.url);
+      setRemoved(false);
     } catch {
       setUploadError('Não foi possível enviar a imagem. Tente novamente.');
     } finally {
@@ -1411,12 +1443,19 @@ export function ItemForm({
         <p className="hint">
           Imagem anexada ✓{' '}
           <label style={{ display: 'inline' }}>
-            <input type="checkbox" name="removeImage" onChange={(e) => { if (e.target.checked) setImageUrl(''); }} /> remover
+            <input
+              type="checkbox"
+              checked={removed}
+              onChange={(e) => { setRemoved(e.target.checked); if (e.target.checked) setImageUrl(''); }}
+            /> remover
           </label>
         </p>
       )}
       {/* The Server Action reads only this URL string, not the file itself. */}
       <input type="hidden" name="imageUrl" value={imageUrl} />
+      {/* Persists past the checkbox unmounting (imageUrl clears on check) so the
+          removal intent still reaches the Server Action on submit. */}
+      <input type="hidden" name="removeImage" value={removed ? 'on' : ''} />
 
       {state.error && <p className="error">{state.error}</p>}
       <button className="primary" type="submit" disabled={pending || uploading} style={{ marginTop: 12 }}>
@@ -1516,16 +1555,18 @@ import { requireSession } from '@/lib/auth/session';
 import { getChurchById, updateChurch } from '@/lib/repo/church-admin';
 import { createAdmin, deleteAdmin, findAdminByEmail } from '@/lib/repo/admin';
 import { hashPassword } from '@/lib/auth/password';
-import { validateChurchText, validateLabel } from '@/lib/validation';
+import { validateButtonLabel, validateChurchText, validateLabel } from '@/lib/validation';
 
 export interface ConfigResult {
   error?: string;
   ok?: boolean;
 }
 
-// The bot-text columns a church always has. name uses validateLabel; the rest validateChurchText.
+// The bot-text columns a church always has, validated by validateChurchText.
+// name uses validateLabel; menuButtonLabel uses validateButtonLabel (Meta's
+// 20-char interactive-list button cap) — both are validated separately below.
 const TEXT_FIELDS = [
-  'greetingText', 'menuHeaderText', 'menuButtonLabel', 'fallbackText',
+  'greetingText', 'menuHeaderText', 'fallbackText',
   'unsupportedMediaText', 'errorText', 'prayerPromptText', 'prayerThanksText',
   'handoffText', 'handoffClosedText',
 ] as const;
@@ -1537,11 +1578,15 @@ export async function saveTexts(_prev: ConfigResult, formData: FormData): Promis
   const nameError = validateLabel(name);
   if (nameError) return { error: `Nome da igreja: ${nameError}` };
 
-  const fields: Record<string, string> = { name };
+  const menuButtonLabel = String(formData.get('menuButtonLabel') ?? '');
+  const buttonError = validateButtonLabel(menuButtonLabel);
+  if (buttonError) return { error: `Rótulo do botão: ${buttonError}` };
+
+  const fields: Record<string, string> = { name, menuButtonLabel };
   for (const key of TEXT_FIELDS) {
     const value = String(formData.get(key) ?? '');
     const err = validateChurchText(value);
-    if (err) return { error: `Há um campo em branco. Preencha todos os textos do bot.` };
+    if (err) return { error: `Há um campo em branco ou muito longo. Revise os textos do bot.` };
     fields[key] = value;
   }
 
