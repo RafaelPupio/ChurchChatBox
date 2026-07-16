@@ -5,16 +5,18 @@ import { requireSession } from '@/lib/auth/session';
 import { getChurchById, updateChurch } from '@/lib/repo/church-admin';
 import { createAdmin, deleteAdmin, findAdminByEmail } from '@/lib/repo/admin';
 import { hashPassword } from '@/lib/auth/password';
-import { validateChurchText, validateLabel } from '@/lib/validation';
+import { validateButtonLabel, validateChurchText, validateLabel } from '@/lib/validation';
 
 export interface ConfigResult {
   error?: string;
   ok?: boolean;
 }
 
-// The bot-text columns a church always has. name uses validateLabel; the rest validateChurchText.
+// The bot-text columns a church always has, validated by validateChurchText.
+// name uses validateLabel; menuButtonLabel uses validateButtonLabel (Meta's
+// 20-char interactive-list button cap) — both are validated separately below.
 const TEXT_FIELDS = [
-  'greetingText', 'menuHeaderText', 'menuButtonLabel', 'fallbackText',
+  'greetingText', 'menuHeaderText', 'fallbackText',
   'unsupportedMediaText', 'errorText', 'prayerPromptText', 'prayerThanksText',
   'handoffText', 'handoffClosedText',
 ] as const;
@@ -26,11 +28,15 @@ export async function saveTexts(_prev: ConfigResult, formData: FormData): Promis
   const nameError = validateLabel(name);
   if (nameError) return { error: `Nome da igreja: ${nameError}` };
 
-  const fields: Record<string, string> = { name };
+  const menuButtonLabel = String(formData.get('menuButtonLabel') ?? '');
+  const buttonError = validateButtonLabel(menuButtonLabel);
+  if (buttonError) return { error: `Rótulo do botão: ${buttonError}` };
+
+  const fields: Record<string, string> = { name, menuButtonLabel };
   for (const key of TEXT_FIELDS) {
     const value = String(formData.get(key) ?? '');
     const err = validateChurchText(value);
-    if (err) return { error: `Há um campo em branco. Preencha todos os textos do bot.` };
+    if (err) return { error: `Há um campo em branco ou muito longo. Revise os textos do bot.` };
     fields[key] = value;
   }
 
