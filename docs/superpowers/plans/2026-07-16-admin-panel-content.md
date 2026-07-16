@@ -1367,6 +1367,7 @@ export function ItemForm({
 }) {
   const [state, formAction, pending] = useActionState(action, initial);
   const [imageUrl, setImageUrl] = useState<string>(values.imageUrl ?? '');
+  const [removed, setRemoved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
@@ -1380,6 +1381,7 @@ export function ItemForm({
       // passes through a Server Action, so there is no 1 MB body cap.
       const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob/upload' });
       setImageUrl(blob.url);
+      setRemoved(false);
     } catch {
       setUploadError('Não foi possível enviar a imagem. Tente novamente.');
     } finally {
@@ -1411,12 +1413,19 @@ export function ItemForm({
         <p className="hint">
           Imagem anexada ✓{' '}
           <label style={{ display: 'inline' }}>
-            <input type="checkbox" name="removeImage" onChange={(e) => { if (e.target.checked) setImageUrl(''); }} /> remover
+            <input
+              type="checkbox"
+              checked={removed}
+              onChange={(e) => { setRemoved(e.target.checked); if (e.target.checked) setImageUrl(''); }}
+            /> remover
           </label>
         </p>
       )}
       {/* The Server Action reads only this URL string, not the file itself. */}
       <input type="hidden" name="imageUrl" value={imageUrl} />
+      {/* Persists past the checkbox unmounting (imageUrl clears on check) so the
+          removal intent still reaches the Server Action on submit. */}
+      <input type="hidden" name="removeImage" value={removed ? 'on' : ''} />
 
       {state.error && <p className="error">{state.error}</p>}
       <button className="primary" type="submit" disabled={pending || uploading} style={{ marginTop: 12 }}>
