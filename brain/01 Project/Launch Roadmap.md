@@ -1,12 +1,12 @@
 # Launch Roadmap
 
-Where we are: **bot core + admin Plan A both code-complete; the gate is a live Neon DB**.
+Where we are: **bot core + admin Plan A both merged to `main`; the gate is a live Neon DB**. The step-by-step, who-does-what version of what's left is [[Launch Checklist]].
 
 | # | Stage | Status |
 |---|---|---|
 | 1 | Requirements + design approved | ✅ done (2026-07-15) |
-| 2 | Bot core plan + implementation | ✅ done — branch `feat/bot-core`, PR #1 |
-| 3 | Admin panel **Plan A** (login + Conteúdo + Configurações) | ✅ done — branch `feat/admin-panel`, 113 tests |
+| 2 | Bot core plan + implementation | ✅ merged to `main` (PR #1) |
+| 3 | Admin panel **Plan A** (login + Conteúdo + Configurações) | ✅ merged to `main` (PR #3), 113 tests |
 | 4 | **Create Neon DB → migrate + seed → create-admin** | 🔜 **next — needs Rafael** |
 | 5 | Test end-to-end on Meta's **free test number** | ⬜ needs Meta account |
 | 6 | Admin panel **Plan B** (Caixa de Entrada + Pedidos de Oração) | ⬜ separate plan, later |
