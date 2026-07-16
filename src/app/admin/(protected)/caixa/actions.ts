@@ -37,7 +37,8 @@ export async function sendReplyToContact(
 
   try {
     await sendText({ phoneNumberId: church.phoneNumberId, accessToken: church.accessToken }, convo.contact.phone, body);
-  } catch {
+  } catch (error) {
+    console.error('Reply send failed', error);
     return { error: 'Não foi possível enviar a mensagem. Tente novamente.' };
   }
 

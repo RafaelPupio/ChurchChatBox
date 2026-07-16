@@ -10,7 +10,12 @@ export interface PrayerActionResult {
 
 export async function setPrayerStatus(id: string, status: 'novo' | 'orado'): Promise<PrayerActionResult> {
   const { churchId } = await requireSession();
-  await updatePrayerStatus(id, churchId, status);
+  try {
+    await updatePrayerStatus(id, churchId, status);
+  } catch (error) {
+    console.error('Prayer status update failed', error);
+    return { error: 'Não foi possível atualizar o status. Tente novamente.' };
+  }
   revalidatePath('/admin/oracao');
   return {};
 }

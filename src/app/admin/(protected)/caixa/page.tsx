@@ -16,7 +16,7 @@ export default async function CaixaPage() {
   return (
     <div>
       <h1>Caixa de Entrada</h1>
-      <p className="hint">Conversas de quem pediu atendente aparecem aqui. Responda pelo número da igreja.</p>
+      <p className="hint">As conversas aparecem aqui. Quem pediu atendente aparece marcado como <strong>Atendimento</strong> — abra para responder pelo número da igreja.</p>
       {conversations.length === 0 ? (
         <p className="hint">Nenhuma conversa ainda.</p>
       ) : (

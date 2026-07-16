@@ -366,7 +366,7 @@ export default async function CaixaPage() {
   return (
     <div>
       <h1>Caixa de Entrada</h1>
-      <p className="hint">Conversas de quem pediu atendente aparecem aqui. Responda pelo número da igreja.</p>
+      <p className="hint">As conversas aparecem aqui. Quem pediu atendente aparece marcado como <strong>Atendimento</strong> — abra para responder pelo número da igreja.</p>
       {conversations.length === 0 ? (
         <p className="hint">Nenhuma conversa ainda.</p>
       ) : (
@@ -456,7 +456,8 @@ export async function sendReplyToContact(
 
   try {
     await sendText({ phoneNumberId: church.phoneNumberId, accessToken: church.accessToken }, convo.contact.phone, body);
-  } catch {
+  } catch (error) {
+    console.error('Reply send failed', error);
     return { error: 'Não foi possível enviar a mensagem. Tente novamente.' };
   }
 
@@ -584,11 +585,18 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
       <div className="thread">
         {convo.messages.length === 0 && <span className="hint">Sem mensagens.</span>}
         {convo.messages.map((m) => (
-          <div key={m.id} className={`bubble ${m.direction === 'outbound' ? 'out' : 'in'}`}>{m.body ?? ''}</div>
+          <div key={m.id} className={`bubble ${m.direction === 'outbound' ? 'out' : 'in'}`}>
+            {m.body ?? (m.direction === 'inbound' ? '📎 mídia recebida' : '')}
+          </div>
         ))}
       </div>
 
-      {open ? (
+      {/* Reply only for an active handoff: a reply to a bot-mode contact would send,
+          but the bot would still answer their next message — an interleaved thread.
+          Mirror the EndHandoffButton's mode === 'human' gate. */}
+      {convo.contact.mode !== 'human' ? (
+        <p className="hint">Esta conversa não está em atendimento humano — o bot responde automaticamente. Para responder por aqui, a pessoa precisa pedir um atendente.</p>
+      ) : open ? (
         <ReplyForm contactId={contactId} hoursRemaining={hrs} />
       ) : (
         <p className="error">A janela de 24 horas do WhatsApp expirou. Só é possível responder até 24h após a última mensagem da pessoa.</p>
@@ -639,7 +647,12 @@ export interface PrayerActionResult {
 
 export async function setPrayerStatus(id: string, status: 'novo' | 'orado'): Promise<PrayerActionResult> {
   const { churchId } = await requireSession();
-  await updatePrayerStatus(id, churchId, status);
+  try {
+    await updatePrayerStatus(id, churchId, status);
+  } catch (error) {
+    console.error('Prayer status update failed', error);
+    return { error: 'Não foi possível atualizar o status. Tente novamente.' };
+  }
   revalidatePath('/admin/oracao');
   return {};
 }
