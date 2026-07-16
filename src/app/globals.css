@@ -40,3 +40,13 @@ button.danger { color: var(--danger); border-color: var(--danger); background: #
 .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
 .chip.on { background: #d1fae5; color: var(--ok); }
 .chip.off { background: #fee2e2; color: var(--danger); }
+.thread { display: flex; flex-direction: column; gap: 6px; background: #eef2f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; min-height: 180px; }
+.bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; line-height: 1.4; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+.bubble.in { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
+.bubble.out { align-self: flex-end; background: #dcf8c6; color: #111; }
+.conv { display: flex; align-items: center; gap: 8px; padding: 12px 14px; text-decoration: none; color: var(--text); }
+.conv:hover { background: #f2f2f2; }
+.mode-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.mode-human { background: #fef3c7; color: #92400e; }
+.mode-bot { background: #e5e7eb; color: #374151; }
+.mode-prayer { background: #ede9fe; color: #5b21b6; }

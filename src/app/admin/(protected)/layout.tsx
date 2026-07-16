@@ -14,6 +14,8 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       <nav className="nav">
         <span className="brand">⛪ Secretária Virtual</span>
         <Link href="/admin/conteudo">Conteúdo</Link>
+        <Link href="/admin/caixa">Caixa de Entrada</Link>
+        <Link href="/admin/oracao">Pedidos de Oração</Link>
         <Link href="/admin/configuracoes">Configurações</Link>
         <span className="grow" />
         <span className="hint">{session.name}</span>
