@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { contact, message } from '@/db/schema';
 import type { ContactRecord } from '@/lib/repo/contact';
@@ -6,14 +6,17 @@ import type { ContactMode } from '@/lib/types';
 
 export type MessageRecord = typeof message.$inferSelect;
 
-/** All of the church's contacts, most-recently-active first. Contacts that have
- *  talked to the bot all have lastInboundAt set. */
+/** All of the church's contacts, most-recently-active first.
+ *  NULLS LAST is required, not cosmetic: Postgres sorts NULLs FIRST in a DESC
+ *  order, so a contact row created without a lastInboundAt would float above
+ *  real, recent conversations at the top of the inbox. Verified against a real
+ *  Postgres engine. */
 export async function listConversations(churchId: string): Promise<ContactRecord[]> {
   return db
     .select()
     .from(contact)
     .where(eq(contact.churchId, churchId))
-    .orderBy(desc(contact.lastInboundAt));
+    .orderBy(sql`${contact.lastInboundAt} desc nulls last`);
 }
 
 /** A contact and its full message history, church-scoped. Null when the contact

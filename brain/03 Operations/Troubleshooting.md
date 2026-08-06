@@ -51,5 +51,20 @@ These were all found reviewing the bot-core branch. They're recorded because eac
 
 **Every by-id edit is church-scoped.** With one church it looks like overkill, but `updateMenuItem`/`deleteAdmin` filter on both id AND `church_id` so church #2 can never edit church #1's rows by guessing an id.
 
+## ✅ Verified against a real Postgres engine (2026-07-16)
+
+Before any Neon project existed, the migration and the risky Postgres semantics were executed against a real Postgres (PGlite, an in-process build of Postgres). **14/14 checks passed.** This retires most of the "never executed" risk on the data layer:
+
+- **The migration applies cleanly** — all 21 statements, producing the 6 tables, 4 enums, and 4 unique indexes.
+- **The dedupe gate genuinely works** — the highest-leverage assumption in the project. A new `wa_message_id` returns 1 row (bot replies); a re-delivered one returns 0 rows (bot stays silent); only one row is stored. Had this inverted, the bot would have treated *every* message as a duplicate and gone completely silent. See [[Data Model]].
+- **Outbound rows may all leave `wa_message_id` NULL** — Postgres permits many NULLs in a unique index, so replies don't collide with the dedupe index.
+- **The contact race guard works** — a duplicate `(church_id, phone)` conflicts and returns 0 rows, so the re-fetch path in `findOrCreateContact` is the one that runs.
+- **`getNextPosition` on an empty menu** → `max()` is NULL → yields 1. And 10 after the 9 seed rows.
+- **The 9-row seed insert lands atomically**; the prayer-list join returns prayer + contact with status defaulting to `novo`; **cascade delete** cleans every child table.
+
+**One real bug was found this way, not by review:** in a `DESC` sort Postgres puts NULLs **first**, so contacts who had never messaged floated to the *top* of the Caixa de Entrada, above real recent conversations. Fixed with `desc nulls last` in `listConversations`, and the fix re-verified on the same engine.
+
+**Still unverified** (needs Neon + Meta + a browser): the neon-http driver specifically, the login/session round-trip, the panel's Server Actions, Blob upload, and any real WhatsApp send.
+
 ## Real gremlins (append as they happen)
-*(none yet — nothing has run against a real database, a real Meta callback, or a real browser login)*
+*(none yet in production — nothing has run against Neon, a real Meta callback, or a real browser login)*
