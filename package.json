@@ -12,7 +12,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts",
-    "create-admin": "tsx scripts/create-admin.ts"
+    "create-admin": "tsx scripts/create-admin.ts",
+    "create-owner": "tsx scripts/create-owner.ts",
+    "create-church": "tsx scripts/create-church.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.0",
