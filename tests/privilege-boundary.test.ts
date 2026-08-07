@@ -1,18 +1,41 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 /** Church-facing code must never import the owner-only cross-church repo.
  *  This is the only thing enforcing that boundary — the repo has no linter.
- *  Catches static `import ... from`, dynamic `import(...)`, and `require(...)` —
- *  any reference to the module path, regardless of import form. */
+ *
+ *  Matching on the raw specifier text was not enough: `import … from './platform'`
+ *  inside src/lib/repo/ names the exact same module and never contains the string
+ *  "repo/platform". So every specifier is RESOLVED to an absolute path first and
+ *  compared against the real file. Alias (`@/lib/repo/platform`), relative
+ *  (`./platform`, `../repo/platform`, `../../lib/repo/platform`) and
+ *  extension-bearing forms all collapse to the same path.
+ *
+ *  Catches static `import … from`, side-effect `import '…'`, dynamic `import(…)`
+ *  and `require(…)` — any import form. */
+
+const SRC = join(process.cwd(), 'src');
+
+/** src/lib is in here because the boundary is about REACHABILITY, not directory.
+ *  src/lib/auth/writable.ts is imported by every admin write action; if it pulled
+ *  in the platform repo, every church admin would transitively hold cross-church
+ *  queries. Scanning only app/admin, app/api and lib/repo left that gap open. */
 const CHURCH_FACING_ROOTS = [
-  join(process.cwd(), 'src/app/admin'),
-  join(process.cwd(), 'src/app/api'),
-  join(process.cwd(), 'src/lib/repo'),
+  join(SRC, 'app/admin'),
+  join(SRC, 'app/api'),
+  join(SRC, 'lib'),
 ];
 
-const ALLOWED = new Set([join(process.cwd(), 'src/lib/repo/platform.ts')]);
+/** The owner-only module itself. Nothing else under the scanned roots is
+ *  owner-only: src/app/owner/ reaches the platform repo directly and otherwise
+ *  imports only shared modules (church-status, church-defaults, provisioning) and
+ *  src/lib/repo/owner.ts, which is owner-account auth, not cross-church data. */
+const PLATFORM_MODULE = join(SRC, 'lib/repo/platform.ts');
+const ALLOWED = new Set([PLATFORM_MODULE]);
+
+/** Every import form, capturing the specifier. */
+const SPECIFIER_RE = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]/g;
 
 function walk(dir: string): string[] {
   let out: string[] = [];
@@ -24,13 +47,51 @@ function walk(dir: string): string[] {
   return out;
 }
 
+/** Absolute path a specifier refers to, without extension — or null for a bare
+ *  package specifier ('next/navigation', 'drizzle-orm'), which can never be a
+ *  local module. */
+function resolveSpecifier(fromFile: string, specifier: string): string | null {
+  let target: string;
+  if (specifier.startsWith('@/')) target = join(SRC, specifier.slice(2));
+  else if (specifier.startsWith('./') || specifier.startsWith('../')) target = resolve(dirname(fromFile), specifier);
+  else return null;
+  return target.replace(/\.(tsx?|jsx?|mjs|cjs)$/, '');
+}
+
+function importedModules(file: string): string[] {
+  const source = readFileSync(file, 'utf8');
+  const out: string[] = [];
+  for (const match of source.matchAll(SPECIFIER_RE)) {
+    const resolved = resolveSpecifier(file, match[1]);
+    if (resolved) out.push(resolved);
+  }
+  return out;
+}
+
 describe('privilege boundary', () => {
   it('no church-facing file imports the owner-only platform repo', () => {
     const files = CHURCH_FACING_ROOTS.flatMap((d) => walk(d));
     // Guard against a bad glob silently passing by scanning nothing.
-    expect(files.length).toBeGreaterThan(5);
+    expect(files.length).toBeGreaterThan(40);
 
-    const offenders = files.filter((f) => /['"][^'"]*repo\/platform['"]/.test(readFileSync(f, 'utf8')));
+    const platformBase = PLATFORM_MODULE.replace(/\.tsx?$/, '');
+    const offenders = files.filter((f) => importedModules(f).includes(platformBase));
     expect(offenders).toEqual([]);
+  });
+
+  it('resolves alias, relative and extension-bearing specifiers to the same module', () => {
+    // The resolver is the whole guard; if it stopped normalising these forms the
+    // test above would pass while the boundary was open.
+    const platformBase = PLATFORM_MODULE.replace(/\.tsx?$/, '');
+    const inboxFile = join(SRC, 'lib/repo/inbox.ts');
+    const writableFile = join(SRC, 'lib/auth/writable.ts');
+
+    expect(resolveSpecifier(inboxFile, './platform')).toBe(platformBase);
+    expect(resolveSpecifier(inboxFile, '../repo/platform')).toBe(platformBase);
+    expect(resolveSpecifier(inboxFile, '@/lib/repo/platform')).toBe(platformBase);
+    expect(resolveSpecifier(writableFile, '../../lib/repo/platform')).toBe(platformBase);
+    expect(resolveSpecifier(writableFile, '../repo/platform.ts')).toBe(platformBase);
+    // Bare package specifiers are never local modules.
+    expect(resolveSpecifier(writableFile, 'next/navigation')).toBeNull();
   });
 });
