@@ -2,23 +2,12 @@ import 'dotenv/config';
 import { eq } from 'drizzle-orm';
 import { db } from './client';
 import { church, menuItem } from './schema';
+import { CHURCH_DEFAULTS } from '@/lib/church-defaults';
 
 const EDIT_HINT = '\n\n_Edite este texto no painel._';
 
-const CHURCH_DEFAULTS = {
-  name: 'Minha Igreja',
-  greetingText: 'Olá! 🙏 Sou a secretária virtual da igreja. Como posso te ajudar?',
-  menuHeaderText: 'Escolha uma opção:',
-  menuButtonLabel: 'Ver opções',
-  fallbackText: 'Desculpe, não entendi. 🙏 Escolha uma das opções abaixo:',
-  unsupportedMediaText: 'Por enquanto eu entendo apenas texto e as opções do menu. 🙏',
-  errorText: 'Estamos com uma instabilidade no momento. Por favor, tente novamente em instantes 🙏',
-  prayerPromptText: 'Pode escrever seu pedido de oração 🙏 Vamos orar por você!',
-  prayerThanksText: 'Recebemos seu pedido! ❤️ Nossa equipe estará orando por você.',
-  handoffText: 'Um momento! 😊 Alguém da secretaria vai te atender por aqui em breve.',
-  handoffClosedText: 'Atendimento encerrado. Se precisar de mais alguma coisa, é só chamar! 🙏',
-} as const;
-
+// Local dev fixture only. Real churches are created by provisionChurch(), which
+// starts them blank apart from the Privacidade item.
 const MENU_SEED = [
   { position: 1, label: '⛪ Horários de Culto', kind: 'content' as const, bodyText: '*Horários de Culto*' + EDIT_HINT },
   { position: 2, label: '📍 Endereço e Contato', kind: 'content' as const, bodyText: '*Endereço e Contato*' + EDIT_HINT },
