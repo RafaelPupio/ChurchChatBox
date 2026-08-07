@@ -141,6 +141,15 @@ describe('webhook suspension gate', () => {
   it('still records the inbound message and the reply window while suspended', async () => {
     await setStatus('suspended', null);
 
+    const countOutbound = async (): Promise<number> => {
+      const r = await client.query<{ n: number }>(
+        "select count(*)::int as n from message where church_id = $1 and direction = 'outbound'",
+        [churchId],
+      );
+      return r.rows[0].n;
+    };
+    const outboundBefore = await countOutbound();
+
     await post(payload('wamid.suspensa.2', 'estou aqui'));
 
     // Suspension silences the bot; it does not drop member state. The message
@@ -160,12 +169,10 @@ describe('webhook suspension gate', () => {
     );
     expect(contacts.rows[0].last_inbound_at).not.toBeNull();
 
-    const outbound = await client.query<{ n: number }>(
-      "select count(*)::int as n from message where church_id = $1 and direction = 'outbound'",
-      [churchId],
-    );
-    // Only the active-church test above produced outbound rows.
-    expect(outbound.rows[0].n).toBeGreaterThan(0);
+    // Snapshotted around THIS request. A bare `> 0` would have been satisfied by
+    // the outbound rows the active-church test left behind, so it would pass even
+    // if a suspended church replied.
+    expect(await countOutbound()).toBe(outboundBefore);
   });
 
   it('keeps replying while a past_due church is inside its grace period', async () => {

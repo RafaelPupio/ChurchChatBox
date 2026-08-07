@@ -109,16 +109,28 @@ describe('privilege boundary', () => {
  *  agent of the controller. */
 const ADMIN_PROTECTED = join(SRC, 'app/admin/(protected)');
 
+/** Pages that render no church data and so need no guard. Kept as an explicit
+ *  list rather than inferred: adding a page here is a deliberate, reviewable act,
+ *  whereas a rule clever enough to infer "this one is safe" is a rule that can be
+ *  fooled by the next page. */
+const NO_CHURCH_DATA = new Set([
+  // Bare redirect to /admin/conteudo — reads nothing, renders nothing.
+  join(ADMIN_PROTECTED, 'page.tsx'),
+]);
+
 describe('admin read guard', () => {
-  it('no protected page uses the cookie-only session guard', () => {
+  it('every protected page uses the re-checking read guard', () => {
     const pages = walk(ADMIN_PROTECTED).filter((f) => /\bpage\.tsx$/.test(f));
     // Guard against a bad path silently passing by scanning nothing.
     expect(pages.length).toBeGreaterThan(5);
 
-    const sessionModule = join(SRC, 'lib/auth/session');
-    const offenders = pages.filter(
-      (f) => importedModules(f).includes(sessionModule) && /\brequireSession\b/.test(readFileSync(f, 'utf8')),
-    );
+    // Stated as "must import the strong guard", not "must not import the weak
+    // one": the weak-guard phrasing let a page pass by using getSession() or
+    // isAuthenticated() directly, or by having no guard at all.
+    const writableModule = join(SRC, 'lib/auth/writable');
+    const offenders = pages
+      .filter((f) => !NO_CHURCH_DATA.has(f))
+      .filter((f) => !importedModules(f).includes(writableModule) || !/\brequireReadableSession\b/.test(readFileSync(f, 'utf8')));
     expect(offenders).toEqual([]);
   });
 });

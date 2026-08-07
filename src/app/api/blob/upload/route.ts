@@ -21,7 +21,17 @@ export async function POST(request: Request): Promise<Response> {
   // Vercel retry it on each image upload. The callback is not left unauthenticated
   // by this: handleUpload verifies its x-vercel-signature against the blob token,
   // which our cookie check could not do anyway.
-  const body = (await request.json()) as HandleUploadBody;
+  // Parsed defensively: this is an unauthenticated entry point, and a non-JSON or
+  // null body would otherwise throw straight out of the handler as a framework 500.
+  let body: HandleUploadBody;
+  try {
+    body = (await request.json()) as HandleUploadBody;
+  } catch {
+    return NextResponse.json({ error: 'Requisição inválida.' }, { status: 400 });
+  }
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json({ error: 'Requisição inválida.' }, { status: 400 });
+  }
 
   if (body.type === 'blob.generate-client-token') {
     const session = await checkWritableSession();
