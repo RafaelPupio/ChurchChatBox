@@ -35,6 +35,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   const session = await getSession();
+  session.kind = 'admin';
   session.adminUserId = admin.id;
   session.churchId = admin.churchId;
   session.name = admin.name ?? '';

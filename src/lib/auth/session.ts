@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 export interface SessionData {
+  kind?: 'admin';
   adminUserId?: string;
   churchId?: string;
   name?: string;
@@ -11,8 +12,8 @@ export interface SessionData {
 const COOKIE_NAME = 'sv_admin';
 
 /** Pure guard used by both the layout and every action. */
-export function isAuthenticated(session: Pick<SessionData, 'adminUserId'>): boolean {
-  return typeof session.adminUserId === 'string' && session.adminUserId.length > 0;
+export function isAuthenticated(session: Pick<SessionData, 'kind' | 'adminUserId'>): boolean {
+  return session.kind === 'admin' && typeof session.adminUserId === 'string' && session.adminUserId.length > 0;
 }
 
 /** Read SESSION_SECRET lazily so `next build` never requires it. */
