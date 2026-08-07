@@ -67,6 +67,10 @@ export const contact = pgTable('contact', {
   mode: contactModeEnum('mode').notNull().default('bot'),
   modeChangedAt: timestamp('mode_changed_at', { withTimezone: true }).notNull().defaultNow(),
   lastInboundAt: timestamp('last_inbound_at', { withTimezone: true }),
+  // Set only after the greeting has actually left for this contact. Distinct from
+  // "the row is new": a row can be created while the church is suspended, or while
+  // a send is failing, and in neither case has the member been greeted.
+  greetedAt: timestamp('greeted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   churchPhoneUq: uniqueIndex('contact_church_phone_uq').on(t.churchId, t.phone),

@@ -83,7 +83,12 @@ export function route(input: RouterInput): RouterResult {
 
   if (!selected) {
     const bodyText = isFirstContact ? config.greetingText : config.fallbackText;
-    return { replies: [menuReply(bodyText)], nextMode: 'bot' };
+    const result: RouterResult = { replies: [menuReply(bodyText)], nextMode: 'bot' };
+    // Flagged, not inferred: the webhook records "we have greeted this person" only
+    // after the send succeeds, and it cannot tell greetingText from fallbackText by
+    // comparing strings when a church has configured them identically.
+    if (isFirstContact) result.greeted = true;
+    return result;
   }
 
   switch (selected.kind) {

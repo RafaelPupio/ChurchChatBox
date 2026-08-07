@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseInbound } from '@/lib/inbound';
 import { route } from '@/lib/menu-router';
-import { effectiveMode } from '@/lib/contact-mode';
+import { effectiveMode, modeAfterUndeliveredTurn } from '@/lib/contact-mode';
 import { sendReply, sendText, verifySignature } from '@/lib/whatsapp';
 import { findChurchByPhoneNumberId, toChurchConfig, type ChurchRecord } from '@/lib/repo/church';
 import { loadMenuItems } from '@/lib/repo/menu';
-import { findOrCreateContact, touchLastInbound, updateContactMode } from '@/lib/repo/contact';
+import { findOrCreateContact, markGreeted, touchLastInbound, updateContactMode } from '@/lib/repo/contact';
 import { recordInboundMessage, recordOutboundMessage } from '@/lib/repo/message';
 import { savePrayerRequest } from '@/lib/repo/prayer';
 import { effectiveStatus } from '@/lib/church-status';
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     const config = toChurchConfig(churchRecord);
     const creds = { phoneNumberId: churchRecord.phoneNumberId, accessToken: churchRecord.accessToken };
 
-    const { contact, isFirstContact } = await findOrCreateContact(churchRecord.id, inbound.from, inbound.name);
+    const contact = await findOrCreateContact(churchRecord.id, inbound.from, inbound.name);
 
     // Dedupe: false means Meta re-delivered a message we already answered.
     // For a list tap, store the row's title (not the bare id) so the future admin
@@ -97,13 +97,11 @@ export async function POST(request: NextRequest) {
 
     await touchLastInbound(contact.id, churchRecord.id);
 
-    // A suspended church's bot goes quiet. Everything that records member state
-    // has already run above — the message row and lastInboundAt — so nothing is
-    // lost, the inbox stays correctly ordered, and the 24h reply window is
-    // accurate the moment the church is reactivated. Only routing and sending stop.
-    if (suspended) {
-      return NextResponse.json({ ok: true });
-    }
+    // The suspension gate used to sit HERE. It now sits below routing, because a
+    // suspended church must stop SENDING, never stop RECORDING. Skipping the whole
+    // router also skipped the prayer capture and the mode transitions, which lost
+    // a member's prayer and left them armed to have their next ordinary message
+    // filed as one.
 
     // Staff have 24h to pick up a `human` handoff (see contact-mode.ts). Compute
     // the effective mode here, at the edge — the router stays pure and must never
@@ -120,13 +118,39 @@ export async function POST(request: NextRequest) {
     }
 
     const items = await loadMenuItems(churchRecord.id);
+
+    // Derived from a greeting that actually left, not from "we just INSERTed the
+    // row". A row created while the church was suspended is a contact we have
+    // never greeted, and the old derivation burned their greeting on a message
+    // that was never sent — leaving them permanently stuck on the fallback text.
+    const isFirstContact = contact.greetedAt === null;
     const result = route({ config, items, mode, message: inbound.message, isFirstContact });
+
+    // ---- Facts about what the MEMBER did. True whether or not anything ships. ----
 
     // Deliberately BEFORE the send loop: a saved prayer whose confirmation later
     // fails to send is recoverable (staff can still see it); a prayer that was
     // never saved because a send failed first would be lost forever.
     if (result.prayerRequestText) {
       await savePrayerRequest(churchRecord.id, contact.id, result.prayerRequestText);
+    }
+
+    // The member's prayer turn ended the moment they wrote it. Persisting that
+    // here — rather than after the send — is what stops their NEXT ordinary
+    // message from being filed as a prayer when the confirmation was suppressed
+    // (suspension) or threw. See modeAfterUndeliveredTurn for the full rule.
+    const undelivered = modeAfterUndeliveredTurn(mode, result.nextMode);
+    if (undelivered !== mode) {
+      await updateContactMode(contact.id, churchRecord.id, undelivered);
+    }
+
+    // ---- The single exit for a silent church. Every send site is below this. ----
+    // Kept as one early return rather than an `if (!suspended) { ... }` block, so
+    // that "a suspended church sends nothing" stays structural: anything a future
+    // contributor adds below is silenced by construction, not by remembering to
+    // check. Everything that records member state has already run.
+    if (suspended) {
+      return NextResponse.json({ ok: true });
     }
 
     for (const reply of result.replies) {
@@ -138,14 +162,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Deliberately AFTER the send loop, and compared against the effective mode
-    // (not the stale stored one): if sendReply throws partway through, the mode
-    // transition this result implies (e.g. "human" for a handoff, or
-    // "awaiting_prayer" for a prompt) must not be committed. Otherwise a member
-    // could be silenced without ever receiving the "someone will help you"
-    // message, or have their next ordinary message silently swallowed as a
-    // prayer request nobody prompted them for.
-    if (result.nextMode !== mode) {
+    // Only now is it true that we have said hello to this person.
+    if (result.greeted) {
+      await markGreeted(contact.id, churchRecord.id);
+    }
+
+    // Transitions that only make sense because the member RECEIVED something —
+    // "human" for a handoff they were told about, "awaiting_prayer" for a prompt
+    // they actually saw. Compared against `undelivered` (what we already
+    // committed), not against `mode`. If sendReply threw above, control is in the
+    // catch and none of this commits, which is the point.
+    if (result.nextMode !== undelivered) {
       await updateContactMode(contact.id, churchRecord.id, result.nextMode);
     }
   } catch (error) {

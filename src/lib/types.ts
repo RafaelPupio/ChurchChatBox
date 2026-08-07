@@ -54,4 +54,10 @@ export interface RouterResult {
   replies: Reply[];
   nextMode: ContactMode;
   prayerRequestText?: string;
+  /** True only when `replies` carries the church's greetingText — i.e. this is the
+   *  first thing the bot has ever said to this person. The webhook persists
+   *  contact.greetedAt from this flag AFTER the reply successfully sends. A string
+   *  comparison would be wrong here: a church may legitimately configure
+   *  greetingText === fallbackText in the panel. */
+  greeted?: true;
 }

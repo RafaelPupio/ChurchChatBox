@@ -1,0 +1,1 @@
+ALTER TABLE "contact" ADD COLUMN "greeted_at" timestamp with time zone;
