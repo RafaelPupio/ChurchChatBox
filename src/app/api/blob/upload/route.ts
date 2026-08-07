@@ -14,19 +14,24 @@ export async function POST(request: Request): Promise<Response> {
   // control-flow signal is not an API error message, least of all one shown to a
   // Brazilian church secretary.
   //
-  // This gates every POST to this route, including Vercel Blob's own
-  // upload-completed callback, which carries no session cookie. That callback is
-  // a no-op here (onUploadCompleted does nothing — the URL is persisted when the
-  // item form is saved), so refusing it costs the product nothing.
-  const session = await checkWritableSession();
-  if ('blocked' in session) {
-    return NextResponse.json(
-      { error: blockedMessage(session.blocked) },
-      { status: session.blocked === 'suspended' ? 403 : 401 },
-    );
-  }
-
+  // Only the token request is gated on our session. This route receives two
+  // different POSTs: the browser's token request, which carries the admin's
+  // cookie, and Vercel Blob's upload-completed callback, which is server-to-server
+  // and carries no cookie at all. Gating both would 401 every callback and make
+  // Vercel retry it on each image upload. The callback is not left unauthenticated
+  // by this: handleUpload verifies its x-vercel-signature against the blob token,
+  // which our cookie check could not do anyway.
   const body = (await request.json()) as HandleUploadBody;
+
+  if (body.type === 'blob.generate-client-token') {
+    const session = await checkWritableSession();
+    if ('blocked' in session) {
+      return NextResponse.json(
+        { error: blockedMessage(session.blocked) },
+        { status: session.blocked === 'suspended' ? 403 : 401 },
+      );
+    }
+  }
 
   try {
     const result = await handleUpload({

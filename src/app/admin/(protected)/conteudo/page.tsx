@@ -1,11 +1,11 @@
 import Link from 'next/link';
-import { requireSession } from '@/lib/auth/session';
+import { requireReadableSession } from '@/lib/auth/writable';
 import { countActiveMenuItems, listMenuItemsForAdmin } from '@/lib/repo/menu-admin';
 import { WHATSAPP_LIST_MAX_ROWS } from '@/lib/whatsapp';
 import { MenuList, type MenuListItem } from './MenuList';
 
 export default async function ConteudoPage() {
-  const { churchId } = await requireSession();
+  const { churchId } = await requireReadableSession();
   const rows = await listMenuItemsForAdmin(churchId);
   const active = await countActiveMenuItems(churchId);
 

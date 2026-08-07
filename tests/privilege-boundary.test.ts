@@ -95,3 +95,30 @@ describe('privilege boundary', () => {
     expect(resolveSpecifier(writableFile, 'next/navigation')).toBeNull();
   });
 });
+
+/** requireSession() trusts the session cookie alone. requireReadableSession() also
+ *  re-reads the admin row and confirms it still exists and still belongs to this
+ *  church, so a secretary removed via removeStaff loses access on their next page
+ *  load rather than whenever their cookie happens to expire.
+ *
+ *  That distinction only holds if every page actually picks the right one, and
+ *  nothing but this test makes it hold: both are exported, both typecheck, and a
+ *  page using the weaker one renders perfectly. The panel shows member phone
+ *  numbers, message bodies and prayer requests — under LGPD Art. 5 II a church's
+ *  membership is sensitive personal data, and a removed staff member is a former
+ *  agent of the controller. */
+const ADMIN_PROTECTED = join(SRC, 'app/admin/(protected)');
+
+describe('admin read guard', () => {
+  it('no protected page uses the cookie-only session guard', () => {
+    const pages = walk(ADMIN_PROTECTED).filter((f) => /\bpage\.tsx$/.test(f));
+    // Guard against a bad path silently passing by scanning nothing.
+    expect(pages.length).toBeGreaterThan(5);
+
+    const sessionModule = join(SRC, 'lib/auth/session');
+    const offenders = pages.filter(
+      (f) => importedModules(f).includes(sessionModule) && /\brequireSession\b/.test(readFileSync(f, 'utf8')),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
