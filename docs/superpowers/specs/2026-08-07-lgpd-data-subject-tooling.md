@@ -1,6 +1,6 @@
 # Secretária Virtual — LGPD Art. 18 Data-Subject Tooling
 
-**Design doc** · 2026-08-07 · Status: proposed (revised after adversarial review — see Revisions)
+**Design doc** · 2026-08-07 · Status: proposed · revision 3, after adversarial review, revision and re-attack — see Revisions
 
 ## Overview
 
@@ -10,12 +10,13 @@ This subsystem builds the tooling that turns those promises into mechanisms, and
 
 - **The church secretary performs deletions from the panel.** A member asks the church; staff act. There is no member-initiated delete command in the bot, and the vendor never deletes on a church's behalf.
 - **Member data is auto-purged at 12 months.** The purge makes an existing promise true rather than adding a new one.
+- **Prayer requests are on the same clock.** No exemption. The church is warned 30 days ahead and offered an export of exactly what is about to go, and the purge runs whether or not the export is taken.
 
 **Done means:**
 
 1. A panel page per member that shows exactly what the church holds about that person, downloads it as one file, corrects the name, and deletes everything — reachable in two clicks from the conversation.
 2. A daily job that deletes messages, prayer requests, and idle contacts older than 12 months, for every church, fairly across churches and resumably within each.
-3. A record that proves each deletion happened, which is not itself a copy of what was deleted, and whose counts are true rather than approximately true.
+3. A record that proves each deletion happened, which is not itself a copy of what was deleted, whose counts never overstate what was destroyed, and which is never hidden from the church for reading zero.
 4. A 🔒 Privacidade text that describes what the system actually does, including sharing (Art. 18 VII), which the current text omits entirely.
 5. No path anywhere that writes member data to Vercel Blob, to a log line, or to a file that outlives the request.
 
@@ -88,13 +89,13 @@ Two consequences the design has to carry:
 | Missing `ERASURE_HASH_SECRET` | The delete **proceeds**, storing a null hash | Fails toward the member's right, mirroring `effectiveStatus`'s fail-toward-service (`src/lib/church-status.ts:13-21`). A missing operator env var must never be the reason a statutory erasure does not happen. |
 | Suspension gate | **Export and delete are exempt, and delete is argued on its own terms** — see "Why a suspended church may still delete" | `requireWritableSession` blocks suspended churches (`src/lib/auth/writable.ts:29-31`). Routing data-subject actions through it would make a vendor billing dispute the reason a controller misses a statutory deadline — and the fine lands on the church, not on Rafael. |
 | Blocking future contact | **No blocklist.** A deleted member who writes again is a new person | The only way to stop future processing is to keep the phone number in a blocklist — retaining the exact identifier we were asked to erase, forever. The member already holds the real control: they can stop writing, or block the number in WhatsApp. Stated plainly in the Privacidade text so nobody is misled. |
-| Purge scope | Messages **and prayer requests** and idle contacts | This reverses the earlier spec's "prayer requests are exempt from the automatic purge" (`2026-08-06-multi-church-saas-design.md:113`). Keeping the single most sensitive column the longest is indefensible under Art. 6 III (necessity), and it contradicts the owner's instruction that member data is purged at 12 months. **Owner must confirm** — churches may value their prayer history. |
+| Purge scope | Messages **and prayer requests** and idle contacts. **Settled by the owner** (`.superpowers/sdd/owner-decisions-2026-08-07.md:41-56`): prayer requests run on the same 12-month clock, with a 30-day warning and an export offered first. | This reverses the earlier spec's "prayer requests are exempt from the automatic purge" (`2026-08-06-multi-church-saas-design.md:113`). Keeping the single most sensitive column the longest is indefensible under Art. 6 III (necessity). The owner's rationale is that the argument for keeping prayers longest is the same argument for keeping them least. The warning is a **courtesy, not a consent gate** — see "Prayer requests: warned, exportable, purged anyway". No longer an open question. |
 | Purge measurement | `message.created_at`, `prayer_request.created_at`, and `coalesce(contact.last_inbound_at, contact.created_at)` | `last_inbound_at` is written by a *separate statement* from the contact insert (`webhook/route.ts:80` then `:98`), so with no transactions it can legitimately be null on a real row. Coalescing to `created_at` (NOT NULL, `schema.ts:74`) means such a row still ages out instead of living forever. |
 | **Purge counting model** | **Children first, guarded parent last. Every deleted row is returned by the statement that deleted it; a cascade can never fire during the purge.** | The original ordering deleted idle contacts first and let the FK cascade take their messages and prayers — and cascaded rows appear in **no** rowcount and no `RETURNING`, so the receipt understated by exactly the amount the purge did most work. The fix is structural: delete the children (including those belonging to idle contacts) first, then delete contacts under an explicit `NOT EXISTS` guard so a contact is only ever removed once it provably owns zero child rows. Not "count more carefully" — "make the uncountable case impossible". Full statements below. |
 | Purge atomicity & resumability | Many small idempotent statements. **Resumable within a church by an absolute predicate; fair across churches by a persisted per-church cursor.** | The original claim "nothing needs to be persisted between runs" was true only inside one church. Across churches, an unordered list plus a wall-clock budget starves the tail. `church.retention_purged_at` is added and the loop runs least-recently-purged first, advancing the cursor when a church's slice ends whether or not it finished. A per-church slice cap stops one large church eating the whole run. |
 | Retention receipt ordering | **`pending` → delete → `done`, symmetric with erasure,** with counts committed incrementally after each batch | The original wrote the retention row *after* the deletes, i.e. exactly the ordering the erasure path rejects. A transient `neon-http` failure on that insert would have destroyed a year of message bodies with zero Art. 6 X evidence and nothing to detect it. There is no asymmetry to justify; there was a bug. |
 | Export storage | Generated per request, **streamed page by page**, never written to Blob, disk, or email | Vercel Blob URLs are public-by-URL and permanent — that is exactly why the menu-image flow works. A member export placed there would be a durable, unauthenticated, church-unscoped copy of the most sensitive rows in the system. The export is the one artifact where a convenience shortcut is a breach. |
-| Export bounding | Keyset-paged at 1 000 rows, hard ceiling 50 000 rows per collection, 45 s wall-clock budget, **defined continuation past the ceiling** | `neon-http` has no server-side cursors, so "stream from the database" is not available; what *is* available is keyset pagination feeding a `ReadableStream`, which bounds memory to one page. The ceiling and the budget bound time. Past either, the file is complete-as-far-as-it-goes, says so in pt-BR, and the panel offers a continuation file. |
+| Export bounding | Keyset-paged at 1 000 rows, hard ceiling 50 000 rows per collection, 45 s wall-clock budget under a declared **`maxDuration = 60`**, and a **keyset-cursor continuation** past either limit | `neon-http` has no server-side cursors, so "stream from the database" is not available; what *is* available is keyset pagination feeding a `ReadableStream`, which bounds memory to one page. The ceiling and the budget bound time — but only if the platform lets the function live that long, which is why `maxDuration` is declared rather than inherited. Past either limit the file is complete-as-far-as-it-goes, says so in pt-BR, and carries the exact `(created_at, id)` position to resume from. Revision 2's date-granular `?desde=` is withdrawn: a date cannot name a position inside a day. |
 | Export format | JSON, with **pt-BR keys** | Art. 18 V asks for an interoperable, common format; JSON is that. The keys are user-facing text handed to a Brazilian member, so the binding pt-BR rule applies to them (unlike code identifiers). The panel also renders the same content on screen, which satisfies Art. 19 §2's electronic-or-printed option without a second format. |
 | Correction (III) | Name yes; message and prayer bodies no | A conversation log is a record of an event. Editing what someone said destroys the only value the record has and would let a church rewrite a member's words. The remedy for a wrong or regretted prayer request is deletion of that request, not rewriting it. |
 | Deletion granularity | Whole member only. No per-message delete | Two reasons: a per-row delete cannot be made atomic against its audit record without the same machinery for a much smaller benefit, and "apague aquela mensagem" is nearly always "apague tudo". A single prayer request can be removed by deleting the member and letting them start over — stated in the panel copy. |
@@ -102,7 +103,9 @@ Two consequences the design has to carry:
 | Cron authentication | `Authorization: Bearer $CRON_SECRET`, timing-safe compare; **refuse to run if the secret is unset** | The deliberate inversion of this codebase's fail-open habit. Every other guard fails toward service; this one guards a destructive, unauthenticated-by-default endpoint. An open `/api/cron/purge` is a delete button on the public internet. |
 | Cross-church query privilege | New system-only module `src/lib/repo/retention.ts`, importable by **exactly one file**, enforced by an **importer-keyed** allowlist that keeps the module inside `walk()` | See "The privilege-boundary amendment". Adding `retention.ts` to the existing `ALLOWED` set would have *stopped it being scanned for its own imports* — opening the hole the amendment claims to close. |
 
-### Why a suspended church may still delete
+### Why a suspended church may still delete — **settled**
+
+**Owner decision, recorded 2026-08-07: a suspended church keeps a working delete button.** An Art. 18 deadline does not pause for a billing dispute between the vendor and the church. This section argued the case; it is no longer an argument seeking approval, and it has been removed from "What the owner must decide". The reasoning is kept because an implementer who does not understand *why* the delete path skips the status check is one refactor away from routing it through `requireWritableSession`.
 
 The original spec argued the suspension exemption for **export** — "this grants no new reading power, `requireReadableSession` already lets a suspended church read every message" (verified: `writable.ts:75-84` performs no status check) — and then quietly applied the same guard to `deleteMemberData`, which is destructive, unrecoverable, and would become the **only write a suspended church can perform**. That argument does not transfer. Here is the one that is actually about deletion.
 
@@ -110,7 +113,7 @@ The original spec argued the suspension exemption for **export** — "this grant
 2. **The controller is deleting the controller's own data.** Rafael is the *operador*. Withholding a controller's delete button over a billing dispute is the operator asserting control over the controller's data, which is the wrong role in the wrong direction, and worse than the billing problem it would be leverage for.
 3. **The deadline runs against the church.** Art. 18 VI plus Art. 19 II's 15 days, and the fine lands on the church. A vendor's invoice must not be the mechanism by which a controller misses a statutory deadline.
 4. **The blast radius is one member, and the identity gate is unchanged.** `requireDataRightsSession` still performs the revocation re-check, so a *removed* secretary is blocked exactly as today; a *current* secretary of a suspended church is still the controller's agent. The action is one contact at a time, behind a typed `APAGAR` confirmation, scoped by the same two predicates as every other query — a suspended church cannot reach another church's rows through it.
-5. **The exemption is exactly two actions, and a test says so.** `deleteMemberData` and the export route are the only permitted callers of `requireDataRightsSession`/`checkDataRightsSession`. Everything else a suspended church might want — replying to the member, editing texts, changing credentials, staff management — still goes through `requireWritableSession` and is still blocked.
+5. **The exemption is exactly three entry points, and a test enforces it.** The only permitted callers of `requireDataRightsSession`/`checkDataRightsSession` are `deleteMemberData` (the action), `GET /api/dados/[contactId]` (the member export) and `GET /api/dados/oracoes-expirando` (the prayer-request export offered before the purge). Everything else a suspended church might want — replying to the member, editing texts, changing credentials, staff management — still goes through `requireWritableSession` and is still blocked. Revision 2 claimed "a test says so" while the Testing section contained no such test; the test is written out below under **Data-rights guard allowlist**, and it reuses the `walk()` + `importedModules()` scanner that `tests/privilege-boundary.test.ts` already runs. Until that test exists, the claim in this bullet is a design intention and nothing more.
 
 The honest residual: a secretary of a church in a billing dispute can destroy that church's own member data. That is true of every day the church is *not* suspended too, so suspension is not the control that was preventing it.
 
@@ -118,7 +121,7 @@ The honest residual: a secretary of a church in a billing dispute can destroy th
 
 ## Schema changes
 
-Migration **0004** — a new file; `0000`–`0003` are never touched. It carries one new enum pair, one new table, one new column on `church`, and five supporting indexes without which the new purge statements are sequential scans.
+Migration **0004** — a new file; `0000`–`0003` are never touched. It carries one new enum pair, one new table, one new column on `church`, and five supporting indexes, each one written against a predicate that appears verbatim elsewhere in this spec. Revision 2 also listed five, but two of them could not serve the statements they were added for; the shapes below are corrected and the reasoning is in "On the indexes and these statements".
 
 ```sql
 -- drizzle/0004_<generated>.sql
@@ -160,15 +163,32 @@ CREATE UNIQUE INDEX "erasure_record_subject_uq"
 -- table so it disappears with the church for free.
 ALTER TABLE "church" ADD COLUMN "retention_purged_at" timestamp with time zone;
 
--- Without these, the purge's NOT EXISTS guards and its age predicates are
--- sequential scans over every message in the platform. Postgres does not index
--- FK columns automatically, and today `message` and `prayer_request` carry only
--- their primary keys and the wa_message_id unique index (schema.ts:89-91, :93-100).
+-- Postgres does not index FK columns automatically, and today `message` and
+-- `prayer_request` carry only their primary keys and the wa_message_id unique
+-- index (verified in schema.ts: `message` declares only `waMessageIdUq`,
+-- `prayer_request` declares no third argument at all). Each index below is
+-- written to match a predicate that appears verbatim in this spec.
+
+-- Age predicates: the purge's message/prayer cutoff, the step-0 probe, and the
+-- expiring-prayers warning.
 CREATE INDEX "message_church_created_idx"        ON "message" ("church_id", "created_at");
-CREATE INDEX "message_contact_idx"               ON "message" ("church_id", "contact_id");
 CREATE INDEX "prayer_request_church_created_idx" ON "prayer_request" ("church_id", "created_at");
-CREATE INDEX "prayer_request_contact_idx"        ON "prayer_request" ("church_id", "contact_id");
-CREATE INDEX "contact_church_last_inbound_idx"   ON "contact" ("church_id", "last_inbound_at");
+
+-- One index per child table, serving BOTH the purge's church-scoped NOT EXISTS
+-- guard (the leading pair) and the export's keyset page, whose ORDER BY is
+-- (created_at, id) within one contact (all four columns). Two narrower indexes
+-- would be one index more than the work needs.
+CREATE INDEX "message_contact_keyset_idx"
+  ON "message" ("church_id", "contact_id", "created_at", "id");
+CREATE INDEX "prayer_request_contact_keyset_idx"
+  ON "prayer_request" ("church_id", "contact_id", "created_at", "id");
+
+-- An EXPRESSION index, not ("church_id", "last_inbound_at"). The idle predicate
+-- is coalesce(last_inbound_at, created_at) < $cutoff, and a plain column index
+-- is not sargable against a coalesce() over two columns. Revision 2 listed the
+-- plain-column form, which no statement in this spec could have used.
+CREATE INDEX "contact_church_idle_idx"
+  ON "contact" ("church_id", (coalesce("last_inbound_at", "created_at")));
 ```
 
 Column notes:
@@ -220,7 +240,30 @@ export const erasureRecord = pgTable('erasure_record', {
 }));
 ```
 
-**Implementation note on the partial index.** `drizzle-kit generate` is the source of migration 0004, but the emitted SQL must be read before it is committed: if drizzle-kit drops the `WHERE reason = 'subject_request'` predicate, the index becomes total and blocks a second retention row per church, which is wrong. The predicate is hand-restored if needed. The PGlite suite runs the real migration, so a dropped predicate fails a test rather than reaching production.
+**Three existing `pgTable` definitions gain index entries.** This is a real edit to existing code, stated rather than glossed:
+
+```ts
+// message — third argument already exists (waMessageIdUq); two entries are added
+  churchCreatedIdx: index('message_church_created_idx').on(t.churchId, t.createdAt),
+  contactKeysetIdx: index('message_contact_keyset_idx').on(t.churchId, t.contactId, t.createdAt, t.id),
+
+// prayer_request — has NO third argument today; one is added
+}, (t) => ({
+  churchCreatedIdx: index('prayer_request_church_created_idx').on(t.churchId, t.createdAt),
+  contactKeysetIdx: index('prayer_request_contact_keyset_idx').on(t.churchId, t.contactId, t.createdAt, t.id),
+}));
+
+// contact — third argument already exists (churchPhoneUq); one expression entry is added
+  churchIdleIdx: index('contact_church_idle_idx')
+    .on(t.churchId, sql`coalesce(${t.lastInboundAt}, ${t.createdAt})`),
+```
+
+**Implementation note on the two hand-checkable index shapes.** `drizzle-kit generate` is the source of migration 0004, but the emitted SQL must be read before it is committed, in two places:
+
+- If drizzle-kit drops the `WHERE reason = 'subject_request'` predicate, the partial index becomes total and blocks a second retention row per church, which is wrong.
+- If it emits `contact_church_idle_idx` over the bare columns instead of the `coalesce(…)` expression, the index silently stops serving the idle predicate — the exact defect being fixed here.
+
+Either is hand-restored in the migration file. The PGlite suite runs the real migration, so a dropped predicate fails a test rather than reaching production; a wrong *expression* would not fail a correctness test, so it is a read-the-diff item, and the plan should say so.
 
 **No other schema change.** In particular there is no `blocked_at`, no `deletion_requested_at` on `contact`, and no soft-delete flag — soft deletion is not deletion.
 
@@ -269,10 +312,13 @@ CRON_SECRET=""
 |---|---|
 | `src/app/admin/(protected)/caixa/[contactId]/dados/page.tsx` | The member data page. Uses `requireReadableSession` — mandatory, `tests/privilege-boundary.test.ts:121-135` fails any protected page that does not. |
 | `.../dados/actions.ts` | `deleteMemberData(contactId, formData)` and `renameMember(...)`. Uses the new `requireDataRightsSession`. |
-| `src/app/api/dados/[contactId]/route.ts` | GET → the export file, as a `ReadableStream`. Uses `checkDataRightsSession`, the non-redirecting variant: a route handler that let `NEXT_REDIRECT` escape would serialise a framework control-flow signal into its own body — the exact bug already fixed once at `src/app/api/blob/upload/route.ts:9-25`. |
+| `src/app/api/dados/[contactId]/route.ts` | GET → the member export file, as a `ReadableStream`. **Declares `export const maxDuration = 60` and `export const dynamic = 'force-dynamic'`** — without the first, Vercel's 10 s default kills the request before the 45 s budget can apply. Uses `checkDataRightsSession`, the non-redirecting variant: a route handler that let `NEXT_REDIRECT` escape would serialise a framework control-flow signal into its own body — the exact bug already fixed once at `src/app/api/blob/upload/route.ts:9-25`. |
+| `src/app/api/dados/oracoes-expirando/route.ts` | GET → the expiring-prayer-requests export, same stream/keyset/budget/`maxDuration` shape, church-scoped rather than contact-scoped. Offered by the 30-day warning. Third and last caller of `checkDataRightsSession`. |
 | `src/app/api/cron/purge/route.ts` | Bearer-authenticated purge runner, **exported as `GET`**. The only importer of `repo/retention.ts`. |
 | `src/lib/auth/writable.ts` | Gains `requireDataRightsSession()` (actions) and `checkDataRightsSession()` (route handlers). See the refactor note below — the split is narrower than the original spec proposed, on purpose. |
-| `src/app/admin/(protected)/configuracoes/page.tsx` | Gains a "Retenção e exclusões" panel: the retention statement, the last records, and the hash-verification box. |
+| `src/app/admin/(protected)/configuracoes/page.tsx` | Gains a "Retenção e exclusões" panel: the retention statement, **every** retention and subject record (no all-zero filter — see the display rule), the hash-verification box, and the 30-day expiring-prayers warning. |
+| `src/app/admin/(protected)/oracao/page.tsx` | Gains the same 30-day expiring-prayers warning at the top, rendered only when the count is greater than zero. Read-only; the guard it already uses is unchanged. |
+| `src/lib/repo/prayer-admin.ts` | Gains `countExpiringPrayers(churchId, before)` and `pageExpiringPrayers(churchId, before, after, limit)`. Church-scoped like the two functions already there; no new module for a two-query feature. |
 | `src/app/owner/(protected)/[churchId]/actions.ts` | Gains `updatePrivacyText(churchId)` — rewrites the 🔒 Privacidade body **only** if it is byte-identical to a previous seeded default. Sits beside the existing `seedPrivacyItem` (`actions.ts:56-83`), which it deliberately does not modify. |
 | `vercel.json` | New file (none exists today). One cron entry. |
 
@@ -299,14 +345,20 @@ checkWritableSession()       = as today                                         
 
 The amendment is an **importer-keyed** table, and `walk()` loses its skip entirely:
 
+**The two sides of the map must be keyed differently, and getting that wrong disables the check silently.** `resolveSpecifier` ends with `target.replace(/\.(tsx?|jsx?|mjs|cjs)$/, '')` (`privilege-boundary.test.ts:58`), so `importedModules()` yields **extensionless** paths — which is exactly why the test that exists today compares against `PLATFORM_MODULE.replace(/\.tsx?$/, '')` (`:77`) and not against `PLATFORM_MODULE`. `walk()`, by contrast, yields real paths **with** `.ts`/`.tsx`. A `RESTRICTED` keyed on `'lib/repo/platform.ts'` would therefore never match anything `importedModules` returns: the amendment would pass green while enforcing nothing at all — a worse outcome than the exemption it replaces, because it would look like a guard. Keys are module bases; importer sets are walked paths:
+
 ```ts
+const base = (p: string) => p.replace(/\.tsx?$/, '');
+
 /** Modules whose privilege is bounded by WHO may import them — not by being
- *  invisible to the scanner. Key: the restricted module. Value: the exact set of
- *  files permitted to import it. Every file here is STILL walked, so a restricted
- *  module's own imports are checked like anyone else's. */
+ *  invisible to the scanner.
+ *  KEY:   the restricted module, EXTENSIONLESS — that is what importedModules() returns.
+ *  VALUE: the files permitted to import it, WITH extension — that is what walk() returns.
+ *  Every file here is STILL walked, so a restricted module's own imports are
+ *  checked like anyone else's. */
 const RESTRICTED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  [join(SRC, 'lib/repo/platform.ts'), new Set<string>()],            // importable by nothing under the scanned roots
-  [join(SRC, 'lib/repo/retention.ts'), new Set([join(SRC, 'app/api/cron/purge/route.ts')])],
+  [base(PLATFORM_MODULE), new Set<string>()],                        // importable by nothing under the scanned roots
+  [base(join(SRC, 'lib/repo/retention.ts')), new Set([join(SRC, 'app/api/cron/purge/route.ts')])],
 ]);
 
 function walk(dir: string): string[] {           // the `!ALLOWED.has(full)` filter is removed
@@ -315,7 +367,7 @@ function walk(dir: string): string[] {           // the `!ALLOWED.has(full)` fil
 }
 ```
 
-The assertion becomes: for every scanned file `f` and every restricted module `m` that `f` imports, fail unless `RESTRICTED.get(m)!.has(f)`. Three properties follow, and each gets its own test:
+The assertion becomes: for every scanned file `f` and every restricted module `m` that `f` imports, fail unless `RESTRICTED.get(m)!.has(f)`. The existing `resolves alias, relative and extension-bearing specifiers` test (`privilege-boundary.test.ts:82-96`) already pins the resolver's extensionless output, so a later change to it breaks there rather than quietly emptying this map. Three properties follow, and each gets its own test:
 
 1. `platform.ts` is importable by nothing under the scanned roots — the rule it has today, unchanged, now expressed as an empty set instead of an exemption.
 2. `platform.ts` is itself scanned for the first time. Verified safe: it imports only `drizzle-orm`, `@/db/client`, `@/db/schema` and `@/lib/church-status` (`platform.ts:1-4`), none of them restricted.
@@ -347,7 +399,7 @@ type DeleteResult =
 
 1. `requireDataRightsSession()` — revocation re-checked, suspension deliberately not.
 2. Confirmation: `formData.get('confirm') !== 'APAGAR'` → `{ error: 'Escreva APAGAR para confirmar.' }`. Nothing is read or written before this.
-3. `loadMemberSubject(churchId, contactId)` and `countMemberRows(churchId, contactId)`. If the contact is absent, skip to step 6's lookup.
+3. `loadMemberSubject(churchId, contactId)` and `countMemberRows(churchId, contactId)`. If the contact is absent, skip to step 7's lookup.
 4. `hashPhone(contact.phone)` — pure, in memory, never logged.
 5. **`openSubjectErasure(...)` — one statement, two guards:**
 
@@ -428,13 +480,19 @@ type DeleteResult =
       SELECT id FROM contact c
        WHERE c.church_id = $1
          AND coalesce(c.last_inbound_at, c.created_at) < $cutoff
-         AND NOT EXISTS (SELECT 1 FROM message        m WHERE m.contact_id = c.id)
-         AND NOT EXISTS (SELECT 1 FROM prayer_request p WHERE p.contact_id = c.id)
+         AND NOT EXISTS (SELECT 1 FROM message        m
+                          WHERE m.church_id = $1 AND m.contact_id = c.id)
+         AND NOT EXISTS (SELECT 1 FROM prayer_request p
+                          WHERE p.church_id = $1 AND p.contact_id = c.id)
        LIMIT 500)
    RETURNING id;
    ```
 
-The `NOT EXISTS` pair is what turns "the cascade *should* have nothing left" into "the cascade *cannot* fire". A member who writes in the window between step 1 and step 3 — the webhook inserts the message (`route.ts:85`) one statement before it touches `last_inbound_at` (`:98`), so their contact still matches the idle predicate for a moment — simply fails the `NOT EXISTS` and survives to the next run. Their new message is not silently cascaded away and the counts do not drift. **Every row the purge deletes is a row some statement returned.** The five indexes in migration 0004 are what keep these `NOT EXISTS` guards and `IN` subqueries from being sequential scans.
+   **`m.church_id = $1` is load-bearing and was missing in revision 2.** Without it the guard is still *correct* — `contact_id` is a UUID primary key, so a row of another church can never match — but it is no longer *seekable*: `message_contact_keyset_idx` leads with `church_id`, and a predicate that constrains only the second column cannot be used as an index seek. The previous revision added indexes and then wrote predicates those indexes could not serve. Church-scoping the guard costs nothing semantically and is the only reason the index exists.
+
+The `NOT EXISTS` pair is what turns "the cascade *should* have nothing left" into "the cascade *cannot* fire". A member who writes in the window between step 1 and step 3 — the webhook inserts the message (`route.ts:85`) one statement before it touches `last_inbound_at` (`:98`), so their contact still matches the idle predicate for a moment — simply fails the `NOT EXISTS` and survives to the next run. Their new message is not silently cascaded away and the counts do not drift. **Every row the purge deletes is a row some statement returned.**
+
+**On the indexes and these statements, stated at the strength the evidence supports.** Each index in migration 0004 is written to match a predicate that appears verbatim above: the age arms against `(church_id, created_at)`, the `NOT EXISTS` guards against the leading `(church_id, contact_id)` of the keyset indexes, and the idle predicate against the `coalesce` expression index. That the planner *chooses* them — in particular that it resolves the `created_at < $cutoff OR contact_id IN (…)` disjunction into a `BitmapOr` of two index scans rather than a sequential scan — is a plan-level claim, and there is no database in this repository on which to read a plan. It is listed under "What cannot be verified here" rather than asserted. What is asserted, and is checkable by reading, is the weaker and more useful property: **no predicate in this spec is now unservable by the indexes this spec adds.** Revision 2's claim that the indexes "keep these guards from being sequential scans" is withdrawn — it was false for two of the five indexes and unverifiable for the rest.
 
 The receipt string is therefore left **verbatim** — it is now true — rather than being softened to hide a number that could not be trusted.
 
@@ -452,8 +510,16 @@ The receipt string is therefore left **verbatim** — it is now true — rather 
    False → advance the cursor, write **no record**, move to the next church. This is what keeps "a retention row means something was actually deleted" true while still writing the row *before* the deletes.
 
 1. **Open the receipt**: `INSERT … reason='retention', status='pending', counts 0 … RETURNING id`.
-2. Run loops 1–3 above. **After each committed batch**, `UPDATE erasure_record SET messages_deleted = messages_deleted + $n WHERE id = $1 AND church_id = $2`. One extra round trip per 500 rows — the price of a receipt that is truthful at every instant rather than only at the end.
+2. Run loops 1–3 above. **After each committed batch**, `UPDATE erasure_record SET messages_deleted = messages_deleted + $n WHERE id = $1 AND church_id = $2`. One extra round trip per 500 rows.
 3. **Mark `done`**, set `completed_at`, set `church.retention_purged_at = now()`.
+
+**What the counts actually guarantee — the "truthful at every instant" claim is retracted.** It was false, and the way it was false is the same shape as the bug it replaced. With no transactions, the batch `DELETE` and the `+n` `UPDATE` are two statements: the delete can commit and the function be killed before the update lands. The receipt then reports fewer rows than were destroyed. Making them one statement is possible in principle (`WITH d AS (DELETE … RETURNING id) UPDATE erasure_record SET … + (SELECT count(*) FROM d)`) but is exactly the "new machinery to close a finding" that produced this defect in the first place, and it does not remove the risk — it moves it to the *next* batch boundary.
+
+The honest invariant, and the one the design does enforce, is one-directional:
+
+> **A retention receipt never overstates.** `messages_deleted ≤ rows actually deleted`, always, because every increment is applied only after the delete that earned it has already committed. It can lag reality by at most one batch per table (500 rows), and it lags by more than that only if the run is killed and the row is later swept.
+
+That is a weaker claim than revision 2 made and a stronger one than "approximately right": a church reading its receipt knows the number is a floor, never a ceiling. It also means an all-zero `done` row is a real, reachable state — which is what the display rule below has to handle.
 
 **Why the retention path is `pending → done` like erasure, not the reverse.** The original wrote the retention row *after* the deletes, which is precisely the ordering the erasure section rejects as "the dangerous direction". A transient `neon-http` failure on that final insert would have left 1 240 message bodies destroyed with zero Art. 6 X evidence and nothing anywhere to notice. There was no asymmetry worth justifying — there was a bug, and it is fixed by making the two paths the same shape.
 
@@ -469,11 +535,48 @@ The receipt string is therefore left **verbatim** — it is now true — rather 
 
 > Within a church, the purge is resumable by construction — the predicate is absolute time, not a cursor, so a run cut short leaves the remainder for the next run and running twice deletes nothing the second time. **Across churches, resumability is a persisted cursor**, and the worst-case retention overrun is one full rotation of the church list, which grows with the number of churches and the size of their backlogs. With one church live today the rotation is one day. The Configurações panel shows each run, so a church whose purge is being cut short can see it in its own receipts.
 
-**Mid-run timeout: what record the church gets.** The `pending` row stays, carrying counts that are true as far as the run got, and the cursor still advances. The next run opens a *new* record for whatever remains. A church therefore sees two lines for a purge that took two days, which is what actually happened. At the start of every run, retention rows still `pending` after **6 hours** are flipped to `done` with their counts as they stand — safe, because those counts were committed incrementally and no further deletion is attributed to them.
+**Mid-run timeout: what record the church gets.** The `pending` row stays, carrying counts that are true as far as the run got, and the cursor still advances. The next run opens a *new* record for whatever remains. A church therefore sees two lines for a purge that took two days, which is what actually happened. At the start of every run, retention rows still `pending` after **6 hours** are flipped to `done` with their counts as they stand. The sweep never invents a number and never attributes further deletion to the row; what it can do is freeze a count that already lags, up to and including 0/0/0, which is why the display rule below lists such a row instead of hiding it.
 
 **Also swept each run:** `erasure_record` subject-request rows still `pending` more than **15 minutes** old. The sweep re-runs the delete for `subject_contact_id` (zero rows if it already succeeded) and marks the record `done` — **with no counts written**, because the counts have been on the row since it was opened. This is what makes the pending-first ordering safe: an interrupted erasure completes itself without anyone noticing it broke, and without a self-healed receipt claiming `0 mensagens, 0 pedidos de oração` for the one case where the delete definitely happened.
 
-**Display rule for Configurações.** A retention row is listed when any of its three counts is greater than zero, **or** its status is `pending`. The probe in step 0 makes an all-zero completed row rare (it needs a race between the probe and the deletes), and a church should not be shown a line reporting that nothing was deleted.
+**Display rule for Configurações: every retention row is listed. No filter.** Revision 2 hid rows whose three counts were all zero and whose status was `done`, on the reasoning that a church should not be shown a line reporting that nothing happened. That reasoning inverts on the one case that matters. Trace it: probe finds work → `pending` row opened at 0/0/0 → a 500-row `DELETE` **commits** → the function is killed before the `+500` update → six hours later the sweep flips the row to `done` at 0/0/0. Five hundred message bodies are gone, the receipt says nothing was deleted, and the hidden-row filter means the church is shown **no line at all**. The failure the pending→done ordering was introduced to make impossible survived at a smaller size and was then made invisible.
+
+So the filter is removed. An all-zero `done` row is exactly the row a church most needs to see, and it gets a suffix that says what it is:
+
+> `{data} · Limpeza automática (12 meses) · a execução foi interrompida antes de registrar a contagem`
+
+**Why this remedy and not the other.** The re-attack offered a choice: retract the "truthful at every instant" claim, or list the all-zero rows. The claim had to be retracted regardless — a spec may not assert something it knows to be false, and the paragraph above does that work. But retracting a sentence changes nothing a church can see. The display rule is the edit that closes the actual defect, because the defect is *invisibility*, not wording. Both are done; only one of them is the fix.
+
+The cost is the case the old filter existed for: a probe/delete race can produce a genuine "found work, deleted nothing" row, and that church now sees one line saying so. That is a rare, truthful, self-explaining line, and it is a much smaller harm than a silent 500-row deletion. The three-count `> 0` filter is not a safe proxy for "nothing happened", and this is why.
+
+### Prayer requests: warned, exportable, purged anyway
+
+**Settled by the owner** (`.superpowers/sdd/owner-decisions-2026-08-07.md:41-56`). Prayer requests are purged on the same 12-month clock as messages and idle contacts — no exemption, no longer period. The church is warned first and offered an export, and **the purge happens whether or not the export is taken.** The owner's reasoning is the one the purge scope decision already rests on: prayer requests carry health, family and faith detail, so the argument for keeping them longest is the same argument for keeping them least. The export exists so a church that wants its pastoral history can keep it deliberately, not so that inertia keeps sensitive data alive forever.
+
+**Lead time: 30 days. Why 30 and not 7 or 90.**
+
+The only channel this product has to a church is the panel. There is no email address on file for a secretary, no in-product notification system, and this spec has already refused to add one — a WhatsApp or email message saying "we are about to delete your members' prayer requests" is alarming, needs a delivery channel that does not exist, and would be a second place member data could leak. A warning delivered by a passive channel has to survive the reader's absence, so the window is chosen against how often a secretary actually opens the panel:
+
+- **7 days is defeated by one holiday.** A secretary who checks the panel weekly and takes two weeks off in December loses prayers without ever having seen the warning. A courtesy nobody can receive is not a courtesy.
+- **90 days makes the warning permanent, which makes it invisible.** Prayer requests arrive continuously, so once a church passes its first year a 90-day window is almost never empty. A banner that is always on stops being read within a month — the failure mode is not that the church misses one warning, it is that the church stops seeing warnings at all.
+- **30 days clears exactly one full monthly cycle** with room for a two-week absence, and it is short enough that the window is frequently empty for a normal-volume church, so the banner appearing still means something. It is also the coarsest unit a church actually plans in.
+
+30 days is a starting point tied to an assumption — that a secretary opens the panel at least monthly — which nobody here has observed, because no church has used this product yet. It is listed under "What cannot be verified here".
+
+**Where the warning appears.** Two read pages, both already guarded by `requireReadableSession`: the **Oração** page, because that is where a secretary who cares about prayer requests already is, and the **Configurações** "Retenção e exclusões" panel, beside the retention statement it qualifies. It is rendered only when the count is greater than one; there is no empty state, because a permanent "0 pedidos vão ser apagados" line is the 90-day failure in another form.
+
+**The export covers prayer requests specifically.** `GET /api/dados/oracoes-expirando` streams, in the same `ReadableStream` + keyset shape as the member export, every prayer request whose `created_at` is earlier than `retentionCutoff(now) + 30 days` — that is, exactly the set the warning is counting, and exactly the set the next 30 days of purges will destroy. Not the church's whole prayer archive: a full archive is a whole-church backup, which this spec puts out of scope on its own risk grounds, and a warning-driven export should hand over the thing that is about to be lost and nothing else.
+
+- Same headers as the member export: `application/json; charset=utf-8`, `Cache-Control: no-store`, `Content-Disposition: attachment; filename="pedidos-de-oracao-a-expirar-<yyyy-mm-dd>.json"`. No phone or name in the filename.
+- Same declarations: `export const maxDuration = 60`, `export const dynamic = 'force-dynamic'`, same 45 s budget, same 50 000-row ceiling, same `aviso`/`continuacao` footer.
+- Each entry carries `quando`, `situacao`, `texto`, and the member's `nome` and `whatsapp` — because a prayer request the church cannot attach to a person is pastorally worthless, and this file goes to the controller, not to a member. That makes it the single most sensitive artifact this subsystem produces, and the panel copy says so.
+- Church-scoped by the same two predicates as everything else; served by `prayer_request_church_created_idx`.
+- Guarded by `checkDataRightsSession` — the third and last member of the allowlist in "Why a suspended church may still delete". It grants no new reading power: the Oração page already shows a suspended church every prayer request it holds.
+- Two new church-scoped functions on the existing `src/lib/repo/prayer-admin.ts` (which is already church-scoped and already joins `contact` on two predicates): `countExpiringPrayers(churchId, before)` and `pageExpiringPrayers(churchId, before, after, limit)`. No new module.
+
+**The warning is a courtesy, not a consent gate — stated in the product, not only here.** Nothing about the purge is conditional on the export. The cron route does not check whether a warning was displayed, does not check whether a file was downloaded, and has no field it could check with: `erasure_record` records deletions, not notifications. A church that never opens the panel for a year loses its prayer requests on schedule, and the panel says that in so many words rather than leaving it to be discovered. The accepted cost is the owner's, recorded verbatim in the decisions file: *"a church that ignores the warning loses the data anyway. That is the correct default — the alternative is holding sensitive data indefinitely because nobody read an email."*
+
+**At launch this warning never fires,** for the same reason the purge deletes nothing: no prayer request in the system is eleven months old, and none will be for eleven months.
 
 ### Scheduling
 
@@ -497,7 +600,9 @@ The receipt string is therefore left **verbatim** — it is now true — rather 
 
 **Trigger:** the secretary, from the member page. Never the member directly, never the vendor.
 
-**Delivery:** `GET /api/dados/<contactId>` responds with `Content-Type: application/json; charset=utf-8`, `Content-Disposition: attachment; filename="dados-membro-<first-6-of-uuid>-<yyyy-mm-dd>.json"`, and `Cache-Control: no-store`. The filename carries no phone and no name — it lands in a shared secretariat's Downloads folder. The URL carries only the contact UUID (already in `/admin/caixa/<contactId>` today) and, for a continuation file, a plain date; no personal data ever goes in a query string.
+**Delivery:** `GET /api/dados/<contactId>` responds with `Content-Type: application/json; charset=utf-8`, `Content-Disposition: attachment; filename="dados-membro-<first-6-of-uuid>-<yyyy-mm-dd>.json"`, and `Cache-Control: no-store`. The filename carries no phone and no name — it lands in a shared secretariat's Downloads folder. The URL carries only the contact UUID (already in `/admin/caixa/<contactId>` today) and, for a continuation file, a keyset cursor made of a timestamp and a row UUID. Neither is personal data; no phone, name or body text ever goes in a query string.
+
+**The route declares `export const maxDuration = 60` and `export const dynamic = 'force-dynamic'`.** This is not decoration. No file under `src/` sets `maxDuration` today — verified by grep, the repository has never needed it — so the export route would inherit Vercel's default, which is 10 s on the Hobby plan. Revision 2 specified a 45 s wall-clock budget and a 50 000-row ceiling on a route that the platform would have killed at 10 s, meaning the entire bounding design would have been dead code on precisely the member whose history is large enough to need it. The 45 s budget is only meaningful under a 60 s ceiling; the two numbers belong to the same decision and must be written in the same file. Whether the plan in force actually permits `maxDuration = 60` is in "What cannot be verified here", alongside the same question for the cron route.
 
 **Isolation:** the handler resolves `churchId` from the session and calls the church-scoped loaders, so another church's `contactId` returns 404 — the same two-predicate pattern `tests/repo-isolation.test.ts` already exercises for `loadConversation`.
 
@@ -508,11 +613,23 @@ The original said the response was "built in memory and streamed", which is two 
 **`neon-http` has no server-side cursors,** so "stream from the database" is not on the menu. What is:
 
 - The response body is a `ReadableStream`. The route writes the header object, then pages, then the footer, as UTF-8 chunks. **At most one page — 1 000 rows — is in memory at a time.**
-- Paging is **keyset**, ascending, on `(created_at, id)`: `WHERE church_id = $1 AND contact_id = $2 AND (created_at, id) > ($3, $4) ORDER BY created_at, id LIMIT 1000`. Stable under concurrent inserts and index-friendly (`message_contact_idx` from migration 0004).
+- Paging is **keyset**, ascending, on `(created_at, id)`: `WHERE church_id = $1 AND contact_id = $2 AND (created_at, id) > ($3, $4) ORDER BY created_at, id LIMIT 1000`. Stable under concurrent inserts, and covered by `message_contact_keyset_idx` / `prayer_request_contact_keyset_idx` from migration 0004, whose four columns are exactly these four.
 - Two cheap `count(*)` statements run first so the header can carry `total_de_mensagens` / `total_de_pedidos` honestly.
 - **Ceiling:** 50 000 rows per collection, or a 45 s wall-clock budget, whichever comes first. At 12 months' retention, 50 000 messages is 137 per day, every day, from one person.
 
-**Behaviour past the ceiling is defined, not hoped for.** The stream closes as valid JSON, the footer carries an explicit pt-BR `aviso`, and the panel offers a continuation: `GET /api/dados/<contactId>?desde=YYYY-MM-DD` restarts the keyset at that date. The secretary hands over two files instead of one, and neither the church nor the member is told a truncated file is complete. Truncation is never silent.
+**Behaviour past the ceiling is defined, not hoped for.** The stream closes as valid JSON, the footer carries an explicit pt-BR `aviso`, and the panel offers a continuation. **The continuation is a keyset cursor, not a date** — revision 2's `?desde=YYYY-MM-DD` is withdrawn:
+
+```
+GET /api/dados/<contactId>?apos=mensagens:2026-03-12T19:04:11.208Z,7c1e…-…-…
+GET /api/dados/<contactId>?apos=oracoes:2026-03-12T19:04:11.208Z,7c1e…-…-…
+```
+
+- **Why a date could not work.** Truncation happens at a keyset position `(created_at, id)`, which is mid-day and mid-second. Resuming at `>= that date` re-exports everything earlier in that day; resuming at `> that date` skips the rest of it. There is no third option, so the test that revision 2 wrote — "a continuation that returns the remainder with no overlap and no gap" — was unsatisfiable against its own URL design. A defect the spec's own test could not pass is worse than a missing test.
+- **Why the stated privacy reason did not apply.** The date was chosen so that "no personal data goes in a query string". That rule is right and stays, but neither `message.created_at` nor `message.id` is personal data: the id is a `defaultRandom()` UUID that identifies a row, not a person, and it is already the same class of value as the `contactId` sitting in the path today. The excluded values are the phone, the name, the body, and `wa_message_id` — and none of those is in the cursor.
+- **One cursor is enough, because there is one truncation point.** The stream writes messages first, then prayers, so truncation is either mid-messages (prayers not started) or mid-prayers (messages complete). The `apos` value names which collection it resumes and where; a continuation that resumes mid-messages then runs the prayers to completion as usual. The cursor is emitted by the footer as `continuacao`, and the panel passes it straight back — the secretary never types or reads it.
+- **The date stays in the human copy.** *"O arquivo ficou grande demais e foi até {data}"* is what a secretary should see; the opaque cursor is what the link carries. Human-readable and machine-resumable are different jobs and revision 2 tried to make one value do both.
+
+The secretary hands over two files instead of one, and neither the church nor the member is told a truncated file is complete. Truncation is never silent.
 
 **Shape** (keys pt-BR, because a member reads them):
 
@@ -548,11 +665,14 @@ The original said the response was "built in memory and streamed", which is two 
 }
 ```
 
-When and only when the ceiling or the budget is reached, the footer gains:
+When and only when the ceiling or the budget is reached, the footer gains two keys:
 
 ```json
-  "aviso": "Este arquivo vai até 12/03/2026. Havia mais dados do que cabe em um único arquivo — a secretaria da igreja pode gerar o restante em um segundo arquivo."
+  "aviso": "Este arquivo vai até 12/03/2026. Havia mais dados do que cabe em um único arquivo — a secretaria da igreja pode gerar o restante em um segundo arquivo.",
+  "continuacao": "mensagens:2026-03-12T19:04:11.208Z,7c1e8b2a-4d55-4f0a-9a31-2b6c0f9e1a77"
 ```
+
+**Who reads `continuacao`.** The route is the only party that knows where it stopped — the ceiling is predictable from a row count, the 45 s budget is not — so the resume point is written into the file rather than guessed by the panel. The panel then reads it back, and this costs nothing new: revision 2 already required the panel to render *"O arquivo ficou grande demais e foi até {data}"*, which it can only do by reading the response body. So the export button fetches the response, hands the bytes to the browser as a download (`URL.createObjectURL` — the secretary's own browser, not Vercel Blob), and takes `aviso` and `continuacao` from the same object. The secretary never sees, types or pastes the cursor; they see two buttons and hand over two files.
 
 `wa_message_id` and internal UUIDs are excluded — they mean nothing to the member and one of them may encode their phone number.
 
@@ -676,6 +796,7 @@ The statute is no longer named in the member-facing text at all. It does not nee
 | Standing text | `As conversas e os pedidos de oração são apagados automaticamente após 12 meses. A limpeza roda todos os dias de madrugada.` |
 | Empty state | `Nenhuma exclusão registrada ainda.` |
 | Retention row | `{data} · Limpeza automática (12 meses) · {n} mensagens, {n} pedidos de oração, {n} cadastros apagados` |
+| Retention row, interrupted (status `done`, all three counts zero) | `{data} · Limpeza automática (12 meses) · a execução foi interrompida antes de registrar a contagem` |
 | Subject-request row | `{data} · Pedido do titular · {n} mensagens, {n} pedidos de oração · por {email}` |
 | Pending suffix | ` · pendente` |
 | Verify box title | `Verificar uma exclusão` |
@@ -685,6 +806,19 @@ The statute is no longer named in the member-facing text at all. It does not nee
 | Verify not found | `Nenhuma exclusão registrada para este número.` |
 | Verify unavailable | `A verificação não está disponível nesta instalação.` |
 | Verify hint | `O número apagado não fica guardado. A verificação usa uma impressão digital (hash) do número.` |
+
+**The 30-day prayer-request warning** — rendered identically on the Oração page and inside "Retenção e exclusões", **only when `{n}` is greater than zero**. This is the copy the owner decision asks for, verbatim.
+
+| Where | pt-BR |
+|---|---|
+| Title | `Pedidos de oração que serão apagados em breve` |
+| Body | `{n} pedido(s) de oração completam 12 meses nos próximos 30 dias e serão apagados automaticamente. Se a igreja quiser guardar esse histórico, baixe a cópia antes — depois de apagados não há como recuperar.` |
+| Not-a-gate line (always shown with the warning) | `A limpeza acontece mesmo que ninguém baixe o arquivo. Este aviso é uma cortesia, não um pedido de autorização.` |
+| Export button | `Baixar os pedidos que serão apagados (JSON)` |
+| Export hint | `O arquivo traz o nome e o número de quem fez cada pedido, junto com o texto. É o arquivo mais sensível do sistema: guarde em lugar seguro e não compartilhe fora da equipe.` |
+| Export failed | `Não foi possível gerar o arquivo. Tente novamente.` |
+| Export truncated (panel) | `O arquivo ficou grande demais e foi até {data}. Baixe o restante no botão abaixo e guarde os dois arquivos.` |
+| Export continuation button | `Baixar o restante (a partir de {data})` |
 
 **Export route errors** (JSON body) — reuses `UNAUTHENTICATED_MESSAGE` and `REVOKED_MESSAGE` from `src/lib/auth/writable.ts:86-92`, plus:
 
@@ -719,6 +853,10 @@ The cron route returns no user-facing text; its responses and logs are operator-
 | Member writes at the same moment as an erasure | A fresh contact row with a new UUID appears seconds later; the record's counts describe the state observed immediately before the delete. | The record is proof of an act, not an inventory. Off-by-one under a genuine race is honest; the alternative (counting deleted rows exactly) would require deleting each table separately and reintroduce the half-deleted member. |
 | Member writes mid-purge, between the child deletes and the contact delete | The contact fails the `NOT EXISTS` guard and survives to the next run. Nothing is cascaded, no count drifts. | The count model is preserved by construction rather than by a narrower race window. |
 | Retention record insert fails before any delete | Nothing is purged for that church this run; the cursor still advances; the next run retries. | Evidence before deletion, symmetric with erasure. A day of retention overrun beats a year of deleted bodies with no proof. |
+| Purge run is hard-killed between a committed batch `DELETE` and its `+n` count `UPDATE` | Rows are gone; the receipt lags by up to 500 per table, possibly reading 0/0/0. The 6-hour sweep flips it to `done` with the counts as they stand, and Configurações **lists it anyway**, with `a execução foi interrompida antes de registrar a contagem`. | The invariant is one-directional: a receipt never overstates. The church sees a line saying a cleanup ran and its count is unreliable, which is true and actionable. Revision 2 hid this row, so 500 destroyed message bodies produced no visible line at all — that is the defect this row exists to record as closed. |
+| Retention receipt reports fewer rows than were deleted | Accepted, bounded at one batch per table per interruption. | Stated as a floor, never a ceiling. The alternative — folding the `DELETE` and the `UPDATE` into one CTE — is new machinery that moves the boundary rather than removing it, and this spec's whole reason for existing is that the previous pass added machinery and added defects with it. |
+| Prayer-request warning shown, export never taken | The prayers are purged on schedule anyway. | **Owner decision, deliberate.** The warning is a courtesy, not a consent gate. The panel says this in the warning itself, so the church is not surprised by its own default. |
+| Church never opens the panel during the 30-day window | Same: purged on schedule, no warning ever seen. | The honest residual of a passive-only channel. The alternative is an email or WhatsApp notification, which needs a delivery channel this product does not have and would put member data in a second place. 30 days is the mitigation, not a guarantee. |
 | Purge run times out mid-batch | Partially purged. The `pending` receipt carries counts that are true so far; the cursor advances; the next run opens a new receipt for the remainder; the 6-hour sweep flips the stale row to `done`. | Every deleted row is a completed unit and is on a receipt. The church sees two lines for a two-day purge, which is what happened. |
 | One church's backlog is enormous | Its slice caps at 10 s / 20 batches per table; the cursor advances; other churches are purged in the same run. | Without the cap, one church starves the platform — the exact failure the flat "45 s and stop" budget produced. |
 | Cron does not fire for days | Retention overruns by those days; the next runs work through the rotation. | A bounded, self-healing overrun, visible in Vercel's cron log and in each church's own receipts. **Accepted risk:** there is no in-product alarm for a dead cron. |
@@ -726,7 +864,8 @@ The cron route returns no user-facing text; its responses and logs are operator-
 | `CRON_SECRET` unset | Endpoint refuses (503) and logs loudly; no purge runs. | Deliberate inversion of fail-open. An unauthenticated purge endpoint is a public delete button. |
 | Someone hits `/api/cron/purge` without the token | 401, nothing runs. Constant-time comparison, as in `verifySignature` (`src/lib/whatsapp.ts:84-98`). | Same discipline the WhatsApp webhook already uses. |
 | `ERASURE_HASH_SECRET` unset or rotated | Erasure proceeds; hash stored as `null`, or old records stop matching. Verify box answers `A verificação não está disponível nesta instalação.` | Never block a statutory erasure on an operator env var. Counts and timestamps remain valid evidence. |
-| Export exceeds 50 000 rows or the 45 s budget | Valid JSON closes with the `aviso`; the panel shows the truncation notice and the continuation button. | Defined, visible, and continuable. The failure the original design had — an unbounded query that dies on the heaviest member — is removed. |
+| Export exceeds 50 000 rows or the 45 s budget | Valid JSON closes with the `aviso` **and the `continuacao` cursor**; the panel reads both from the response and renders the truncation notice plus a continuation link carrying that cursor. | Defined, visible, and continuable. The continuation resumes at the exact `(created_at, id)` where the previous file stopped, so there is no overlap and no gap — which revision 2's date-granular `?desde=` could not deliver in either direction. |
+| Export route is killed by the platform before the 45 s budget applies | **Prevented, not accepted:** the route declares `maxDuration = 60`. Without it Vercel's 10 s default applies and no bounding logic ever runs. | Verified that no file in `src/` sets `maxDuration` today, so this had to be stated rather than assumed inherited. Whether the plan in force honours 60 s is unverifiable here and listed as such. |
 | Export requested for another church's contactId | 404 with `Conversa não encontrada.` | Church-scoped loaders; the isolation pattern the repo suite already verifies. |
 | Export requested while the church is suspended | Succeeds. | Deliberate — grants no new reading power, since `requireReadableSession` already permits reading every message (`writable.ts:75-84`). |
 | **Delete performed while the church is suspended** | Succeeds. | Deliberate and argued separately — see "Why a suspended church may still delete". Revocation is still checked, the scope is one member, and the alternative is the operator holding the controller's statutory obligation hostage to an invoice. |
@@ -750,10 +889,16 @@ All on PGlite with real migrations, plus pure unit tests — the existing patter
 - **Purge receipt ordering (C3)** — make the deletes succeed and the *completion* update fail; assert a `pending` retention row survives with truthful counts; run the sweep and assert `done`. Then make the *opening* insert fail and assert nothing was deleted.
 - **Purge isolation and convergence** — two churches, mixed ages, assert only rows past the cutoff disappear and the other church is untouched; run twice and assert the second run deletes nothing; run with a batch limit of 1 and assert convergence.
 - **Cross-church fairness (C2)** — five churches all needing work, a budget that admits only two per run; assert three runs cover all five and that no church is visited twice before every church has been visited once. Assert `retention_purged_at` advances even for a church whose slice was cut short.
-- **Export purity and bounding** — the three builders are pure: assert `wa_message_id` and internal UUIDs are absent, direction maps to `membro`/`igreja`, and null bodies survive as `null`. Then a paging test: 2 500 messages with a page size of 1 000 produce three pages, one valid JSON document, and every message exactly once; and a ceiling test producing the `aviso` plus a continuation that returns the remainder with no overlap and no gap.
+- **Retention receipt under-reporting (N1)** — run a purge, let one batch `DELETE` commit, then force the `+n` `UPDATE` to throw; assert the rows are gone and the receipt still reads 0. Run the sweep, assert `done` at 0/0/0. Then assert the Configurações list **contains** that row and renders the interrupted string — the assertion revision 2's display rule would have failed.
+- **Prayer-request warning and its export** — with prayers aged 11, 11.5 and 6 months, assert `countExpiringPrayers` returns 2 and that a church with none renders no warning at all. Assert the export contains exactly those two, carries `nome` and `whatsapp`, and is church-scoped against a second church. Assert the purge deletes them on schedule **with the export never having been called** — the "courtesy, not a gate" property, tested rather than asserted.
+- **Export purity and bounding** — the three builders are pure: assert `wa_message_id` and internal UUIDs are absent, direction maps to `membro`/`igreja`, and null bodies survive as `null`. Then a paging test: 2 500 messages with a page size of 1 000 produce three pages, one valid JSON document, and every message exactly once.
+- **Export continuation is exact (N3)** — 2 500 messages, ceiling forced to 1 000. Assert the first file carries `aviso` and `continuacao`; feed `continuacao` back as `?apos=`; assert the union of the two files is all 2 500 messages, each **exactly once**. The same test with several messages sharing one `created_at` to the millisecond, which is the case a date cursor cannot split and the `(created_at, id)` cursor can.
+- **Export route declarations (N4)** — assert both export routes export `maxDuration` with the value 60 and `dynamic` as `'force-dynamic'`. A static read of the module, in the same style as the cron route's "exports `GET`, does not export `POST`" assertion. Cheap, and it is the only thing standing between the bounding design and a 10 s platform timeout.
+- **Data-rights guard allowlist (N8)** — the claim in "Why a suspended church may still delete" point 5, made enforceable. Reusing `walk()` and `importedModules()` from `tests/privilege-boundary.test.ts`: collect every scanned file that references `requireDataRightsSession` or `checkDataRightsSession`, and assert the set is exactly `{ caixa/[contactId]/dados/actions.ts, api/dados/[contactId]/route.ts, api/dados/oracoes-expirando/route.ts }`. A fourth caller fails the test, which is the point — the exemption must not spread by copy-paste.
 - **Cron auth and method** — missing header, wrong token, right token, unset `CRON_SECRET`; and that the module exports `GET` and does not export `POST`.
 - **Isolation** — every new church-scoped repo function added to `tests/repo-isolation.test.ts`'s two-church attack list.
 - **Privilege boundary (I4)** — the amended importer-keyed check: `retention.ts` importable only by the cron route; the webhook and the admin panel cannot reach it; `platform.ts` importable by nothing; and — the property the old shape could not express — `retention.ts` itself is scanned, proven by asserting `walk()`'s output contains it.
+- **`RESTRICTED` keys actually match (N6)** — assert `RESTRICTED.has(importedModules(cronRoute).find(m => m.endsWith('repo/retention')))`, i.e. that a key from the map is a value the resolver really produces. Without this, a `.ts`-suffixed key makes the whole boundary check pass while matching nothing, and every other boundary test still goes green.
 - **Redaction** — `redactError` on a real `Error` whose message is `Graph API 400: {"error":{"message":"…5511999998888…"}}`, asserting the digits are gone and the stack text survives.
 
 ---
@@ -778,6 +923,9 @@ Nothing in this repository has ever run against Neon, Meta, Vercel, or a browser
 
 - **That the cascade deletes at production scale in one statement within Neon's limits.** The behaviour is proven on PGlite; a contact with tens of thousands of messages on a real Neon connection is not.
 - **Vercel cron behaviour** — that the platform actually invokes the path with a **GET**, sends `Authorization: Bearer $CRON_SECRET`, and that `maxDuration` on the current plan permits the 45-second budget. Hobby-plan crons also fire within the hour rather than on the minute. The method is stated as GET on the strength of Vercel's documentation, not on an observed request.
+- **That `maxDuration = 60` is honoured on the plan in force**, for the cron route and both export routes. What *is* verified is the negative: no file under `src/` declares `maxDuration` today, so the platform default applies unless this spec's routes declare it. The declaration is necessary; that 60 is granted is not established here.
+- **The query plans for the purge statements.** Every index in migration 0004 is written to match a predicate that appears verbatim in this spec, and that correspondence is checkable by reading. Whether the planner picks them — especially whether the `created_at < $cutoff OR contact_id IN (…)` disjunction becomes a `BitmapOr` of two index scans rather than a sequential scan — cannot be observed without a database. PGlite will answer a *correctness* question here, not a performance one. Revision 2 asserted the performance claim; this revision does not.
+- **That a church secretary opens the panel at least monthly**, which is the entire load-bearing assumption behind the 30-day prayer-request warning window. No church has used this product yet. If real usage is quarterly, 30 days is the wrong number and the window — not the purge — is what changes.
 - **The real per-round-trip latency of `neon-http`**, which is what decides whether 500-row batches and 1 000-row export pages are the right sizes and whether the 45 s budget covers a useful number of churches. All three numbers are starting points to be measured, not tuned constants.
 - **Whether Meta's Graph API error bodies actually contain a member's phone number.** The redaction fix is defence-in-depth against a plausible vector, not a fix for an observed leak, and this is the one item in this spec whose priority could drop to zero once a live Meta app exists.
 - **Vercel log retention** — how long anything leaked into the runtime logs survives, and therefore how urgent redaction is. Plan-dependent and not observable from here.
@@ -789,16 +937,42 @@ Nothing in this repository has ever run against Neon, Meta, Vercel, or a browser
 
 ## What the owner must decide before implementation
 
-1. **Do prayer requests get purged at 12 months?** This spec says yes, reversing the earlier design's exemption. If churches would object to losing their prayer history, the alternative is a longer, separately-stated period — but the Privacidade text must then say so.
-2. **How long do `erasure_record` rows live?** This spec keeps them for as long as the church exists. A five-year cap is arguable; destroying your own proof is worse than keeping a hash.
-3. **Is a staff email in a permanent audit log acceptable?** The alternative loses "who did it" the day that person leaves.
-4. **Who holds `ERASURE_HASH_SECRET` and `CRON_SECRET`,** and what happens on rotation.
-5. **The privilege-boundary amendment** — the first named exception to an absolute rule, now shaped as an importer-keyed table that also closes the pre-existing "ALLOWED files are never scanned" gap for `platform.ts`. It should be approved deliberately rather than noticed in review.
-6. **The delete exemption from the suspension gate.** Argued at length above, but it is a real product decision: a church in a billing dispute keeps a working destructive button. If the owner disagrees, the fallback is to exempt export only and route delete through `requireWritableSession`, accepting that a suspended church cannot meet an Art. 18 VI deadline until it pays.
+Two items that stood here in revision 2 have been **settled by the owner** (`.superpowers/sdd/owner-decisions-2026-08-07.md`) and are folded into the design above rather than listed here: prayer requests are purged on the 12-month clock with a 30-day warning and an export offered first, and a suspended church keeps a working delete button. Neither is open.
+
+1. **How long do `erasure_record` rows live?** This spec keeps them for as long as the church exists. A five-year cap is arguable; destroying your own proof is worse than keeping a hash. (Also listed as open in the owner-decisions file.)
+2. **Is a staff email in a permanent audit log acceptable?** The alternative loses "who did it" the day that person leaves. (Also listed as open in the owner-decisions file.)
+3. **Who holds `ERASURE_HASH_SECRET` and `CRON_SECRET`,** and what happens on rotation.
+4. **The privilege-boundary amendment** — the first named exception to an absolute rule, now shaped as an importer-keyed table that also closes the pre-existing "ALLOWED files are never scanned" gap for `platform.ts`. It should be approved deliberately rather than noticed in review.
+5. **The 30-day warning window is a product choice, not a legal one.** The spec picks and justifies 30 days against a passive-only channel; the owner decision required the spec to choose, and it has. It is listed here only because the assumption it rests on — monthly panel visits — is unobserved, and the first real church can falsify it cheaply. Changing the window changes no mechanism.
 
 ---
 
 ## Revisions
+
+**2026-08-07 — revision 3**, after the re-attack (`.superpowers/sdd/reattack-lgpd.md`, verdict "Needs revision — narrowly"). Revision 2 closed every Critical structurally and introduced four new defects doing it. All four are closed here by local edits; nothing was re-architected, and no mechanism was added that a finding did not force.
+
+**Blockers.**
+
+- **N1 (retention receipt under-reports, and the display rule hides it)** → **both remedies, and the spec says which one is the fix.** The "truthful at every instant" claim is retracted as false — with no transactions, a batch `DELETE` can commit and the function die before the `+n` `UPDATE` — and replaced with the invariant the design actually enforces: *a retention receipt never overstates; it can lag by at most one batch per table.* Separately, and this is the edit that closes the defect, the Configurações filter is removed: **every** retention row is listed, and an all-zero `done` row renders `a execução foi interrompida antes de registrar a contagem`. Retracting a sentence changes nothing a church can see; the display rule is what turns 500 silently destroyed message bodies into a visible line. The CTE alternative (`WITH d AS (DELETE … RETURNING id) UPDATE …`) was considered and rejected: it is new machinery and it moves the boundary rather than removing it.
+- **N2 (indexes do not serve their predicates)** → both halves fixed at the source. `m.church_id = $1` / `p.church_id = $1` added to the two `NOT EXISTS` guards, so the leading column of the index is constrained and the index can be seeked. `contact_church_last_inbound_idx` is replaced by the expression index `contact_church_idle_idx ON contact (church_id, (coalesce(last_inbound_at, created_at)))`, which is what the idle predicate is actually written against. `message_contact_idx` and `prayer_request_contact_idx` are widened to `(church_id, contact_id, created_at, id)` so one index serves both the guard and the export keyset (this also closes **N5**). The performance claim itself is downgraded: the spec now asserts only that no predicate is unservable, and puts query plans in the unverifiable list, because there is no database here on which to read one.
+- **N3 (`?desde=` cannot deliver the continuation)** → withdrawn and replaced by `?apos=<colecao>:<iso>,<uuid>`, a real keyset cursor. The re-attack is right on both counts: a date cannot name a position inside a day, so revision 2's own test was unsatisfiable, and the privacy justification did not apply — neither `created_at` nor a `defaultRandom()` row id is personal data, and the path already carries a contact UUID. The route emits the cursor as `continuacao` in the footer because only the route knows where a *budget* truncation stopped; the panel reads it from the response, which it already had to parse to render the truncation date.
+- **N4 (export route never declares `maxDuration`)** → `export const maxDuration = 60` and `export const dynamic = 'force-dynamic'` are specified on both export routes, with a test asserting they are exported. Verified by grep that **no file under `src/` sets `maxDuration` today**, so nothing was going to be inherited. Whether 60 s is granted on the plan in force is unverifiable here and is listed as such rather than assumed.
+
+**Minors.**
+
+- **N5** → folded into N2: the keyset indexes are `(church_id, contact_id, created_at, id)`.
+- **N6** → confirmed against the real file. `resolveSpecifier` strips extensions (`privilege-boundary.test.ts:58`), which is exactly why the existing assertion at `:77` compares against `PLATFORM_MODULE.replace(/\.tsx?$/, '')`. `RESTRICTED` keys are now `base(...)`-normalised, the asymmetry between keys (extensionless, from `importedModules`) and values (extension-bearing, from `walk`) is documented in the map's own comment, and a test asserts a key really matches something the resolver produces — without which the amendment passes green while enforcing nothing.
+- **N7** → "skip to step 6's lookup" corrected to step 7.
+- **N8** → the unbacked "a test says so" is made true rather than deleted: a **Data-rights guard allowlist** test is added to the Testing section, reusing the `walk()` + `importedModules()` scanner that `tests/privilege-boundary.test.ts` already runs. The count also changes from two to **three**, because the prayer-request export is a third caller; a fourth fails the test.
+
+**Owner decisions folded in** (`.superpowers/sdd/owner-decisions-2026-08-07.md`), both removed from "What the owner must decide":
+
+- **Prayer requests are purged on the same 12-month clock, with a warning and an export first.** New section "Prayer requests: warned, exportable, purged anyway": a **30-day** lead time, justified against the only channel this product has (the panel — 7 days dies to one holiday, 90 days makes the banner permanent and therefore invisible, 30 clears one monthly cycle); a dedicated `GET /api/dados/oracoes-expirando` covering **exactly the expiring prayer requests**, with `nome` and `whatsapp` attached because an unattributed prayer request is pastorally worthless; verbatim pt-BR warning copy including the not-a-gate line *"A limpeza acontece mesmo que ninguém baixe o arquivo. Este aviso é uma cortesia, não um pedido de autorização."*; two failure-mode rows and a test asserting the purge runs with the export never called. The 30-day window's load-bearing assumption — monthly panel visits — is unobserved and is listed as unverifiable.
+- **A suspended church keeps a working delete button.** "Why a suspended church may still delete" is retitled **settled** and records the decision at the top; the reasoning stays so a later refactor does not route the path back through `requireWritableSession` without knowing why it was not there.
+
+**Nothing was refuted this pass.** All eight findings held against the real source: the resolver really strips extensions, `src/` really has no `maxDuration`, `prayer_request` really declares no index callback at all, and the two `NOT EXISTS` guards really omitted `church_id`. One claim was *narrowed* rather than refuted — the indexes are correct-by-construction against the written predicates, but "not sequential scans" is a plan-level assertion this repository cannot make, so it moved to the unverifiable list instead of being reworded into something softer that would still have been unbacked.
+
+---
 
 **2026-08-07 — revision 1**, after adversarial review (`.superpowers/sdd/review-lgpd-spec.md`). Every finding the review listed as required is addressed below. One item is refuted with evidence.
 
