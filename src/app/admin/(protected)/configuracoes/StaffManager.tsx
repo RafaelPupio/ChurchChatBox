@@ -18,7 +18,13 @@ export function StaffManager({ staff }: { staff: StaffRow[] }) {
       <h2 style={{ marginTop: 0 }}>Equipe</h2>
       {staff.map((s) => (
         <div key={s.id} className="row" style={{ padding: '6px 0' }}>
-          <span className="grow">{s.name || s.email} <span className="hint">{s.email}</span></span>
+          {/* The secondary e-mail renders only when a name is actually set. Without the
+              guard, an account with no name shows its address twice — which is every
+              church's FIRST admin, since provisionChurch creates them with name: null. */}
+          <span className="grow">
+            {s.name || s.email}
+            {s.name && <span className="hint"> {s.email}</span>}
+          </span>
           {s.isSelf ? (
             <span className="hint">você</span>
           ) : (
