@@ -171,10 +171,14 @@ export async function listErasureSignals(limit = 100): Promise<ErasureSignal[]>
 
 ## Schema changes
 
-Migration **0004** — a new file; `0000`–`0003` are never touched. It carries one new enum pair, one new table, one new column on `church`, and five supporting indexes, each one written against a predicate that appears verbatim elsewhere in this spec. Revision 2 also listed five, but two of them could not serve the statements they were added for; the shapes below are corrected and the reasoning is in "On the indexes and these statements".
+A new migration — `0000`–`0003` are never touched. See the note on numbering below.
+
+**On the migration number.** Three unshipped specs — this one, `2026-08-07-lgpd-data-subject-tooling.md` and `2026-08-07-nota-fiscal.md` — each add a migration, and each was written assuming it would be `0004`. They cannot all be. The number is whatever `npm run db:generate` assigns at the moment this subsystem is built; whichever ships second and third **regenerates rather than renames**, because the file name and the `_journal.json` entry must agree. The plan must not hardcode a number.
+
+It It carries one new enum pair, one new table, one new column on `church`, and five supporting indexes, each one written against a predicate that appears verbatim elsewhere in this spec. Revision 2 also listed five, but two of them could not serve the statements they were added for; the shapes below are corrected and the reasoning is in "On the indexes and these statements".
 
 ```sql
--- drizzle/0004_<generated>.sql
+-- drizzle/<next>_<generated>.sql
 CREATE TYPE "erasure_reason" AS ENUM('subject_request', 'retention');
 CREATE TYPE "erasure_status" AS ENUM('pending', 'done');
 
@@ -308,7 +312,7 @@ export const erasureRecord = pgTable('erasure_record', {
     .on(t.churchId, sql`coalesce(${t.lastInboundAt}, ${t.createdAt})`),
 ```
 
-**Implementation note on the two hand-checkable index shapes.** `drizzle-kit generate` is the source of migration 0004, but the emitted SQL must be read before it is committed, in two places:
+**Implementation note on the two hand-checkable index shapes.** `drizzle-kit generate` is the source of this migration, but the emitted SQL must be read before it is committed, in two places:
 
 - If drizzle-kit drops the `WHERE reason = 'subject_request'` predicate, the partial index becomes total and blocks a second retention row per church, which is wrong.
 - If it emits `contact_church_idle_idx` over the bare columns instead of the `coalesce(…)` expression, the index silently stops serving the idle predicate — the exact defect being fixed here.
@@ -544,7 +548,7 @@ type DeleteResult =
 
 The `NOT EXISTS` pair is what turns "the cascade *should* have nothing left" into "the cascade *cannot* fire". A member who writes in the window between step 1 and step 3 — the webhook inserts the message (`route.ts:85`) one statement before it touches `last_inbound_at` (`:98`), so their contact still matches the idle predicate for a moment — simply fails the `NOT EXISTS` and survives to the next run. Their new message is not silently cascaded away and the counts do not drift. **Every row the purge deletes is a row some statement returned.**
 
-**On the indexes and these statements, stated at the strength the evidence supports.** Each index in migration 0004 is written to match a predicate that appears verbatim above: the age arms against `(church_id, created_at)`, the `NOT EXISTS` guards against the leading `(church_id, contact_id)` of the keyset indexes, and the idle predicate against the `coalesce` expression index. That the planner *chooses* them — in particular that it resolves the `created_at < $cutoff OR contact_id IN (…)` disjunction into a `BitmapOr` of two index scans rather than a sequential scan — is a plan-level claim, and there is no database in this repository on which to read a plan. It is listed under "What cannot be verified here" rather than asserted. What is asserted, and is checkable by reading, is the weaker and more useful property: **no predicate in this spec is now unservable by the indexes this spec adds.** Revision 2's claim that the indexes "keep these guards from being sequential scans" is withdrawn — it was false for two of the five indexes and unverifiable for the rest.
+**On the indexes and these statements, stated at the strength the evidence supports.** Each index in this migration is written to match a predicate that appears verbatim above: the age arms against `(church_id, created_at)`, the `NOT EXISTS` guards against the leading `(church_id, contact_id)` of the keyset indexes, and the idle predicate against the `coalesce` expression index. That the planner *chooses* them — in particular that it resolves the `created_at < $cutoff OR contact_id IN (…)` disjunction into a `BitmapOr` of two index scans rather than a sequential scan — is a plan-level claim, and there is no database in this repository on which to read a plan. It is listed under "What cannot be verified here" rather than asserted. What is asserted, and is checkable by reading, is the weaker and more useful property: **no predicate in this spec is now unservable by the indexes this spec adds.** Revision 2's claim that the indexes "keep these guards from being sequential scans" is withdrawn — it was false for two of the five indexes and unverifiable for the rest.
 
 The receipt string is therefore left **verbatim** — it is now true — rather than being softened to hide a number that could not be trusted.
 
@@ -675,7 +679,7 @@ The original said the response was "built in memory and streamed", which is two 
 **`neon-http` has no server-side cursors,** so "stream from the database" is not on the menu. What is:
 
 - The response body is a `ReadableStream`. The route writes the header object, then pages, then the footer, as UTF-8 chunks. **At most one page — 1 000 rows — is in memory at a time.**
-- Paging is **keyset**, ascending, on `(created_at, id)`: `WHERE church_id = $1 AND contact_id = $2 AND (created_at, id) > ($3, $4) ORDER BY created_at, id LIMIT 1000`. Stable under concurrent inserts, and covered by `message_contact_keyset_idx` / `prayer_request_contact_keyset_idx` from migration 0004, whose four columns are exactly these four.
+- Paging is **keyset**, ascending, on `(created_at, id)`: `WHERE church_id = $1 AND contact_id = $2 AND (created_at, id) > ($3, $4) ORDER BY created_at, id LIMIT 1000`. Stable under concurrent inserts, and covered by `message_contact_keyset_idx` / `prayer_request_contact_keyset_idx` from this spec's migration, whose four columns are exactly these four.
 - Two cheap `count(*)` statements run first so the header can carry `total_de_mensagens` / `total_de_pedidos` honestly.
 - **Ceiling:** 50 000 rows per collection, or a 45 s wall-clock budget, whichever comes first. At 12 months' retention, 50 000 messages is 137 per day, every day, from one person.
 
@@ -1026,7 +1030,7 @@ Nothing in this repository has ever run against Neon, Meta, Vercel, or a browser
 - **That the cascade deletes at production scale in one statement within Neon's limits.** The behaviour is proven on PGlite; a contact with tens of thousands of messages on a real Neon connection is not.
 - **Vercel cron behaviour** — that the platform actually invokes the path with a **GET**, sends `Authorization: Bearer $CRON_SECRET`, and that `maxDuration` on the current plan permits the 45-second budget. Hobby-plan crons also fire within the hour rather than on the minute. The method is stated as GET on the strength of Vercel's documentation, not on an observed request.
 - **That `maxDuration = 60` is honoured on the plan in force**, for the cron route and both export routes. What *is* verified is the negative: no file under `src/` declares `maxDuration` today, so the platform default applies unless this spec's routes declare it. The declaration is necessary; that 60 is granted is not established here.
-- **The query plans for the purge statements.** Every index in migration 0004 is written to match a predicate that appears verbatim in this spec, and that correspondence is checkable by reading. Whether the planner picks them — especially whether the `created_at < $cutoff OR contact_id IN (…)` disjunction becomes a `BitmapOr` of two index scans rather than a sequential scan — cannot be observed without a database. PGlite will answer a *correctness* question here, not a performance one. Revision 2 asserted the performance claim; this revision does not.
+- **The query plans for the purge statements.** Every index in this spec's migration is written to match a predicate that appears verbatim in this spec, and that correspondence is checkable by reading. Whether the planner picks them — especially whether the `created_at < $cutoff OR contact_id IN (…)` disjunction becomes a `BitmapOr` of two index scans rather than a sequential scan — cannot be observed without a database. PGlite will answer a *correctness* question here, not a performance one. Revision 2 asserted the performance claim; this revision does not.
 - **That a church secretary opens the panel at least monthly**, which is the entire load-bearing assumption behind the 30-day prayer-request warning window. No church has used this product yet. If real usage is quarterly, 30 days is the wrong number and the window — not the purge — is what changes.
 - **The real per-round-trip latency of `neon-http`**, which is what decides whether 500-row batches and 1 000-row export pages are the right sizes and whether the 45 s budget covers a useful number of churches. All three numbers are starting points to be measured, not tuned constants.
 - **Whether Meta's Graph API error bodies actually contain a member's phone number.** The redaction fix is defence-in-depth against a plausible vector, not a fix for an observed leak, and this is the one item in this spec whose priority could drop to zero once a live Meta app exists.
@@ -1106,7 +1110,7 @@ Two items that stood here in revision 2 have been **settled by the owner** (`.su
 - **C1 (double-click mints a phantom receipt)** → the receipt is now opened by a single `INSERT … SELECT FROM contact WHERE id = $1 AND church_id = $2 … ON CONFLICT DO NOTHING`, backed by the new partial unique index `erasure_record_subject_uq`. Two guards, one statement, no TOCTOU. The action's return type is now written out as a four-shape union, including what happens when `deleteMember` reports 0.
 - **C2 (purge not resumable across churches)** → new `church.retention_purged_at` cursor, least-recently-purged ordering, a per-church slice cap so one church cannot eat the run, and the cursor advanced even for an unfinished slice. The "one-day overrun" claim is retracted in the text and replaced with "one full rotation of the church list".
 - **C3 (retention rows had no pending→done ordering)** → retention receipts are now opened `pending` before any delete, with counts committed incrementally after each batch, and flipped to `done` at the end or by a 6-hour sweep. The asymmetry is not justified; it is removed. A `hasPurgeWork` probe keeps "a row means something was deleted" true without deleting before writing evidence.
-- **C4 (counts wrong by construction)** → the statement order is inverted: children first (including children of contacts about to go), then contacts under a `NOT EXISTS` guard so a cascade can never fire. Every deleted row is returned by the statement that deleted it. The church-facing string is therefore kept verbatim because it is now true, rather than being softened to conceal an understatement. Migration 0004 gains the five indexes these predicates need.
+- **C4 (counts wrong by construction)** → the statement order is inverted: children first (including children of contacts about to go), then contacts under a `NOT EXISTS` guard so a cascade can never fire. Every deleted row is returned by the statement that deleted it. The church-facing string is therefore kept verbatim because it is now true, rather than being softened to conceal an understatement. This spec's migration gains the five indexes these predicates need.
 
 **Important findings.**
 
