@@ -2,23 +2,21 @@ import 'dotenv/config';
 import { eq } from 'drizzle-orm';
 import { db } from './client';
 import { church, menuItem } from './schema';
+import { CHURCH_DEFAULTS } from '@/lib/church-defaults';
 
 const EDIT_HINT = '\n\n_Edite este texto no painel._';
 
-const CHURCH_DEFAULTS = {
-  name: 'Minha Igreja',
-  greetingText: 'Olá! 🙏 Sou a secretária virtual da igreja. Como posso te ajudar?',
-  menuHeaderText: 'Escolha uma opção:',
-  menuButtonLabel: 'Ver opções',
-  fallbackText: 'Desculpe, não entendi. 🙏 Escolha uma das opções abaixo:',
-  unsupportedMediaText: 'Por enquanto eu entendo apenas texto e as opções do menu. 🙏',
-  errorText: 'Estamos com uma instabilidade no momento. Por favor, tente novamente em instantes 🙏',
-  prayerPromptText: 'Pode escrever seu pedido de oração 🙏 Vamos orar por você!',
-  prayerThanksText: 'Recebemos seu pedido! ❤️ Nossa equipe estará orando por você.',
-  handoffText: 'Um momento! 😊 Alguém da secretaria vai te atender por aqui em breve.',
-  handoffClosedText: 'Atendimento encerrado. Se precisar de mais alguma coisa, é só chamar! 🙏',
-} as const;
-
+// LOCAL DEVELOPMENT FIXTURE ONLY — never run this against production.
+//
+// It picks "the" church with an unordered `select().from(church).limit(1)`, which
+// was written when exactly one church could exist. On a multi-tenant database
+// that row is arbitrary: on a populated DB it can graft this 9-item dev menu onto
+// whichever real church happens to have an empty menu, and on an empty one it
+// creates a church with no admin and no Privacidade item, bypassing
+// provisionChurch() (the single supported path into existence) entirely.
+//
+// Real churches are created by provisionChurch(), via the owner console or
+// `npm run create-church`. The NODE_ENV guard in main() enforces that.
 const MENU_SEED = [
   { position: 1, label: '⛪ Horários de Culto', kind: 'content' as const, bodyText: '*Horários de Culto*' + EDIT_HINT },
   { position: 2, label: '📍 Endereço e Contato', kind: 'content' as const, bodyText: '*Endereço e Contato*' + EDIT_HINT },
@@ -70,7 +68,19 @@ async function seed() {
   console.log(`Seed complete: church "${churchRow.name}" with ${finalMenuCount} menu items`);
 }
 
-seed()
+async function main() {
+  // Refuse outright in production. This script writes to an arbitrarily chosen
+  // church row; there is no safe way to run it against real tenants.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'src/db/seed.ts is a local development fixture and refuses to run with NODE_ENV=production. ' +
+        'Create real churches with the owner console or `npm run create-church`.',
+    );
+  }
+  await seed();
+}
+
+main()
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

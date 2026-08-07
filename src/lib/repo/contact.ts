@@ -45,10 +45,25 @@ export async function findOrCreateContact(
   return { contact: raced, isFirstContact: false };
 }
 
-export async function updateContactMode(contactId: string, mode: ContactMode): Promise<void> {
-  await db.update(contact).set({ mode, modeChangedAt: new Date() }).where(eq(contact.id, contactId));
+/** Church-scoped, like every other mutation in the repo layer. The webhook is the
+ *  only caller today and its contactId always comes from a church-scoped lookup,
+ *  so a bare id is safe *right now* — but that safety lives in prose, and prose is
+ *  not a control. The second predicate makes a cross-church write structurally
+ *  impossible instead of merely unreached. */
+export async function updateContactMode(
+  contactId: string,
+  churchId: string,
+  mode: ContactMode,
+): Promise<void> {
+  await db
+    .update(contact)
+    .set({ mode, modeChangedAt: new Date() })
+    .where(and(eq(contact.id, contactId), eq(contact.churchId, churchId)));
 }
 
-export async function touchLastInbound(contactId: string): Promise<void> {
-  await db.update(contact).set({ lastInboundAt: new Date() }).where(eq(contact.id, contactId));
+export async function touchLastInbound(contactId: string, churchId: string): Promise<void> {
+  await db
+    .update(contact)
+    .set({ lastInboundAt: new Date() })
+    .where(and(eq(contact.id, contactId), eq(contact.churchId, churchId)));
 }

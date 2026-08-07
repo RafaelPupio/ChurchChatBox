@@ -19,7 +19,10 @@ export function EndHandoffButton({ contactId }: { contactId: string }) {
           // and the promise is awaited (not fire-and-forget) so failures surface.
           start(async () => {
             try {
-              await endHandoff(contactId);
+              // The action reports refusals by RETURNING an error (suspended or
+              // revoked); only genuine faults throw. Check both.
+              const result = await endHandoff(contactId);
+              if (result?.error) setError(result.error);
             } catch {
               setError('Não foi possível encerrar. Tente novamente.');
             }

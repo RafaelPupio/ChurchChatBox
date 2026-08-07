@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/auth/session';
+import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
 import { loadConversation, updateContactModeScoped } from '@/lib/repo/inbox';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { recordOutboundMessage } from '@/lib/repo/message';
@@ -18,7 +18,9 @@ export async function sendReplyToContact(
   _prev: ReplyState,
   formData: FormData,
 ): Promise<ReplyState> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
 
   const body = String(formData.get('body') ?? '').trim();
   if (!body) return { error: 'Escreva uma mensagem.' };
@@ -57,8 +59,11 @@ export async function sendReplyToContact(
   redirect(`/admin/caixa/${contactId}`);
 }
 
-export async function endHandoff(contactId: string): Promise<void> {
-  const { churchId } = await requireSession();
+export async function endHandoff(contactId: string): Promise<{ error?: string }> {
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
   await updateContactModeScoped(churchId, contactId, 'bot');
   revalidatePath(`/admin/caixa/${contactId}`);
+  return {};
 }

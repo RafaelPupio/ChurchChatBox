@@ -6,6 +6,7 @@ export const menuItemKindEnum = pgEnum('menu_item_kind', ['content', 'prayer', '
 export const contactModeEnum = pgEnum('contact_mode', ['bot', 'awaiting_prayer', 'human']);
 export const messageDirectionEnum = pgEnum('message_direction', ['inbound', 'outbound']);
 export const prayerStatusEnum = pgEnum('prayer_status', ['novo', 'orado']);
+export const churchStatusEnum = pgEnum('church_status', ['active', 'past_due', 'suspended']);
 
 export const church = pgTable('church', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -15,6 +16,12 @@ export const church = pgTable('church', {
   accessToken: text('access_token'),
   webhookVerifyToken: text('webhook_verify_token'),
   appSecret: text('app_secret'),
+  // Subscription lifecycle. Stripe writes these in a later plan; until then the
+  // owner console sets status by hand. Created now to avoid a second migration.
+  status: churchStatusEnum('status').notNull().default('active'),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  graceUntil: timestamp('grace_until', { withTimezone: true }),
   // Every user-facing string. Editable in the panel; never hardcoded.
   greetingText: text('greeting_text').notNull(),
   menuHeaderText: text('menu_header_text').notNull(),
@@ -28,7 +35,17 @@ export const church = pgTable('church', {
   handoffClosedText: text('handoff_closed_text').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
+  // Both nullable, both unique. Postgres allows many NULLs under a unique index,
+  // which is exactly right: any number of churches may be unconfigured, but no two
+  // may share an identity.
+  //
+  // phone_number_id decides which tenant an inbound message belongs to — a
+  // duplicate makes findChurchByPhoneNumberId non-deterministic, i.e. a member's
+  // message could be answered by, and recorded against, the wrong church.
+  // webhook_verify_token is what Meta's GET handshake resolves a church by — a
+  // duplicate means two churches would both verify the same subscription.
   phoneNumberIdUq: uniqueIndex('church_phone_number_id_uq').on(t.phoneNumberId),
+  webhookVerifyTokenUq: uniqueIndex('church_webhook_verify_token_uq').on(t.webhookVerifyToken),
 }));
 
 export const menuItem = pgTable('menu_item', {
@@ -88,4 +105,17 @@ export const adminUser = pgTable('admin_user', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailUq: uniqueIndex('admin_user_email_uq').on(t.email),
+}));
+
+/** Platform owner (Rafael). Deliberately has NO church_id — an owner belongs to
+ *  no church. This is why owner auth is a separate table rather than a role flag
+ *  on admin_user, whose church_id is NOT NULL. */
+export const ownerUser = pgTable('owner_user', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  name: text('name'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  emailUq: uniqueIndex('owner_user_email_uq').on(t.email),
 }));

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireSession } from '@/lib/auth/session';
+import { requireReadableSession } from '@/lib/auth/writable';
 import { listConversations } from '@/lib/repo/inbox';
 import type { ContactMode } from '@/lib/types';
 
@@ -10,7 +10,7 @@ function modeTag(mode: ContactMode): { label: string; cls: string } {
 }
 
 export default async function CaixaPage() {
-  const { churchId } = await requireSession();
+  const { churchId } = await requireReadableSession();
   const conversations = await listConversations(churchId);
 
   return (

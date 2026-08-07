@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { requireSession } from '@/lib/auth/session';
+import { requireReadableSession } from '@/lib/auth/writable';
 import { loadConversation } from '@/lib/repo/inbox';
 import { isReplyWindowOpen, hoursRemaining } from '@/lib/reply-window';
 import { ReplyForm } from './ReplyForm';
@@ -7,7 +7,7 @@ import { EndHandoffButton } from './EndHandoffButton';
 
 export default async function ConversationPage({ params }: { params: Promise<{ contactId: string }> }) {
   const { contactId } = await params;
-  const { churchId } = await requireSession();
+  const { churchId } = await requireReadableSession();
 
   const convo = await loadConversation(churchId, contactId);
   if (!convo) notFound();

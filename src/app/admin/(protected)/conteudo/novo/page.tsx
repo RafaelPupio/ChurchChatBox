@@ -1,9 +1,9 @@
-import { requireSession } from '@/lib/auth/session';
+import { requireReadableSession } from '@/lib/auth/writable';
 import { ItemForm } from '../ItemForm';
 import { createItem } from '../item-actions';
 
 export default async function NovoItemPage() {
-  await requireSession();
+  await requireReadableSession();
   return (
     <div>
       <h1>Novo item</h1>

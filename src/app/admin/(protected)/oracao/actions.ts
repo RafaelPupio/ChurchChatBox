@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/auth/session';
+import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
 import { updatePrayerStatus } from '@/lib/repo/prayer-admin';
 
 export interface PrayerActionResult {
@@ -9,7 +9,9 @@ export interface PrayerActionResult {
 }
 
 export async function setPrayerStatus(id: string, status: 'novo' | 'orado'): Promise<PrayerActionResult> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
   try {
     await updatePrayerStatus(id, churchId, status);
   } catch (error) {

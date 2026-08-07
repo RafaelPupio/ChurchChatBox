@@ -13,9 +13,9 @@ Interactive version (the checkboxes remember what you've ticked): https://claude
 
 ## Phases
 
-**0 · Built & merged** ✅ — bot core + admin panel (Plan A) on `main`, 113 tests. Pure logic only; nothing DB/HTTP/browser-backed has run.
+**0 · Built & merged** ✅ — bot core + admin panel on `main`; multi-church conversion on `feat/multi-tenant` (PR #9), 186 tests. Pure logic and PGlite only; nothing DB/HTTP/browser-backed has run.
 
-**1 · Database — Neon** — *the gate.* 🧑 create a free neon.tech project + copy the connection string · 🤖 `.env` → `npm run db:migrate` → `npm run db:seed` → `npm run create-admin`. First real execution of the schema, seed, and repos. See [[Hosting & Deploy]].
+**1 · Database — Neon** — *the gate.* 🧑 create a free neon.tech project + copy the connection string · 🤖 `.env` → `npm run db:migrate` (applies `0000`–`0002`, none of which has ever touched a real Postgres server) → `npm run create-owner`. Then provision church #1 **from `/owner`**, not from the seed script — `npm run db:seed` is a local dev fixture and refuses to run in production. First real execution of the schema and repos. See [[Hosting & Deploy]] and [[Multi-Tenancy]].
 
 **2 · Prove it runs locally** — 🤖 `npm run dev`, log into `/admin`, exercise every screen (edit texts, add/reorder/hide items, upload an image, add staff) against real Postgres · 🧑 read the pt-BR wording and flag changes.
 
@@ -39,3 +39,29 @@ Interactive version (the checkboxes remember what you've ticked): https://claude
 Also watch the menu button ≤ 20 chars and the empty-content-item rule — see [[Troubleshooting]].
 
 Cost holds at **R$ 0/month** throughout — see [[Hosting & Deploy]].
+
+---
+
+## Onboarding church #2 (and every one after)
+
+Once the platform is live, adding a church is a form, not a deploy. See [[Multi-Tenancy]] for why it works this way.
+
+1. 🧑 **The church buys a new chip.** A number bound to the Cloud API stops working in the WhatsApp app *forever* and its history does not migrate — never their existing number.
+2. 🧑 **Add the number in Meta Business** under your app, and complete verification for that number.
+3. 🤖 **`/owner` → "Nova igreja"** — name, admin e-mail, temporary password. This creates the church, its first admin, and the 🔒 Privacidade menu item in one step.
+4. 🤖 **`/owner/<church>` → credentials** — paste `phone_number_id`, access token, app secret, and a **unique** webhook verify token. Both `phone_number_id` and the verify token carry unique indexes; reusing another church's will fail loudly, which is the point.
+5. 🧑 **Point Meta's webhook** at the same `/api/whatsapp/webhook` URL as every other church, using that church's verify token. One endpoint serves all of them; routing is by `phone_number_id`.
+6. 🧑 **Church staff log in** at `/admin`, change the temporary password, and fill in their own content. They never see credentials — only a read-only "Conectado" indicator.
+7. 🤖 **Send one test message** to the new number and confirm the reply, then confirm nothing landed in any other church's inbox.
+
+**Watch the "Conectado" indicator.** It goes green on `phone_number_id` + access token + app secret. All three are required: without the app secret the webhook drops every inbound message, so a church could otherwise show green while auto-replies were silently dead.
+
+## First live checks, in this order
+
+Everything below has only ever run against PGlite. These are the three things most likely to be wrong on contact with reality:
+
+1. **Two churches, two numbers, one webhook.** Message church A's number. Confirm nothing appears in B's inbox, and that a body signed with B's app secret is *rejected* for A. `findChurchByPhoneNumberId` plus the signature check is the entire tenant router and it has never run.
+2. **Suspend a live church from `/owner`.** A member sends a message → the message row appears and `last_inbound_at` updates → **nothing** is sent, including the error apology. Reactivate and confirm the 24h reply window is still accurate and the contact sits in the right place in the inbox.
+3. **Force a provisioning failure.** Revoke insert on `menu_item` for one attempt and provision a church. It should survive with its admin, report `menuSeeded: false`, and be repairable from the owner console — not wedge the e-mail address.
+
+Also on day one: confirm the 8-hour session `ttl` actually expires a cookie (verified by reading code only), and that a Blob image upload mints a token and completes.

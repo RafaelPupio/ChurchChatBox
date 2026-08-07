@@ -9,6 +9,13 @@ export async function findAdminByEmail(email: string): Promise<AdminRecord | und
   return rows[0];
 }
 
+/** Used by the write guard: confirms the admin row still exists, so a removed
+ *  staff member loses access immediately rather than when their cookie expires. */
+export async function findAdminById(id: string): Promise<AdminRecord | undefined> {
+  const rows = await db.select().from(adminUser).where(eq(adminUser.id, id)).limit(1);
+  return rows[0];
+}
+
 export async function createAdmin(a: {
   churchId: string;
   email: string;

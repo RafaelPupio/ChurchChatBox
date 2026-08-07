@@ -1,9 +1,9 @@
-import { requireSession } from '@/lib/auth/session';
+import { requireReadableSession } from '@/lib/auth/writable';
 import { listPrayerRequests } from '@/lib/repo/prayer-admin';
 import { PrayerList, type PrayerRow } from './PrayerList';
 
 export default async function OracaoPage() {
-  const { churchId } = await requireSession();
+  const { churchId } = await requireReadableSession();
   const requests = await listPrayerRequests(churchId);
 
   const prayers: PrayerRow[] = requests.map((r) => ({

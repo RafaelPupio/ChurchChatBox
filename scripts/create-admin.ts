@@ -1,13 +1,16 @@
 import 'dotenv/config';
-import { getChurchRecord } from '../src/lib/repo/church-admin';
+import { getChurchForOwner, getOnlyChurch, listChurches } from '../src/lib/repo/platform';
 import { createAdmin, findAdminByEmail } from '../src/lib/repo/admin';
 import { hashPassword } from '../src/lib/auth/password';
 
 async function main() {
-  const [email, password, name] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const churchFlag = argv.indexOf('--church');
+  const explicitChurchId = churchFlag === -1 ? undefined : argv[churchFlag + 1];
+  const [email, password, name] = churchFlag === -1 ? argv : argv.filter((_, i) => i !== churchFlag && i !== churchFlag + 1);
 
   if (!email || !password) {
-    console.error('Usage: npm run create-admin -- <email> <password> [name]');
+    console.error('Usage: npm run create-admin -- <email> <password> [name] [--church <churchId>]');
     process.exitCode = 1;
     return;
   }
@@ -17,9 +20,20 @@ async function main() {
     return;
   }
 
-  const churchRow = await getChurchRecord();
+  const churchRow = explicitChurchId
+    ? await getChurchForOwner(explicitChurchId)
+    : await getOnlyChurch();
+
   if (!churchRow) {
-    console.error('No church row found. Run `npm run db:seed` first.');
+    const all = await listChurches();
+    if (all.length === 0) {
+      console.error('No church found. Create one first: npm run create-church -- <name> <adminEmail> <password>');
+    } else if (explicitChurchId) {
+      console.error(`No church with id ${explicitChurchId}.`);
+    } else {
+      console.error('More than one church exists — pass --church <id>:');
+      for (const c of all) console.error(`  ${c.id}  ${c.name}`);
+    }
     process.exitCode = 1;
     return;
   }
