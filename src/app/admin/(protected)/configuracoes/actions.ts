@@ -45,28 +45,6 @@ export async function saveTexts(_prev: ConfigResult, formData: FormData): Promis
   return { ok: true };
 }
 
-export async function saveCredentials(_prev: ConfigResult, formData: FormData): Promise<ConfigResult> {
-  const { churchId } = await requireSession();
-
-  // phone_number_id and the verify token are not secret — always save them.
-  const fields: Parameters<typeof updateChurch>[1] = {
-    phoneNumberId: String(formData.get('phoneNumberId') ?? '').trim() || null,
-    webhookVerifyToken: String(formData.get('webhookVerifyToken') ?? '').trim() || null,
-  };
-
-  // Secrets never round-trip to the browser, so a field is blank unless the admin
-  // deliberately typed a new value. A blank submission must KEEP the stored secret,
-  // not wipe it — so include the column ONLY when a non-empty value was entered.
-  const accessToken = String(formData.get('accessToken') ?? '').trim();
-  if (accessToken) fields.accessToken = accessToken;
-  const appSecret = String(formData.get('appSecret') ?? '').trim();
-  if (appSecret) fields.appSecret = appSecret;
-
-  await updateChurch(churchId, fields);
-  revalidatePath('/admin/configuracoes');
-  return { ok: true };
-}
-
 export async function addStaff(_prev: ConfigResult, formData: FormData): Promise<ConfigResult> {
   const { churchId } = await requireSession();
 

@@ -2,7 +2,7 @@ import { requireSession } from '@/lib/auth/session';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { listAdmins } from '@/lib/repo/admin';
 import { TextsForm } from './TextsForm';
-import { CredentialsForm } from './CredentialsForm';
+import { ConnectionStatus } from './CredentialsForm';
 import { StaffManager, type StaffRow } from './StaffManager';
 
 export default async function ConfiguracoesPage() {
@@ -31,12 +31,7 @@ export default async function ConfiguracoesPage() {
     <div>
       <h1>Configurações</h1>
       <TextsForm values={textValues} />
-      <CredentialsForm values={{
-        phoneNumberId: church.phoneNumberId ?? '',
-        webhookVerifyToken: church.webhookVerifyToken ?? '',
-        hasAccessToken: !!church.accessToken,
-        hasAppSecret: !!church.appSecret,
-      }} />
+      <ConnectionStatus connected={!!church.phoneNumberId && !!church.accessToken} />
       <StaffManager staff={staff} />
     </div>
   );
