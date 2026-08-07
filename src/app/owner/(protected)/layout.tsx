@@ -1,13 +1,13 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getOwnerSession, isOwnerAuthenticated } from '@/lib/auth/owner-session';
+import { requireOwnerSession } from '@/lib/auth/owner-session';
 import { ownerLogout } from './actions';
 
 export default async function OwnerLayout({ children }: { children: React.ReactNode }) {
-  const session = await getOwnerSession();
-  if (!isOwnerAuthenticated(session)) {
-    redirect('/owner/login');
-  }
+  // requireOwnerSession, not the bare cookie check: the layout wraps every owner
+  // page, so putting the "does this owner account still exist?" re-check here
+  // means a future page that forgets to call it still cannot render this console
+  // — which holds every tenant's Meta credentials — to a deleted owner.
+  const session = await requireOwnerSession();
 
   return (
     <div>

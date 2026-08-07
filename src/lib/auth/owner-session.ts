@@ -19,6 +19,12 @@ export interface OwnerSessionData {
  *  future rename would silently undo. */
 const COOKIE_NAME = 'sv_owner';
 
+/** Same 8 hours as the church panel, for a stronger reason: this cookie reaches
+ *  every tenant's Meta credentials and every church's lifecycle switch. Left at
+ *  iron-session's 14-day default, one stale laptop session is a platform-wide
+ *  key. */
+export const OWNER_SESSION_TTL_SECONDS = 8 * 60 * 60;
+
 export function isOwnerAuthenticated(session: Pick<OwnerSessionData, 'kind' | 'ownerUserId'>): boolean {
   return session.kind === 'owner' && typeof session.ownerUserId === 'string' && session.ownerUserId.length > 0;
 }
@@ -36,6 +42,7 @@ export async function getOwnerSession(): Promise<IronSession<OwnerSessionData>> 
   return getIronSession<OwnerSessionData>(await cookies(), {
     password: sessionPassword(),
     cookieName: COOKIE_NAME,
+    ttl: OWNER_SESSION_TTL_SECONDS,
     cookieOptions: {
       httpOnly: true,
       sameSite: 'lax',
