@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireOwnerSession } from '@/lib/auth/owner-session';
 import { setChurchCredentials, setChurchStatus } from '@/lib/repo/platform';
+import { countMenuItems, createMenuItem } from '@/lib/repo/menu-admin';
+import { PRIVACY_ITEM } from '@/lib/church-defaults';
 import type { ChurchStatus } from '@/lib/church-status';
 
 export interface OwnerActionResult {
@@ -38,6 +40,41 @@ export async function saveCredentials(
         ? 'Este Phone Number ID já está em uso por outra igreja. Libere-o na outra igreja primeiro.'
         : 'Não foi possível salvar as credenciais. Tente novamente.',
     };
+  }
+
+  revalidatePath(`/owner/${churchId}`);
+  revalidatePath('/owner');
+  return { ok: true };
+}
+
+/** Repairs a church whose provisioning committed the church and admin but lost
+ *  the Privacidade menu item (provisionChurch returns menuSeeded: false for
+ *  exactly that case, and no longer rolls the church back over it).
+ *
+ *  This is an LGPD transparency gap, not cosmetics: without it a member has no
+ *  way inside WhatsApp to read what the church stores about them. */
+export async function seedPrivacyItem(churchId: string): Promise<OwnerActionResult> {
+  await requireOwnerSession();
+
+  try {
+    // Re-check server-side rather than trusting the button's presence: two owner
+    // tabs open on the same church must not produce two Privacidade items.
+    if ((await countMenuItems(churchId)) > 0) {
+      return { error: 'Esta igreja já tem itens no menu. Recarregue a página.' };
+    }
+
+    await createMenuItem({
+      churchId,
+      position: PRIVACY_ITEM.position,
+      label: PRIVACY_ITEM.label,
+      bodyText: PRIVACY_ITEM.bodyText,
+      imageUrl: null,
+      isActive: true,
+      kind: PRIVACY_ITEM.kind,
+    });
+  } catch (error) {
+    console.error('seedPrivacyItem failed', error);
+    return { error: 'Não foi possível criar o item de Privacidade. Tente novamente.' };
   }
 
   revalidatePath(`/owner/${churchId}`);

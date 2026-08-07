@@ -41,6 +41,17 @@ export async function updateMenuItem(
   await db.update(menuItem).set(safeFields).where(and(eq(menuItem.id, id), eq(menuItem.churchId, churchId)));
 }
 
+/** Total items, active or not — the question "does this church have a menu at
+ *  all?", which is what the owner console's Privacidade repair keys off. An
+ *  inactive Privacidade item is still present and must not be duplicated. */
+export async function countMenuItems(churchId: string): Promise<number> {
+  const rows = await db
+    .select({ n: count() })
+    .from(menuItem)
+    .where(eq(menuItem.churchId, churchId));
+  return rows[0]?.n ?? 0;
+}
+
 export async function countActiveMenuItems(churchId: string): Promise<number> {
   const rows = await db
     .select({ n: count() })

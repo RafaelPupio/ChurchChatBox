@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireOwnerSession } from '@/lib/auth/owner-session';
 import { getChurchForOwner } from '@/lib/repo/platform';
+import { countMenuItems } from '@/lib/repo/menu-admin';
 import { effectiveStatus } from '@/lib/church-status';
 import { CredentialsForm } from './CredentialsForm';
+import { PrivacyItemWarning } from './PrivacyItemWarning';
 import { StatusControls } from './StatusControls';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -20,6 +22,7 @@ export default async function OwnerChurchPage({ params }: { params: Promise<{ ch
   if (!church) notFound();
 
   const status = effectiveStatus(church.status, church.graceUntil, new Date());
+  const menuItemCount = await countMenuItems(churchId);
 
   return (
     <div>
@@ -28,6 +31,8 @@ export default async function OwnerChurchPage({ params }: { params: Promise<{ ch
         <h1 className="grow">{church.name}</h1>
         <span className={`pill pill-${status}`}>{STATUS_LABEL[status]}</span>
       </div>
+
+      {menuItemCount === 0 && <PrivacyItemWarning churchId={churchId} />}
 
       <StatusControls churchId={churchId} status={status} />
 

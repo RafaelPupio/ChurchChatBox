@@ -15,10 +15,17 @@ async function main() {
     return;
   }
 
-  const { churchId, adminUserId } = await provisionChurch(name, adminEmail, password);
+  const { churchId, adminUserId, menuSeeded } = await provisionChurch(name, adminEmail, password);
   console.log(`Church created: ${name}`);
   console.log(`  church id: ${churchId}`);
   console.log(`  admin:     ${adminEmail} (${adminUserId})`);
+  if (!menuSeeded) {
+    // provisionChurch no longer rolls the church back for this, so the operator
+    // has to be told: without the Privacidade item members cannot read what the
+    // church stores about them.
+    console.warn('  WARNING: the Privacidade menu item was NOT created.');
+    console.warn(`  Create it from the owner console at /owner/${churchId} before going live.`);
+  }
   console.log('Connect its WhatsApp number from the owner console at /owner.');
 }
 
