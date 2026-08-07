@@ -13,9 +13,9 @@ Interactive version (the checkboxes remember what you've ticked): https://claude
 
 ## Phases
 
-**0 · Built & merged** ✅ — bot core + admin panel on `main`; multi-church conversion on `feat/multi-tenant` (PR #9), 186 tests. Pure logic and PGlite only; nothing DB/HTTP/browser-backed has run.
+**0 · Built & merged** ✅ — bot core, admin panel and the multi-church conversion all on `main` (PR #9), 212 tests. Pure logic and PGlite only; nothing DB/HTTP/browser-backed has run.
 
-**1 · Database — Neon** — *the gate.* 🧑 create a free neon.tech project + copy the connection string · 🤖 `.env` → `npm run db:migrate` (applies `0000`–`0002`, none of which has ever touched a real Postgres server) → `npm run create-owner`. Then provision church #1 **from `/owner`**, not from the seed script — `npm run db:seed` is a local dev fixture and refuses to run in production. First real execution of the schema and repos. See [[Hosting & Deploy]] and [[Multi-Tenancy]].
+**1 · Database — Neon** — *the gate.* 🧑 create a free neon.tech project + copy the connection string · 🤖 `.env` → `npm run db:migrate` (applies `0000`–`0003`, none of which has ever touched a real Postgres server) → `npm run create-owner`. Then provision church #1 **from `/owner`**, not from the seed script — `npm run db:seed` is a local dev fixture and refuses to run in production. First real execution of the schema and repos. See [[Hosting & Deploy]] and [[Multi-Tenancy]].
 
 **2 · Prove it runs locally** — 🤖 `npm run dev`, log into `/admin`, exercise every screen (edit texts, add/reorder/hide items, upload an image, add staff) against real Postgres · 🧑 read the pt-BR wording and flag changes.
 
@@ -29,7 +29,7 @@ Interactive version (the checkboxes remember what you've ticked): https://claude
 
 **7 · Launch** — 🧑 connect the real chip, final walk-through from your own phone, announce the "secretária virtual" number to members.
 
-**8 · Plan B (deferred)** — Caixa de Entrada + Pedidos de Oração, so staff answer handoffs and read prayer requests in the panel instead of via SQL. Safe to defer — see [[Decisions Log]] and [[Backlog]].
+**8 · After launch** — Stripe billing, then the nota fiscal integration (a *launch dependency* for any church with a CNPJ — see [[Decisions Log]]), then LGPD Art. 18 tooling. All three are specced; none is built.
 
 ## Three things that bite
 - **The new chip is one-way** — a Cloud API number stops working in the normal WhatsApp app forever, so it is never the church's existing line. See [[Meta WhatsApp Setup]].

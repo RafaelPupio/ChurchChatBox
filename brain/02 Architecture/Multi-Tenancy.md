@@ -68,15 +68,32 @@ It now resolves every specifier to an absolute path before comparing. The genera
 
 It **fails toward service**: a `past_due` row with no `graceUntil` keeps working. Silencing a paying church because of a missing timestamp is far worse than a few extra days of service for one that isn't.
 
-What suspension does *not* do is stop recording. The webhook's early return sits deliberately **after** `touchLastInbound()`:
+What suspension does *not* do is stop recording:
 
 ```
-findOrCreateContact → recordInboundMessage → dedupe → touchLastInbound → [suspended? stop] → route → send
+findOrCreateContact → recordInboundMessage → dedupe → touchLastInbound
+  → route() → save prayer → commit "member facts" → [suspended? stop] → send → commit "delivered facts"
 ```
 
-Put that return any earlier and a member who first writes during suspension gets a null `last_inbound_at`: they sink to the bottom of the inbox as a "never messaged" contact, and the 24h reply window reads as already closed the moment the church pays and comes back. Everything that records member state runs; only routing and sending stop.
+The gate is one early `return`, placed so that **every send site is textually below it**. That shape is deliberate: written as `if (!suspended) { send }` instead, the code after the block stays reachable, and "a suspended church sends nothing" degrades from a structural guarantee into a convention every future call site has to remember. A suspended church sends **nothing at all** — including the error apology in the catch block, guarded by `!suspended` as well as `verified`.
 
-A suspended church sends **nothing at all** — including the error apology in the webhook's catch block, which is why that call is guarded by `!suspended` as well as `verified`.
+The gate's *position* was got wrong twice, in opposite directions, and both are worth remembering.
+
+**Too early.** The first version returned before `touchLastInbound()`. A member who first wrote during suspension got a null `last_inbound_at`, sank to the bottom of the inbox as a "never messaged" contact, and their 24h reply window read as already closed the moment the church paid and came back.
+
+**Still too early.** The second version returned before `route()`. That silenced the bot correctly but also skipped the prayer capture and every mode transition — so a member mid-prayer had their prayer land in `message` and never become a `prayer_request`, and stayed armed in `awaiting_prayer` so their first word after reactivation was filed as their prayer.
+
+### The rule that replaced the guesswork
+
+> A mode transition may be persisted **before** delivery only if it is a fact about what the MEMBER did. A transition that only makes sense because the member **received** something waits for a successful send.
+
+Suspension is just the permanent, deterministic case of "the send did not happen", so the behaviour falls out of ordering. `modeAfterUndeliveredTurn` in `contact-mode.ts` encodes it as an exhaustive `switch` with no `default` — adding a fourth `ContactMode` becomes a compile error rather than a silent misclassification.
+
+Its subtlest case: a member in `awaiting_prayer` who taps "Falar com Atendente" while suspended must be moved to `bot`, not left where they are. Three independent design passes proposed falling back to the stored mode here, which leaves them armed — the fix for the prayer bug reproducing the prayer bug.
+
+### Greeting-ness is a stored fact, not an inference
+
+`contact.greeted_at` is written **only after the greeting actually sends**. It replaced "did we just INSERT this row", which conflated *a member arriving* with *a member being greeted*. Those differ whenever nothing gets sent — and that is not only under suspension: at a perfectly healthy church, one Graph API hiccup on a member's very first message used to burn their greeting permanently, leaving them on the fallback text forever.
 
 ## LGPD in one paragraph
 

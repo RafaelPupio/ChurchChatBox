@@ -9,16 +9,18 @@ Where we are: **the product is code-complete as a multi-church SaaS; the gate is
 | 3 | Admin panel **Plan A** (login + Conteúdo + Configurações) | ✅ merged to `main` (PR #3), 113 tests |
 | 4 | Admin panel **Plan B** (Caixa de Entrada + Pedidos de Oração) | ✅ merged to `main` (PRs #5, #6), 123 tests |
 | 5 | Multi-church SaaS design spec | ✅ merged to `main` (PR #7) |
-| 6 | **Multi-tenant conversion** — provisioning, owner console, isolation, suspension | ✅ code-complete (PR #9), 186 tests |
+| 6 | **Multi-tenant conversion** — provisioning, owner console, isolation, suspension | ✅ merged to `main` (PR #9) |
+| 6b | Suspension records what it cannot send; greeting survives a failed send | ✅ merged to `main`, 212 tests |
 | 7 | **Create Neon DB → migrate → create-owner → provision church #1** | 🔜 **next — needs Rafael** |
 | 8 | Test end-to-end on Meta's **free test number** | ⬜ needs Meta account |
 | 9 | Meta business verification + real chip connected | ⬜ |
 | 10 | Fill real content → announce the number to members | ⬜ |
-| 11 | **Stripe billing** — drives `past_due` automatically | ⬜ separate plan, later |
-| 12 | **LGPD data-subject tooling** — export, hard delete, retention purge (Art. 18) | ⬜ separate plan, later |
+| 11 | **Stripe billing** — card-only, drives `past_due` automatically | 📝 spec written, in revision |
+| 12 | **Nota fiscal integration** — a launch dependency, not a nicety | ⬜ needs its own spec |
+| 13 | **LGPD data-subject tooling** — access, export, deletion, 12-month purge (Art. 18) | 📝 spec written, in revision |
 
 ## ⚠️ What is written but has never executed
-The whole product — bot, panel, and owner console — is code-complete, and coverage is now genuinely good: **186 tests**, including tenant isolation, repo scoping, provisioning failure paths, the privilege boundary, and the webhook's suspension behaviour. Crucially, those run on **PGlite — real Postgres in WASM, with the real migrations applied** — so the schema and SQL semantics *are* exercised. That is a real step up from pure-logic-only.
+The whole product — bot, panel, and owner console — is code-complete, and coverage is now genuinely good: **212 tests**, including tenant isolation, repo scoping, provisioning failure paths, the privilege boundary, and the webhook's suspension behaviour. Crucially, those run on **PGlite — real Postgres in WASM, with the real migrations applied** — so the schema and SQL semantics *are* exercised. That is a real step up from pure-logic-only.
 
 But by an explicit decision to defer live verification, **nothing has run against a real server, Meta, or a browser**:
 
