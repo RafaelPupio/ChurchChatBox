@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "church_webhook_verify_token_uq" ON "church" USING btree ("webhook_verify_token");

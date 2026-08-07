@@ -35,7 +35,17 @@ export const church = pgTable('church', {
   handoffClosedText: text('handoff_closed_text').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
+  // Both nullable, both unique. Postgres allows many NULLs under a unique index,
+  // which is exactly right: any number of churches may be unconfigured, but no two
+  // may share an identity.
+  //
+  // phone_number_id decides which tenant an inbound message belongs to — a
+  // duplicate makes findChurchByPhoneNumberId non-deterministic, i.e. a member's
+  // message could be answered by, and recorded against, the wrong church.
+  // webhook_verify_token is what Meta's GET handshake resolves a church by — a
+  // duplicate means two churches would both verify the same subscription.
   phoneNumberIdUq: uniqueIndex('church_phone_number_id_uq').on(t.phoneNumberId),
+  webhookVerifyTokenUq: uniqueIndex('church_webhook_verify_token_uq').on(t.webhookVerifyToken),
 }));
 
 export const menuItem = pgTable('menu_item', {

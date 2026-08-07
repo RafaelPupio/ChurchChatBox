@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     });
     if (!isNew) return NextResponse.json({ ok: true });
 
-    await touchLastInbound(contact.id);
+    await touchLastInbound(contact.id, churchRecord.id);
 
     // A suspended church's bot goes quiet. Everything that records member state
     // has already run above — the message row and lastInboundAt — so nothing is
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     // happened, so the correction is true regardless of this message's outcome.
     // Persisting it now also means the contact isn't re-evaluated as stale forever.
     if (mode !== contact.mode) {
-      await updateContactMode(contact.id, mode);
+      await updateContactMode(contact.id, churchRecord.id, mode);
     }
 
     const items = await loadMenuItems(churchRecord.id);
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     // message, or have their next ordinary message silently swallowed as a
     // prayer request nobody prompted them for.
     if (result.nextMode !== mode) {
-      await updateContactMode(contact.id, result.nextMode);
+      await updateContactMode(contact.id, churchRecord.id, result.nextMode);
     }
   } catch (error) {
     // Fail toward the human, never toward silence.

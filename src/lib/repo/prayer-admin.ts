@@ -22,7 +22,12 @@ export async function listPrayerRequests(churchId: string): Promise<PrayerReques
       contactPhone: contact.phone,
     })
     .from(prayerRequest)
-    .innerJoin(contact, eq(prayerRequest.contactId, contact.id))
+    // The join is church-scoped too, not just the WHERE. Matching on contactId
+    // alone means a prayer_request whose church_id and contact_id disagree (a bad
+    // backfill, a future bulk import) would render ANOTHER church's member name
+    // and phone number in this church's prayer list. Two predicates make the row
+    // simply not appear instead.
+    .innerJoin(contact, and(eq(prayerRequest.contactId, contact.id), eq(contact.churchId, churchId)))
     .where(eq(prayerRequest.churchId, churchId))
     .orderBy(desc(prayerRequest.createdAt));
 }

@@ -1,7 +1,7 @@
 import { and, count, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { church, contact, menuItem } from '@/db/schema';
-import type { ChurchStatus } from '@/lib/church-status';
+import { GRACE_PERIOD_MS, type ChurchStatus } from '@/lib/church-status';
 
 /** OWNER-ONLY. Every query here spans churches by design — that is the whole
  *  point of the owner console. Church-facing code must never import this file;
@@ -38,7 +38,11 @@ export async function listChurches(): Promise<ChurchSummary[]> {
       name: row.name,
       status: row.status,
       graceUntil: row.graceUntil,
-      whatsappConnected: !!row.phoneNumberId && !!row.accessToken,
+      // All THREE, not just the two that send. The webhook refuses to process an
+      // inbound message without app_secret (it cannot verify Meta's signature
+      // without it), so a church missing only that one reads as connected while
+      // every member message is silently dropped and no reply is ever sent.
+      whatsappConnected: !!row.phoneNumberId && !!row.accessToken && !!row.appSecret,
       activeMenuItems: items[0]?.n ?? 0,
       lastInboundAt: last[0]?.at ?? null,
       createdAt: row.createdAt,
@@ -75,11 +79,21 @@ export async function setChurchCredentials(
   await db.update(church).set(update).where(eq(church.id, churchId));
 }
 
-export async function setChurchStatus(churchId: string, status: ChurchStatus): Promise<void> {
-  // Clearing grace_until on any manual status change keeps the computed
+export async function setChurchStatus(
+  churchId: string,
+  status: ChurchStatus,
+  now: Date = new Date(),
+): Promise<void> {
+  // past_due is the only status that starts a clock. It writes the deadline here
+  // rather than leaving it null, because effectiveStatus reads a null grace_until
+  // as "past_due forever" — which is why the grace branch was unreachable before:
+  // nothing in the product ever wrote this column.
+  //
+  // For active and suspended, clearing grace_until keeps the computed
   // effectiveStatus honest — a manually reactivated church is not still counting
-  // down an old grace deadline.
-  await db.update(church).set({ status, graceUntil: null }).where(eq(church.id, churchId));
+  // down an old deadline.
+  const graceUntil = status === 'past_due' ? new Date(now.getTime() + GRACE_PERIOD_MS) : null;
+  await db.update(church).set({ status, graceUntil }).where(eq(church.id, churchId));
 }
 
 /** Returns the church only when there is exactly one. Used by local scripts that

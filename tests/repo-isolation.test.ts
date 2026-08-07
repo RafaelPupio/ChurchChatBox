@@ -15,8 +15,9 @@ import type { PGlite } from '@electric-sql/pglite';
  * in-memory Postgres (PGlite). If a repo function ever dropped its church_id
  * predicate, this is the suite that would catch it.
  *
- * Does not cover src/lib/repo/platform.ts (the owner-only cross-church repo) —
- * that module does not exist yet.
+ * Does not cover src/lib/repo/platform.ts: that repo is owner-only and every
+ * query in it spans churches deliberately, so "leaks another church's row" is its
+ * specification rather than a defect.
  */
 
 vi.mock('@/db/client', async () => {
@@ -32,6 +33,7 @@ import { listConversations, loadConversation } from '@/lib/repo/inbox';
 import { listMenuItemsForAdmin, updateMenuItem } from '@/lib/repo/menu-admin';
 import { listPrayerRequests, updatePrayerStatus } from '@/lib/repo/prayer-admin';
 import { deleteAdmin, listAdmins } from '@/lib/repo/admin';
+import { touchLastInbound, updateContactMode } from '@/lib/repo/contact';
 
 const MIGRATIONS_DIR = join(process.cwd(), 'drizzle');
 
@@ -144,5 +146,48 @@ describe('repository-layer tenant isolation', () => {
     const rows = await listAdmins(B.churchId);
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(B.adminId);
+  });
+
+  it('updateContactMode cannot change another church\'s contact', async () => {
+    await updateContactMode(B.contactId, A.churchId, 'bot');
+
+    const rows = await client.query<{ mode: string }>('select mode from contact where id = $1', [B.contactId]);
+    expect(rows.rows[0].mode).toBe('human');
+  });
+
+  it('touchLastInbound cannot bump another church\'s contact', async () => {
+    const before = await client.query<{ last_inbound_at: Date }>(
+      'select last_inbound_at from contact where id = $1',
+      [B.contactId],
+    );
+
+    await touchLastInbound(B.contactId, A.churchId);
+
+    const after = await client.query<{ last_inbound_at: Date }>(
+      'select last_inbound_at from contact where id = $1',
+      [B.contactId],
+    );
+    // A bumped lastInboundAt would silently reopen B's 24h WhatsApp reply window
+    // and reorder B's inbox from another tenant's request.
+    expect(new Date(after.rows[0].last_inbound_at).getTime()).toBe(
+      new Date(before.rows[0].last_inbound_at).getTime(),
+    );
+  });
+
+  it('listPrayerRequests hides a mis-paired row instead of exposing the other church\'s member', async () => {
+    // A prayer_request whose church_id and contact_id disagree: the shape a bad
+    // backfill or bulk import produces. Joining on contact_id alone would render
+    // church B's member name and phone number inside church A's prayer list.
+    await client.query(
+      `insert into prayer_request (church_id,contact_id,text) values ($1,$2,'linha mal pareada')`,
+      [A.churchId, B.contactId],
+    );
+
+    const rows = await listPrayerRequests(A.churchId);
+
+    expect(rows.map((r) => r.contactPhone)).not.toContain('5544444');
+    expect(rows.map((r) => r.contactName)).not.toContain('Membro de RepoIgrejaB');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(A.prayerId);
   });
 });

@@ -41,8 +41,10 @@ export async function loadConversation(
   return { contact: row, messages };
 }
 
-/** Church-scoped contact-mode write. The bot's updateContactMode is NOT scoped;
- *  the panel must never call it — a panel action could carry any contactId. */
+/** Church-scoped contact-mode write for the panel, whose actions can carry any
+ *  contactId the browser sends. Duplicates repo/contact.ts's updateContactMode,
+ *  which is now church-scoped too (they differ only in argument order); kept
+ *  separate so the panel's inbox module has no reason to import the bot's repo. */
 export async function updateContactModeScoped(
   churchId: string,
   contactId: string,
