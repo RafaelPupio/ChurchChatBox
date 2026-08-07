@@ -3,7 +3,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Church-facing code must never import the owner-only cross-church repo.
- *  This is the only thing enforcing that boundary — the repo has no linter. */
+ *  This is the only thing enforcing that boundary — the repo has no linter.
+ *  Catches static `import ... from`, dynamic `import(...)`, and `require(...)` —
+ *  any reference to the module path, regardless of import form. */
 const CHURCH_FACING_ROOTS = [
   join(process.cwd(), 'src/app/admin'),
   join(process.cwd(), 'src/app/api'),
@@ -28,7 +30,7 @@ describe('privilege boundary', () => {
     // Guard against a bad glob silently passing by scanning nothing.
     expect(files.length).toBeGreaterThan(5);
 
-    const offenders = files.filter((f) => /from ['"][^'"]*repo\/platform['"]/.test(readFileSync(f, 'utf8')));
+    const offenders = files.filter((f) => /['"][^'"]*repo\/platform['"]/.test(readFileSync(f, 'utf8')));
     expect(offenders).toEqual([]);
   });
 });

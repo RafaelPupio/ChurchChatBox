@@ -3,6 +3,20 @@ import { PGlite } from '@electric-sql/pglite';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+/**
+ * Covers SCHEMA-level tenant isolation only: every query here is hand-written
+ * inline SQL run directly against a real Postgres engine (PGlite), proving that
+ * the columns, constraints, and cascade rules the schema defines behave
+ * correctly for a two-predicate (id + church_id) WHERE clause. It does NOT
+ * exercise any actual repository function in src/lib/repo/*.ts, so it cannot
+ * catch a real function that forgets its church_id predicate.
+ *
+ * That is what tests/repo-isolation.test.ts is for: it calls the real
+ * repository functions (unmodified) against the same kind of two-church
+ * fixture, and is the suite to cite for evidence that the APPLICATION's
+ * controls — not just the schema — enforce tenant isolation.
+ */
+
 const MIGRATIONS_DIR = join(process.cwd(), 'drizzle');
 
 let db: PGlite;
