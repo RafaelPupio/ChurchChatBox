@@ -8,6 +8,7 @@ import { loadMenuItems } from '@/lib/repo/menu';
 import { findOrCreateContact, touchLastInbound, updateContactMode } from '@/lib/repo/contact';
 import { recordInboundMessage, recordOutboundMessage } from '@/lib/repo/message';
 import { savePrayerRequest } from '@/lib/repo/prayer';
+import { effectiveStatus } from '@/lib/church-status';
 
 /** Meta's webhook verification handshake. */
 export async function GET(request: NextRequest) {
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
   // The catch block below must never message a number that came from an unverified
   // body — see notifyFailure.
   let verified: { church: ChurchRecord; to: string } | null = null;
+  let suspended = false;
 
   try {
     // Read inside the try: even body extraction can throw (aborted connection,
@@ -69,6 +71,8 @@ export async function POST(request: NextRequest) {
     // From here on the request is authenticated: it carried a valid HMAC signed
     // with this church's app_secret, so churchRecord and inbound.from are trustworthy.
     verified = { church: churchRecord, to: inbound.from };
+    suspended =
+      effectiveStatus(churchRecord.status, churchRecord.graceUntil, new Date()) === 'suspended';
 
     const config = toChurchConfig(churchRecord);
     const creds = { phoneNumberId: churchRecord.phoneNumberId, accessToken: churchRecord.accessToken };
@@ -92,6 +96,14 @@ export async function POST(request: NextRequest) {
     if (!isNew) return NextResponse.json({ ok: true });
 
     await touchLastInbound(contact.id);
+
+    // A suspended church's bot goes quiet. Everything that records member state
+    // has already run above — the message row and lastInboundAt — so nothing is
+    // lost, the inbox stays correctly ordered, and the 24h reply window is
+    // accurate the moment the church is reactivated. Only routing and sending stop.
+    if (suspended) {
+      return NextResponse.json({ ok: true });
+    }
 
     // Staff have 24h to pick up a `human` handoff (see contact-mode.ts). Compute
     // the effective mode here, at the edge — the router stays pure and must never
@@ -143,7 +155,8 @@ export async function POST(request: NextRequest) {
     // request. If the failure happened before that (e.g. a transient DB error
     // during the church lookup), there is no trustworthy recipient to apologize
     // to — an unverified body must never trigger an outbound message.
-    if (verified) {
+    // A suspended church must be completely silent — including apologies.
+    if (verified && !suspended) {
       await notifyFailure(verified).catch((e) => console.error('Could not send error message', e));
     }
   }

@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession, isAuthenticated } from '@/lib/auth/session';
+import { getChurchById } from '@/lib/repo/church-admin';
+import { effectiveStatus } from '@/lib/church-status';
 import { logout } from './actions';
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -8,6 +10,9 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   if (!isAuthenticated(session)) {
     redirect('/admin/login');
   }
+
+  const church = session.churchId ? await getChurchById(session.churchId) : undefined;
+  const status = church ? effectiveStatus(church.status, church.graceUntil, new Date()) : 'active';
 
   return (
     <div>
@@ -23,7 +28,20 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           <button type="submit">Sair</button>
         </form>
       </nav>
-      <div className="container">{children}</div>
+      <div className="container">
+        {status === 'suspended' && (
+          <p className="error">
+            Assinatura suspensa — o painel está somente leitura e o bot não está respondendo.
+            Entre em contato com o suporte para reativar.
+          </p>
+        )}
+        {status === 'past_due' && (
+          <p className="warn">
+            Pagamento pendente. Regularize para não interromper o atendimento aos membros.
+          </p>
+        )}
+        {children}
+      </div>
     </div>
   );
 }

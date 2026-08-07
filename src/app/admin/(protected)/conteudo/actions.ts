@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/auth/session';
+import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
 import {
   countActiveMenuItems,
   listMenuItemsForAdmin,
@@ -17,7 +17,9 @@ export interface ActionResult {
 /** Toggling to active is gated on the 10-row WhatsApp cap. updateMenuItem is
  *  church-scoped, so an id from another church is a silent no-op. */
 export async function setItemActive(id: string, isActive: boolean): Promise<ActionResult> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
 
   if (isActive) {
     const active = await countActiveMenuItems(churchId);
@@ -32,7 +34,9 @@ export async function setItemActive(id: string, isActive: boolean): Promise<Acti
 }
 
 export async function moveItem(id: string, direction: 'up' | 'down'): Promise<ActionResult> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
   const items = await listMenuItemsForAdmin(churchId);
   const index = items.findIndex((i) => i.id === id);
   if (index === -1) return {};

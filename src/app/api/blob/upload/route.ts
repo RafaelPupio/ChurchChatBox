@@ -1,6 +1,6 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextResponse } from 'next/server';
-import { getSession, isAuthenticated } from '@/lib/auth/session';
+import { requireWritableSession } from '@/lib/auth/writable';
 
 /** Mints upload tokens so the admin's browser uploads menu images directly to
  *  Vercel Blob. Only an authenticated admin may obtain a token. */
@@ -12,8 +12,8 @@ export async function POST(request: Request): Promise<Response> {
       body,
       request,
       onBeforeGenerateToken: async () => {
-        const session = await getSession();
-        if (!isAuthenticated(session)) {
+        const session = await requireWritableSession();
+        if ('blocked' in session) {
           throw new Error('Não autorizado.');
         }
         return {

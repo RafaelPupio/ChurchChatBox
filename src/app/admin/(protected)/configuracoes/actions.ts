@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireSession } from '@/lib/auth/session';
+import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
 import { getChurchById, updateChurch } from '@/lib/repo/church-admin';
 import { createAdmin, deleteAdmin, findAdminByEmail } from '@/lib/repo/admin';
 import { hashPassword } from '@/lib/auth/password';
@@ -22,7 +22,9 @@ const TEXT_FIELDS = [
 ] as const;
 
 export async function saveTexts(_prev: ConfigResult, formData: FormData): Promise<ConfigResult> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
 
   const name = String(formData.get('name') ?? '').trim();
   const nameError = validateLabel(name);
@@ -46,7 +48,9 @@ export async function saveTexts(_prev: ConfigResult, formData: FormData): Promis
 }
 
 export async function addStaff(_prev: ConfigResult, formData: FormData): Promise<ConfigResult> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
 
   const email = String(formData.get('email') ?? '').trim();
   const password = String(formData.get('password') ?? '');
@@ -62,7 +66,9 @@ export async function addStaff(_prev: ConfigResult, formData: FormData): Promise
 }
 
 export async function removeStaff(id: string): Promise<ConfigResult> {
-  const { adminUserId, churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { adminUserId, churchId } = session;
   if (id === adminUserId) return { error: 'Você não pode remover a sua própria conta.' };
   await deleteAdmin(id, churchId); // church-scoped: cannot remove another church's staff by id
   revalidatePath('/admin/configuracoes');

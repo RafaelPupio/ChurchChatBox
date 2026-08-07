@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { requireSession } from '@/lib/auth/session';
+import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
 import {
   countActiveMenuItems,
   createMenuItem,
@@ -31,7 +31,9 @@ function resolveImageUrl(formData: FormData, existing: string | null): string | 
 }
 
 export async function createItem(_prev: ItemFormState, formData: FormData): Promise<ItemFormState> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
 
   const label = String(formData.get('label') ?? '').trim();
   const bodyText = String(formData.get('bodyText') ?? '');
@@ -56,7 +58,9 @@ export async function createItem(_prev: ItemFormState, formData: FormData): Prom
 }
 
 export async function editItem(id: string, _prev: ItemFormState, formData: FormData): Promise<ItemFormState> {
-  const { churchId } = await requireSession();
+  const session = await requireWritableSession();
+  if ('blocked' in session) return { error: blockedMessage(session.blocked) };
+  const { churchId } = session;
 
   const items = await listMenuItemsForAdmin(churchId);
   const current = items.find((i) => i.id === id);
