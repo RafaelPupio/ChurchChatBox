@@ -46,7 +46,13 @@ export async function findOrCreateContact(
     .limit(1);
 
   if (!raced) {
-    throw new Error(`Contact race condition: could not find contact after conflicted insert for churchId=${churchId}, phone=${phone}`);
+    // Deliberately WITHOUT the phone number. This error is thrown inside the
+    // webhook's try block and lands in console.error, so anything interpolated
+    // here is a member's personal data sitting in the hosting provider's logs —
+    // under LGPD a phone number is personal data, and log retention is not
+    // something the church controls or was told about. The church id is enough
+    // to diagnose the race; the member's number is not needed to fix it.
+    throw new Error(`Contact race condition: could not find contact after conflicted insert for churchId=${churchId}`);
   }
 
   return raced;
