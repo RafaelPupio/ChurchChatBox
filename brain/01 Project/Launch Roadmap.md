@@ -15,9 +15,9 @@ Where we are: **the product is code-complete as a multi-church SaaS; the gate is
 | 8 | Test end-to-end on Meta's **free test number** | ⬜ needs Meta account |
 | 9 | Meta business verification + real chip connected | ⬜ |
 | 10 | Fill real content → announce the number to members | ⬜ |
-| 11 | **Stripe billing** — card-only, drives `past_due` automatically | 📝 spec written, in revision |
-| 12 | **Nota fiscal integration** — a launch dependency, not a nicety | ⬜ needs its own spec |
-| 13 | **LGPD data-subject tooling** — access, export, deletion, 12-month purge (Art. 18) | 📝 spec written, in revision |
+| 11 | **Stripe billing** — card-only, drives `past_due` automatically | ✅ spec ready to plan |
+| 12 | **Nota fiscal integration** — a launch dependency, not a nicety | ✅ spec ready to plan, 4 homologação experiments first |
+| 13 | **LGPD data-subject tooling** — access, export, deletion, 12-month purge (Art. 18) | ✅ spec ready to plan |
 
 ## ⚠️ What is written but has never executed
 The whole product — bot, panel, and owner console — is code-complete, and coverage is now genuinely good: **212 tests**, including tenant isolation, repo scoping, provisioning failure paths, the privilege boundary, and the webhook's suspension behaviour. Crucially, those run on **PGlite — real Postgres in WASM, with the real migrations applied** — so the schema and SQL semantics *are* exercised. That is a real step up from pure-logic-only.
