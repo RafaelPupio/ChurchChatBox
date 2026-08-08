@@ -17,7 +17,7 @@
 - **ALL user-facing text is Brazilian Portuguese.** English only in code comments, identifiers, tests and docs. Every new string in this plan — banners, aria-labels, error messages, the offline page, the manifest — is pt-BR.
 - **"dízimo" must never appear anywhere user-facing.** Nothing in this plan adds bot copy, but the constraint stands over every string added here.
 - **This plan changes no bot output.** It touches the panel's chrome and layout only. `church.greetingText` and its nine siblings are re-grouped in the UI (Task 9) but their values, names and the `saveTexts` action are untouched.
-- **Any new page under `src/app/admin` MUST call `requireReadableSession`, or the suite fails.** `tests/privilege-boundary.test.ts` has a second describe block, `admin read guard`, that walks every `page.tsx` under `src/app/admin/(protected)` and asserts each one both imports `@/lib/auth/writable` and contains the literal identifier `requireReadableSession`. Read that test before starting. **This plan adds no page under `src/app/admin`** — the one new page, `/offline`, lives at `src/app/offline/page.tsx`, deliberately outside the admin tree because it must render with no session, no database and no network. New *components* under `(protected)` (`TabBar.tsx`, `AutoRefresh.tsx`, `ThreadBottom.tsx`) are not `page.tsx` files and are not covered by that test — but they are also not guards, and none of them fetch data.
+- **Any new page under `src/app/admin` MUST call `requireReadableSession`, or the suite fails.** `tests/privilege-boundary.test.ts` has a second describe block, `admin read guard`, that walks every `page.tsx` under `src/app/admin/(protected)` and asserts each one both imports `@/lib/auth/writable` and contains the literal identifier `requireReadableSession`. Read that test before starting. **This plan adds no page under `src/app/admin`** — the one new page, `/offline`, lives at `src/app/offline/page.tsx`, deliberately outside the admin tree because it must render with no session, no database and no network. New *components* under `(protected)` (`TabBar.tsx`, `AutoRefresh.tsx`, `ThreadBottom.tsx`, `KeyboardInset.tsx`) are not `page.tsx` files and are not covered by that test — but they are also not guards, and none of them fetch data.
 - **Every church-owned query stays `church_id`-scoped.** Task 3 adds one repository read (`countHandoffContacts`) and it takes `churchId` as its first argument like every other function in `src/lib/repo/inbox.ts`. `src/lib/repo/platform.ts` remains owner-only; nothing in this plan imports it.
 - **No CSS framework, no UI kit — and that is a decision, not an omission.** The existing stylesheet already has design tokens (`--bg`, `--card`, `--border`, `--text`, `--muted`, `--primary`, `--primary-contrast`, `--danger`, `--ok`), global `box-sizing: border-box`, and inputs that inherit 16px so iOS never zooms on focus. The whole vocabulary is flat (`.card`, `.row`, `.grow`, `.chip`, `.bubble`, `.thread`, `.conv`, `.btnlink`) with no specificity wars, so a media query appended to the file wins on source order alone. Adopting Tailwind or a component library would mean rewriting the markup of all eleven screens and re-verifying a 212-test suite and a privilege-boundary guard, in exchange for tokens and utilities this file already provides at 57 lines. **The answer is no.** If a future task genuinely needs one, it must argue against that cost first.
 - **Never fix overflow with `overflow-x: hidden` on `body` or `html`.** It hides the bug rather than fixing it, and an `overflow` value other than `visible` on an ancestor silently breaks `position: sticky` for every descendant — which this plan relies on for the app bar, the reply composer and the save bar. Fix the flex rule that overflows.
@@ -26,20 +26,24 @@
 - **Do not set `maximum-scale` or `user-scalable=no`.** Pinch-zoom is how an older volunteer reads a small label. Task 12's `viewport` export sets `initialScale: 1` and nothing else that constrains zoom, and Task 13's test asserts those strings never appear.
 - **Sequencing: Part 1 before Part 2, without exception.** `display: standalone` removes the browser URL bar and the browser back button. Installing today's layout — whose `Configurações` link and `Sair` button render 291px off-viewport — would make the panel genuinely inescapable rather than merely frustrating.
 - **neon-http has NO TRANSACTIONS.** Nothing here writes, but the constraint stands.
-- **TypeScript strict, no `any`.** 212 tests pass today (`npm test` → 19 files, 212 tests). Nothing may regress.
+- **TypeScript strict, no `any`.** The suite passed 212 tests across 19 files when this plan was written. **Do not treat 212 as the gate** — a separate bug-fix pass is in flight (see Task 0) and may have added tests of its own. Task 0 records the real baseline from the branch point; every later "Expected" is *that* number plus this plan's new tests, and nothing may regress below it.
+- **Three overlapping fixes may already be in the tree — reconcile before you write (Task 0).** While this plan waited for review, a separate pass began fixing HEIC upload rejection, the inbox never refreshing (auto-scroll + visibility-aware polling), and tap targets below 44px including the reorder-arrow spacing — and it may also have added the viewport meta tag, which is Part 2's foundation. Tasks 1, 4, 6, 7, 9 and 12 each overlap that work. **Every one of those tasks opens with a `Reconcile first` block: verify whether the fix already landed, and if it did, confirm it satisfies this plan's intent instead of re-doing it.** Never revert a shipped fix so the tree matches this plan's literal code, and never apply the same CSS twice.
 - **Verification reality:** there is no browser harness and no jsdom in this repo, and jsdom would not help — it has no layout engine, so it cannot measure an overflow, a tap target or a wrapped row. Automated gates here are `npm test`, `npm run typecheck`, `npm run build`, plus two new **static contract tests** that read `globals.css` and the PWA files and assert the invariants that the audit found violated. Every task also carries an explicit manual device check with real numbers. Task 15 collects them into one pass.
 
 ---
 
 ## File Structure
 
+Six of these files (`globals.css`, `MenuList.tsx`, `conteudo/page.tsx`, `prepare-image.ts`, `ItemForm.tsx`, `layout.tsx`, plus whatever the parallel pass named its poller and its scroll anchor) may already have been touched by the in-flight bug-fix pass. **`new` below means "new unless Task 0 found it"** — if it exists, reconcile against it rather than creating a second one.
+
 | File | Responsibility |
 |---|---|
-| `src/app/globals.css` | **modify** — the whole responsive foundation: tap targets, 16px input floor, wrapping rows, app bar/tab bar, composer, save bar, one `@media (max-width: 640px)` block |
+| `src/app/globals.css` | **modify** — the whole responsive foundation: tap targets, 16px input floor, wrapping rows, app bar/tab bar, composer, save bar, keyboard inset, one `@media (max-width: 640px)` block |
 | `tests/mobile-css.test.ts` | **new** — static contract test over `globals.css` |
 | `src/app/admin/(protected)/layout.tsx` | **modify** — app bar + tab bar replace the 8-child non-wrapping nav |
 | `src/app/admin/(protected)/TabBar.tsx` | **new** — client tab bar, active state via `usePathname`, waiting badge |
 | `src/app/admin/(protected)/AutoRefresh.tsx` | **new** — client poller: `router.refresh()` while the tab is visible |
+| `src/app/admin/(protected)/KeyboardInset.tsx` | **new** — publishes the iOS software keyboard's height as `--kb` on `<html>` |
 | `src/lib/repo/inbox.ts` | **modify** — `countHandoffContacts`; `listConversations` puts waiting conversations first |
 | `tests/inbox-badge.test.ts` | **new** — PGlite test for the count and the ordering |
 | `src/app/admin/(protected)/conteudo/MenuList.tsx` | **modify** — label first, 44px controls, 8px apart |
@@ -82,6 +86,9 @@ export function TabBar(props: { waiting: number }): JSX.Element;
 // src/app/admin/(protected)/AutoRefresh.tsx
 export function AutoRefresh(props: { intervalMs?: number }): null;
 
+// src/app/admin/(protected)/KeyboardInset.tsx
+export function KeyboardInset(): null;
+
 // src/app/admin/(protected)/caixa/[contactId]/ThreadBottom.tsx
 export function ThreadBottom(props: { count: number }): JSX.Element;
 
@@ -109,11 +116,78 @@ export default function manifest(): import('next').MetadataRoute.Manifest;
 ```
 
 **CSS contract added in Task 1** (every later task depends on these names existing):
-`--tap` (44px) · `--tabbar-h` (58px) · `.appbar` · `.appbar .brand` · `.appbar .who` · `.tabbar` · `.tabbar a` · `.tab-icon` · `.tab-badge` · `.iconbtn` · `.item-card` · `.item-head` · `.item-label` · `.item-meta` · `.item-actions` · `.prayer-card` · `.prayer-text` · `.conv-name` · `.conv-phone` · `.thread-head` · `.thread-title` · `.thread-sub` · `.back` · `.composer` · `.composer-row` · `.composer-input` · `.composer-send` · `.composer-hint` · `.group` · `.group-summary` · `.savebar` · `.image-preview` · `.login-wrap` · `.login-card` · `.offline-banner` · `.sr-only` · `.chip.pending`
+`--tap` (44px) · `--tabbar-h` (58px) · `--kb` (0px; the software keyboard's height, set by `KeyboardInset`) · `html.keyboard-open` · `.appbar` · `.appbar .brand` · `.appbar .who` · `.tabbar` · `.tabbar a` · `.tab-icon` · `.tab-badge` · `.iconbtn` · `.item-card` · `.item-head` · `.item-label` · `.item-meta` · `.item-actions` · `.prayer-card` · `.prayer-text` · `.conv-name` · `.conv-phone` · `.thread-head` · `.thread-title` · `.thread-sub` · `.back` · `.composer` · `.composer-row` · `.composer-input` · `.composer-send` · `.composer-hint` · `.group` · `.group-summary` · `.savebar` · `.image-preview` · `.login-wrap` · `.login-card` · `.offline-banner` · `.sr-only` · `.chip.pending`
 
 ---
 
 # Part 1 — Mobile
+
+### Task 0: Baseline and overlap reconnaissance
+
+**Files:** none. This is a reconnaissance gate, and it is the first thing you do.
+
+This plan was written against `main` and then sat unreviewed while a **separate bug-fix pass** worked on the same screens. That pass was fixing:
+
+1. **HEIC upload rejection** — overlaps **Task 9** entirely.
+2. **The inbox never refreshing** — auto-scroll to the newest message and visibility-aware polling — overlaps **Task 6** (`AutoRefresh`) and **Task 7** (`ThreadBottom`).
+3. **Tap targets below 44px, including the reorder-arrow spacing** — overlaps **Task 1** (`--tap`, the `button`/`.btnlink`/`.iconbtn` floors, `.item-actions { gap: 8px }`) and **Task 4** (the `▲`/`▼` pair in `MenuList.tsx`).
+
+It may also have added the **viewport meta tag**, which is **Task 12**'s foundation.
+
+**The rule, and it applies to every task below:**
+
+> For each overlap: if it is **not** in the tree, do the step exactly as written. If it **is**, do **not** re-apply it. Diff it against the *intent* bullets that task lists, keep the shipped version wherever it satisfies that intent, and write only the delta this plan additionally needs. **Never revert a shipped fix so the tree matches this plan's literal code, and never apply the same CSS or the same component twice.** Where the shipped fix and this plan genuinely conflict (Task 9 names the one real case), the task says which wins and why.
+
+- [ ] **Step 1: Record the real baseline**
+
+```bash
+git log --oneline -20
+git status --short
+npm test 2>&1 | tail -8      # record: N test files, M tests
+```
+Write the file count and test count into the task report. **That M — not 212 — is the number every later "Expected" is measured against.**
+
+- [ ] **Step 2: Probe each overlap and write down what you find**
+
+```bash
+# A. Viewport meta / export  → Task 12
+grep -n "viewport" src/app/layout.tsx
+grep -rn "width=device-width\|viewportFit\|maximumScale\|userScalable" src
+
+# B. Polling / auto-scroll   → Tasks 6 and 7
+grep -rln "setInterval\|visibilitychange\|router.refresh\|scrollTop\|scrollIntoView" "src/app/admin/(protected)"
+
+# C. HEIC                    → Task 9
+grep -rn "heic\|HEIC\|createImageBitmap\|toBlob\|allowedContentTypes" src
+
+# D. Tap targets             → Tasks 1 and 4
+wc -l src/app/globals.css                       # 57 = untouched; larger = it landed
+grep -n "min-height\|--tap\|44px\|gap" src/app/globals.css
+grep -n "aria-label\|className\|gap" "src/app/admin/(protected)/conteudo/MenuList.tsx"
+```
+
+Fill this in, and keep it in the task report — later tasks read it:
+
+| Overlap | Landed? | Where | Satisfies this plan's intent? | Delta still needed |
+|---|---|---|---|---|
+| viewport meta/export | | | | |
+| visibility-aware polling | | | | |
+| scroll-to-newest | | | | |
+| HEIC handling | | | | |
+| 44px tap targets in CSS | | | | |
+| reorder-arrow spacing | | | | |
+
+- [ ] **Step 3: Decide the Task 1 strategy before touching `globals.css`**
+
+Task 1 says "replace `globals.css` entirely". **That is only safe if `globals.css` is still the original 57 lines.** If the tap-target fix already landed there, a wholesale replacement would silently revert it or, worse, keep a near-duplicate of it. In that case treat Task 1's stylesheet as the **target state**, not as a paste, and:
+
+- reconcile declaration by declaration, keeping any shipped rule the target does not contradict;
+- when the shipped rule and the target say the same thing differently (`min-height: 44px` vs `min-height: var(--tap)`), keep **one** of them — prefer the token, since `tests/mobile-css.test.ts` asserts `var(--tap)`;
+- finish with `git diff src/app/globals.css` and confirm no shipped declaration was dropped.
+
+Record which strategy you took.
+
+---
 
 ### Task 1: Responsive CSS foundation
 
@@ -127,7 +201,19 @@ export default function manifest(): import('next').MetadataRoute.Manifest;
 
 This is the whole foundation. Four of the audit's blockers share one root cause — `.row` has no `flex-wrap` — and flex items refuse to shrink below their min-content width, so a label beside two buttons is crushed into a 62px vertical ribbon instead of moving to its own line. Everything else here is a global declaration, not a per-component sweep.
 
-- [ ] **Step 1: Replace `src/app/globals.css` entirely**
+> **Reconcile first — the tap-target fix may already be in `globals.css`.**
+> The in-flight bug-fix pass was raising controls to 44px and separating the reorder arrows, and `globals.css` is where that lands. Task 0 Step 3 already told you which strategy applies; hold to it.
+> **This plan's intent for that overlap** — a shipped fix satisfies it if all of these are true, however it spells them:
+> - every `button`, `.btnlink`, `.tabbar a` and `.back` has a min-height of at least 44px;
+> - the `▲`/`▼` reorder controls are at least 44×44 **and** at least 8px apart;
+> - no input, textarea or select is under 16px (iOS zooms below that);
+> - nothing sets `overflow-x: hidden` on `body` or `html` to hide a spill.
+>
+> If it is there and it satisfies that: **keep it**, and add only what is missing from the stylesheet below — the wrapping rows, the app bar/tab bar, the composer, the save bar, the keyboard inset and the two media queries. If it spells a floor as a literal `44px`, rewrite that one declaration as `var(--tap)` so the contract test's `min-height: var(--tap)` assertions hold, and say so in the task report. That is a rewording, not a revert.
+
+- [ ] **Step 1: Write `src/app/globals.css` to this target state**
+
+If `globals.css` is still the original 57 lines, paste this over it. If Task 0 found it already changed, this is the **target**: reconcile into it, do not paste.
 
 ```css
 :root {
@@ -145,6 +231,12 @@ This is the whole foundation. Four of the audit's blockers share one root cause 
   /* Height of the mobile bottom tab bar, excluding the iOS safe area. .container
      reserves this much bottom padding so content is never hidden behind it. */
   --tabbar-h: 58px;
+  /* How much of the layout viewport the software keyboard is covering. iOS does
+     NOT shrink the layout viewport when the keyboard opens — only the visual
+     viewport — so a sticky composer pinned to `bottom` would sit underneath it.
+     KeyboardInset.tsx overwrites this on <html> from window.visualViewport; the
+     0px default is exactly the no-keyboard, no-JS, desktop behaviour. */
+  --kb: 0px;
 }
 * { box-sizing: border-box; }
 /* No overflow-x: hidden on body or html. It would hide a layout bug rather than
@@ -283,7 +375,11 @@ button:disabled { opacity: 0.55; cursor: default; }
 .back { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: var(--tap); min-height: var(--tap); border: 1px solid var(--border); border-radius: 8px; background: var(--card); text-decoration: none; font-size: 18px; color: var(--text); }
 /* The thread scrolls inside itself so the reply box stays within a thumb's reach
    instead of sitting ~1800px below a 30-message history. */
-.thread { display: flex; flex-direction: column; gap: 6px; background: #eef2f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; min-height: 180px; max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* max-height is declared twice on purpose: dvh tracks the viewport as the browser
+   chrome collapses, vh does not — and the vh line is the fallback for anything
+   that does not know dvh. min-height wins over max-height in CSS, so the thread
+   can never collapse below 180px no matter what the keyboard does. */
+.thread { display: flex; flex-direction: column; gap: 6px; background: #eef2f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; min-height: 180px; max-height: 60vh; max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; line-height: 1.4; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
 .bubble.in { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
 .bubble.out { align-self: flex-end; background: #dcf8c6; color: #111; }

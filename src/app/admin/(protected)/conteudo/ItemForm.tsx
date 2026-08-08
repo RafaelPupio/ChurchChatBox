@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { upload } from '@vercel/blob/client';
+import { IMAGE_ACCEPT_ATTRIBUTE, validateImageFile } from '@/lib/image-upload';
 import type { ItemFormState } from './item-actions';
 
 export interface ItemFormValues {
@@ -31,6 +32,20 @@ export function ItemForm({
   async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    // Checked before the upload starts, so the reason is specific ("this is a
+    // HEIC, here is the iPhone setting that fixes it") instead of the generic
+    // failure the server's rejection produced. The server allow-list is still the
+    // gate — this check is UX and can be bypassed by anyone who cares to.
+    const problem = validateImageFile(file);
+    if (problem) {
+      setUploadError(problem);
+      // Cleared so picking the SAME file again still fires onChange — otherwise
+      // she re-picks the photo, nothing happens, and the panel looks broken.
+      event.target.value = '';
+      return;
+    }
+
     setUploadError('');
     setUploading(true);
     try {
@@ -63,7 +78,11 @@ export function ItemForm({
       <p className="hint">Deixe em branco para itens de oração ou atendente.</p>
 
       <label htmlFor="image">Imagem (opcional — ex.: calendário do mês)</label>
-      <input id="image" type="file" accept="image/*" onChange={onFileChange} disabled={uploading} />
+      {/* Not `image/*`: that offer is what makes an iPhone hand over a HEIC the
+          WhatsApp API cannot render. Naming the four formats makes iOS's own
+          picker convert the photo to JPG before it ever reaches this input. */}
+      <input id="image" type="file" accept={IMAGE_ACCEPT_ATTRIBUTE} onChange={onFileChange} disabled={uploading} />
+      <p className="hint">Formatos aceitos: JPG, PNG, WEBP ou GIF, até 10 MB.</p>
       {uploading && <p className="hint">Enviando imagem…</p>}
       {uploadError && <p className="error">{uploadError}</p>}
       {imageUrl && (
