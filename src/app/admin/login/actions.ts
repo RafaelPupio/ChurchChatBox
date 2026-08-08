@@ -39,6 +39,12 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   session.adminUserId = admin.id;
   session.churchId = admin.churchId;
   session.name = admin.name ?? '';
+  // Seals the password epoch into the cookie. Every guard compares it against the
+  // live row, so a later password change invalidates this session — see
+  // sessionMatchesPassword. Omitting it here would make every cookie this action
+  // issues instantly stale, i.e. login would appear to succeed and then bounce
+  // straight back to this page.
+  session.pwdAt = admin.passwordChangedAt.getTime();
   await session.save();
 
   redirect('/admin/conteudo');

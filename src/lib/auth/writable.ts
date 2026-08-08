@@ -1,5 +1,11 @@
 import { redirect } from 'next/navigation';
-import { getSession, isAuthenticated, requireSession } from '@/lib/auth/session';
+import {
+  getSession,
+  isAuthenticated,
+  requireSession,
+  sessionMatchesPassword,
+  type SessionClaims,
+} from '@/lib/auth/session';
 import { findAdminById } from '@/lib/repo/admin';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { effectiveStatus } from '@/lib/church-status';
@@ -10,18 +16,41 @@ export interface AdminIdentity {
   name: string;
 }
 
-/** The two checks the session cookie alone cannot make.
+/** Strips the guard-only claims off, so `pwdAt` never reaches application code. */
+function identityOf(claims: SessionClaims): AdminIdentity {
+  return { adminUserId: claims.adminUserId, churchId: claims.churchId, name: claims.name };
+}
+
+/** The three checks the session cookie alone cannot make.
  *
  *  1. The admin still exists and still belongs to this church. A cookie proves
  *     who someone WAS; `removeStaff` can delete their row, and a removed
  *     secretary must not keep writing to the church's inbox until their cookie
  *     happens to expire.
- *  2. The church is not suspended. */
+ *  2. The password has not changed since this cookie was sealed. Same idea, one
+ *     step further: a cookie proves who someone was AND which password they knew.
+ *     iron-session is stateless, so a reset cannot delete anyone's session — this
+ *     comparison is the only thing that ends one. It costs nothing, because the
+ *     admin row is already in hand from check 1.
+ *
+ *     WHAT THIS DOES NOT CLOSE, stated plainly rather than left implicit: the
+ *     window between the reset and the intruder's next request. The cookie stays
+ *     unsealable-but-valid in their browser until they use it, and nothing here
+ *     runs until they do. In practice that means "the intruder is ejected on their
+ *     next page load or next write", not "at the instant of the reset" — there is
+ *     no push channel and no session store to revoke against. Also unaffected:
+ *     anything they already read and copied, and any data they exfiltrated before
+ *     the reset. A reset ends access; it cannot undo access.
+ *  3. The church is not suspended. */
 async function verifyWritable(
-  session: AdminIdentity,
+  session: SessionClaims,
 ): Promise<AdminIdentity | { blocked: 'suspended' | 'revoked' }> {
   const admin = await findAdminById(session.adminUserId);
   if (!admin || admin.churchId !== session.churchId) return { blocked: 'revoked' };
+
+  // Same sentinel as a deleted admin: from the holder's point of view the account
+  // this cookie names no longer accepts it, and the remedy is the same — log in.
+  if (!sessionMatchesPassword(session, admin.passwordChangedAt)) return { blocked: 'revoked' };
 
   const church = await getChurchById(session.churchId);
   if (!church) return { blocked: 'revoked' };
@@ -30,7 +59,7 @@ async function verifyWritable(
     return { blocked: 'suspended' };
   }
 
-  return session;
+  return identityOf(session);
 }
 
 /** For Server Actions. No session at all redirects to login; the two revocation
@@ -56,6 +85,7 @@ export async function checkWritableSession(): Promise<
     adminUserId: session.adminUserId!,
     churchId: session.churchId!,
     name: session.name ?? '',
+    pwdAt: session.pwdAt,
   });
 }
 
@@ -80,7 +110,15 @@ export async function requireReadableSession(): Promise<AdminIdentity> {
     redirect('/admin/login');
   }
 
-  return session;
+  // The password-change check belongs on the READ path too, and arguably more so:
+  // the thing a stale session is most useful for is reading member phone numbers,
+  // message bodies and prayer requests, none of which requires a single write.
+  // A guard that only revoked writes would leave the whole panel legible.
+  if (!sessionMatchesPassword(session, admin.passwordChangedAt)) {
+    redirect('/admin/login');
+  }
+
+  return identityOf(session);
 }
 
 /** The pt-BR messages shown wherever access is refused. */
