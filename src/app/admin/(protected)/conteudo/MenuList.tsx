@@ -29,7 +29,11 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
       {error && <p className="error">{error}</p>}
       {items.map((item, index) => (
         <div key={item.id} className="card row">
-          <div className="row" style={{ flexDirection: 'column', gap: 2 }}>
+          {/* 10px apart, not 2px. Each arrow is an immediate server write that
+              reorders the live WhatsApp menu, and 44px targets 2px apart on a
+              phone means the mis-tap moves the item the wrong way — with no undo
+              beyond noticing and pressing the other arrow. */}
+          <div className="row" style={{ flexDirection: 'column', gap: 10, flexShrink: 0 }}>
             <button disabled={pending || index === 0} onClick={() => run(() => moveItem(item.id, 'up'))} aria-label="Mover para cima">▲</button>
             <button disabled={pending || index === items.length - 1} onClick={() => run(() => moveItem(item.id, 'down'))} aria-label="Mover para baixo">▼</button>
           </div>

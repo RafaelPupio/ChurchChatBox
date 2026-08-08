@@ -88,7 +88,8 @@ export function ItemForm({
       {imageUrl && (
         <p className="hint">
           Imagem anexada ✓{' '}
-          <label style={{ display: 'inline' }}>
+          {/* The label is the tap target, not the 22px box inside it. */}
+          <label style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44 }}>
             <input
               type="checkbox"
               checked={removed}

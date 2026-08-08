@@ -8,6 +8,11 @@
   --primary-contrast: #ffffff;
   --danger: #b91c1c;
   --ok: #065f46;
+  /* Minimum size of anything a thumb has to hit. Apple and Google both land on
+     44px; the panel was shipping 36px buttons and 30px nav links, and the ▲▼
+     reorder pair 2px apart — where a mis-tap is an immediate server write that
+     moves a live WhatsApp menu item the wrong way. */
+  --tap: 44px;
 }
 * { box-sizing: border-box; }
 body {
@@ -22,18 +27,31 @@ a { color: var(--primary); }
 .row { display: flex; align-items: center; gap: 8px; }
 .grow { flex: 1; }
 label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-input[type=text], input[type=email], input[type=password], textarea, select {
-  width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: #fff; color: var(--text);
+/* font-size is stated, not inherited: below 16px iOS Safari zooms the page the
+   moment the field takes focus, and never zooms back out. It was 16px here only
+   by accident of inheriting an unstyled body — one font-size on body would have
+   silently reintroduced the zoom. */
+input[type=text], input[type=email], input[type=password], input[type=file], textarea, select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 16px; min-height: var(--tap); background: #fff; color: var(--text);
 }
 textarea { min-height: 90px; resize: vertical; }
-button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border); padding: 8px 14px; background: #fff; color: var(--text); }
+input[type=file]::file-selector-button { font: inherit; cursor: pointer; margin-right: 10px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text); }
+/* A checkbox at its 13px default is not hittable on a phone. The label that
+   wraps one carries min-height: var(--tap) so the whole row is the target. */
+input[type=checkbox] { width: 22px; height: 22px; min-height: 22px; accent-color: var(--primary); margin: 0 6px 0 0; }
+button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border); padding: 10px 14px; background: #fff; color: var(--text); display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: var(--tap); }
 button.primary { background: var(--primary); color: var(--primary-contrast); border-color: var(--primary); }
 button.danger { color: var(--danger); border-color: var(--danger); background: #fff; }
-.btnlink { display: inline-block; text-decoration: none; font: inherit; border-radius: 8px; border: 1px solid var(--border); padding: 8px 14px; background: #fff; color: var(--text); }
+.btnlink { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font: inherit; border-radius: 8px; border: 1px solid var(--border); padding: 10px 14px; background: #fff; color: var(--text); min-height: var(--tap); min-width: var(--tap); }
 .btnlink.primary { background: var(--primary); color: var(--primary-contrast); border-color: var(--primary); }
-.nav { display: flex; gap: 12px; align-items: center; background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 16px; }
+/* Wraps because the eight children already measure well past a 375px phone, and
+   making every one of them 44px tall would have pushed more of them off-screen
+   with no scrollbar to hint they exist. Wrapping is a stopgap, not the layout:
+   the app-bar/tab-bar split in docs/superpowers/plans/2026-08-08-mobile-and-pwa.md
+   is the real fix. */
+.nav { display: flex; flex-wrap: wrap; gap: 12px; row-gap: 8px; align-items: center; background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 16px; }
 .nav .brand { font-weight: 700; }
-.nav a { text-decoration: none; padding: 6px 10px; border-radius: 8px; }
+.nav a { display: inline-flex; align-items: center; min-height: var(--tap); text-decoration: none; padding: 8px 12px; border-radius: 8px; }
 .nav a.active { background: #ecfdf5; color: var(--ok); font-weight: 600; }
 .error { color: var(--danger); font-size: 13px; margin: 8px 0; }
 .hint { color: var(--muted); font-size: 12px; }
@@ -44,7 +62,7 @@ button.danger { color: var(--danger); border-color: var(--danger); background: #
 .bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; line-height: 1.4; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
 .bubble.in { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
 .bubble.out { align-self: flex-end; background: #dcf8c6; color: #111; }
-.conv { display: flex; align-items: center; gap: 8px; padding: 12px 14px; text-decoration: none; color: var(--text); }
+.conv { display: flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 12px 14px; text-decoration: none; color: var(--text); }
 .conv:hover { background: #f2f2f2; }
 .mode-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
 .mode-human { background: #fef3c7; color: #92400e; }
