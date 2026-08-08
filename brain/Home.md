@@ -13,6 +13,7 @@ The project's second brain. **Start here.** Every note is small on purpose — r
 ### Project
 - [[Overview]] — what this is, who it's for, the one-church-now/product-later shape
 - [[Launch Roadmap]] — the stages and where we are
+- [[Whats Left]] — the honest gap list: proven vs. written vs. not built at all
 - [[Decisions Log]] — every big choice and *why*
 
 ### Architecture
