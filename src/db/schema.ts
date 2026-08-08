@@ -1,5 +1,5 @@
 import {
-  boolean, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 
 export const menuItemKindEnum = pgEnum('menu_item_kind', ['content', 'prayer', 'human']);
@@ -106,9 +106,55 @@ export const adminUser = pgTable('admin_user', {
   email: text('email').notNull(),
   passwordHash: text('password_hash').notNull(),
   name: text('name'),
+  /** The session-revocation epoch. Bumped by every password change (reset or
+   *  self-service), and stamped into the session cookie at login.
+   *
+   *  This exists because iron-session is a SEALED STATELESS COOKIE: there is no
+   *  server-side session store to delete from, so changing a password cannot on
+   *  its own log anybody out. Without this column, a member of staff who resets
+   *  their password because they think someone else has it would leave that other
+   *  person's session working for up to the full 8h TTL — the exact scenario a
+   *  password reset is supposed to end.
+   *
+   *  The comparison is free: src/lib/auth/writable.ts already re-reads this row
+   *  on every page load and every write, so the guard gains a field comparison
+   *  and not a query. See that file for the residual gap this does NOT close. */
+  passwordChangedAt: timestamp('password_changed_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailUq: uniqueIndex('admin_user_email_uq').on(t.email),
+}));
+
+/** Self-service password reset.
+ *
+ *  Stores a SHA-256 of the token and never the token itself, for the same reason
+ *  admin_user stores a bcrypt hash and never the password: a database leak — a
+ *  backup on a laptop, a read-replica handed to a contractor — must not hand over
+ *  live reset links to every church's panel. SHA-256 rather than bcrypt is
+ *  deliberate and is justified in src/lib/auth/reset-token.ts.
+ *
+ *  No church_id, and that is not an oversight of the church-scoping rule. A reset
+ *  is requested by someone with no session and therefore no church context; the
+ *  only key that can find the row is the 256-bit token itself, and the church is
+ *  then whatever the referenced admin_user row says it is. A denormalised
+ *  church_id here could only ever disagree with that row, and there is no query
+ *  in the product that lists these by church. The FK cascade means deleting an
+ *  admin (removeStaff) also destroys their outstanding reset links. */
+export const passwordResetToken = pgTable('password_reset_token', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  adminUserId: uuid('admin_user_id').notNull().references(() => adminUser.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  /** Set by the single atomic UPDATE that consumes the token. NULL means unused. */
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // Unique so consumption can be a single indexed UPDATE ... WHERE token_hash = $1,
+  // which is what makes single-use atomic without a transaction.
+  tokenHashUq: uniqueIndex('password_reset_token_hash_uq').on(t.tokenHash),
+  // Every other query here is "all tokens for this admin": the per-admin request
+  // throttle and the invalidate-all-siblings step.
+  adminUserIdIdx: index('password_reset_token_admin_user_id_idx').on(t.adminUserId),
 }));
 
 /** Platform owner (Rafael). Deliberately has NO church_id — an owner belongs to
