@@ -25,7 +25,30 @@ a { color: var(--primary); }
 .container { max-width: 880px; margin: 0 auto; padding: 24px 16px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
 .row { display: flex; align-items: center; gap: 8px; }
-.grow { flex: 1; }
+/* min-width: 0 is the whole point of this rule, not a tidy-up. `flex: 1` sets
+   flex-basis to 0 but leaves min-width at its `auto` default, and a flex item's
+   automatic minimum size is its MIN-CONTENT width — for a text span, the widest
+   single word. So the item refuses to shrink past that word no matter how narrow
+   the phone is, and the row pushes the controls after it off the side of the
+   page. Measured at a real 375px viewport against this stylesheet, with the full
+   MenuList row (▲▼ + label + .chip + Ocultar + Editar): the label
+   "Acompanhamento" left only 2.1px of slack, and "Acompanhamentos" — one letter
+   more — put document.scrollWidth at 381. min-width: 0 releases that floor;
+   overflow-wrap then breaks a word that still cannot fit on its own line, so a
+   single long word wraps instead of overflowing the box it was allowed to
+   shrink into. */
+.grow { flex: 1; min-width: 0; overflow-wrap: break-word; }
+/* min-width: 0 on its own only moves the damage: measured on the same row, the
+   label stopped overflowing and instead collapsed to 33.6px — "Acompanhamento"
+   rendered as a 132px-tall column of single letters, because every control after
+   it still refuses to shrink below its own min-content. A row that carries more
+   than a phone can fit on one line has to use a second line, so this opt-in pair
+   is what those rows get: `wrap` allows the extra line, and the floor on the
+   label is what actually TRIGGERS it — `flex: 1` gives the label a zero basis, so
+   without a floor it always "fits" by shrinking to nothing and no item ever
+   wraps. 9em is about one readable menu label wide. */
+.row.wrap { flex-wrap: wrap; row-gap: 8px; }
+.row.wrap > .grow { min-width: 9em; }
 label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
 /* font-size is stated, not inherited: below 16px iOS Safari zooms the page the
    moment the field takes focus, and never zooms back out. It was 16px here only
@@ -35,7 +58,14 @@ input[type=text], input[type=email], input[type=password], input[type=file], tex
   width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 16px; min-height: var(--tap); background: #fff; color: var(--text);
 }
 textarea { min-height: 90px; resize: vertical; }
-input[type=file]::file-selector-button { font: inherit; cursor: pointer; margin-right: 10px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text); }
+/* The 44px on the rule above sits on the file INPUT, and the input is only
+   reliably tappable across its whole box in Chromium — on iOS Safari the hit
+   target is the button, which computed to 33px and was never 44 despite the
+   token above implying every control is. So the button carries its own floor.
+   ::file-selector-button is supported in Safari 16+ and Firefox; on anything
+   older this is inert and the control is back to 33px, which is the honest
+   position and not something the tap-target test should claim otherwise. */
+input[type=file]::file-selector-button { font: inherit; cursor: pointer; margin-right: 10px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text); min-height: var(--tap); }
 /* A checkbox at its 13px default is not hittable on a phone. The label that
    wraps one carries min-height: var(--tap) so the whole row is the target. */
 input[type=checkbox] { width: 22px; height: 22px; min-height: 22px; accent-color: var(--primary); margin: 0 6px 0 0; }

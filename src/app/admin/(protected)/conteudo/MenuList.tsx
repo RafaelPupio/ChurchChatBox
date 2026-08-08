@@ -27,8 +27,12 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
   return (
     <div>
       {error && <p className="error">{error}</p>}
+      {/* `wrap`: five controls plus a label do not fit one 375px line. Without it
+          the label is squeezed to min-content and, once .grow stopped refusing to
+          shrink, down to a 33.6px column of single letters — measured. See the
+          .row.wrap rule in globals.css. */}
       {items.map((item, index) => (
-        <div key={item.id} className="card row">
+        <div key={item.id} className="card row wrap">
           {/* 10px apart, not 2px. Each arrow is an immediate server write that
               reorders the live WhatsApp menu, and 44px targets 2px apart on a
               phone means the mis-tap moves the item the wrong way — with no undo

@@ -28,8 +28,10 @@ export function PrayerList({ prayers }: { prayers: PrayerRow[] }) {
   return (
     <div>
       {error && <p className="error">{error}</p>}
+      {/* `wrap` for the same reason as MenuList: a prayer request, a status chip
+          and "Marcar como orado" are more than one phone line. */}
       {prayers.map((p) => (
-        <div key={p.id} className="card row">
+        <div key={p.id} className="card row wrap">
           <span className="grow">
             "{p.text}"<span className="hint"> — {p.who} · {p.when}</span>
           </span>
