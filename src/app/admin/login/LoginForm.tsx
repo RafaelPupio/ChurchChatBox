@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 import { login, type LoginState } from './actions';
 
@@ -19,6 +20,9 @@ export function LoginForm() {
       <button className="primary" type="submit" disabled={pending} style={{ marginTop: 12, width: '100%' }}>
         {pending ? 'Entrando…' : 'Entrar'}
       </button>
+      <p style={{ marginBottom: 0, marginTop: 12, textAlign: 'center' }}>
+        <Link href="/admin/esqueci-senha">Esqueci minha senha</Link>
+      </p>
     </form>
   );
 }
