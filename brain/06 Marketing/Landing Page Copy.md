@@ -18,9 +18,17 @@ Breaking any of these makes the asset unusable, not just weaker.
    ([[Decisions Log]], 2026-08-06).
 3. **"Ofertas", never "dízimo"** — the word does not appear on this page ([[Menu Inventory]]).
 4. **The new chip is in step 1**, not the FAQ. Buried, it becomes a betrayal; upfront, it is proof of honesty.
-5. **No feature that isn't built** is described in the present tense. Not-built things are labelled
-   *em construção* out loud (notifications, export/delete, nota fiscal).
+5. **No feature that isn't built** is described in the present tense. Everything on the not-built list
+   is labelled out loud, on the page, in the reader's words. As of 2026-08-08 that list is:
+   **notificação, monitoramento/alerta, troca e recuperação de senha, cobrança (Stripe), nota fiscal,
+   exportar/apagar dados a pedido, expurgo automático, submenus, offboarding de igreja.**
+   ([[Whats Left]] — re-read it before adding any capability sentence to this page.)
 6. **No price.** The CTA is a conversation, which is what makes the missing price survivable.
+7. **Every external fact carries a source and a date read, or it is marked unverified.** Meta's pricing,
+   Meta's list limits, Meta's verification requirements and any operator's chip price change without
+   telling us. Nothing on this page states one as settled unless the source URL and the date it was read
+   are recorded in *Fatos externos a verificar antes de publicar* (bottom of this file). Marked-unverified
+   is allowed; silently deleting a load-bearing claim is not, because then the dependency disappears.
 
 ### The voice decision
 The page is written in **Rafael's first person** ("eu"). With zero social proof, the only persuasion
@@ -34,19 +42,45 @@ a testimonial would normally do — and it only works in first person.
 
 | # | Section | Job | Scroll weight |
 |---|---|---|---|
+| 0 | Meta tags + prévia de link | The real first impression: this link is sent *inside* WhatsApp | — |
 | 1 | Hero | One concrete scene + the promise | full viewport |
 | 2 | O problema | Make them see their own Saturday night | short |
-| 3 | Como funciona (3 passos) | Chip objection defused inside step 1 | medium |
+| 3 | Como funciona (3 passos) | Chip **and Meta verification** defused inside step 1 | medium |
 | 4 | O que o robô responde | The menu, made tangible | medium |
 | 5 | Recursos | 6 blocks, differentiators only | long |
 | 6 | O que ele NÃO é | Kills wrong expectations before the demo | short |
-| 7 | O chip novo | The hardest objection, its own section | medium |
-| 8 | Perguntas difíceis | 4 objections, answered flat | medium |
+| 7 | O chip novo e o cadastro na Meta | The hardest objection, its own section | medium |
+| 8 | Perguntas difíceis | 6 objections, answered flat — including the three gaps | long |
 | 9 | Dados dos membros | LGPD, said honestly | medium |
 | 10 | Quem faz isso | Rafael, named, one person | short |
 | 11 | As primeiras igrejas + CTA | The offer that replaces social proof | medium |
 | 12 | FAQ | Commercial logistics | long, accordion |
 | 13 | Rodapé | | short |
+
+---
+
+## 0 — Meta tags e prévia de link
+
+**Job:** Rafael sends this URL *inside a WhatsApp conversation with a pastor*. The preview card is read
+before the page is. It has to be honest on its own, because plenty of pastors will only ever see it.
+
+**Copy**
+
+> **`<title>`:** Secretária Virtual — atendimento no WhatsApp para a sua igreja
+>
+> **`<meta name="description">`:** Uma secretária virtual no WhatsApp que responde às perguntas de
+> sempre — horários, endereço, agenda, ofertas, pedido de oração — com as palavras que a sua igreja
+> escreveu. Sem aplicativo, sem inteligência artificial.
+>
+> **`og:title`:** Sábado, 22h40. Alguém pergunta que horas é o culto.
+> **`og:description`:** A sua igreja responde na hora, com as palavras dela. Ainda não está no ar em
+> nenhuma igreja — estou escolhendo as primeiras.
+> **`og:image`:** the same illustrated menu used in the hero. **Never** a photo-realistic fake screenshot.
+> **`og:image:alt`:** Ilustração de um menu de WhatsApp com os assuntos de uma igreja.
+
+> ⚠️ **Production rule.** `og:description` must keep the "ainda não está no ar" clause. The preview is
+> the one surface a pastor can screenshot and forward; if it over-promises, the honest page behind it
+> never gets read.
 
 ---
 
@@ -60,15 +94,15 @@ the first line.
 > **H1:** Sábado, 22h40. Alguém pergunta que horas é o culto de amanhã.
 > Sua igreja responde na hora.
 >
-> **Sub:** Uma secretária virtual no WhatsApp que responde as perguntas de sempre — horários, endereço,
+> **Sub:** Uma secretária virtual no WhatsApp que responde às perguntas de sempre — horários, endereço,
 > agenda, ofertas, pedido de oração — com as palavras que a sua igreja escreveu. Sem aplicativo para o
 > membro baixar. Sem inteligência artificial inventando nada.
 >
 > **CTA principal:** Quero conversar 20 minutos
 > **CTA secundário:** Ver como funciona ↓
 >
-> **Linha de honestidade (logo abaixo dos botões, fonte menor):** Ainda não está no ar. Estou escolhendo
-> as primeiras igrejas — e elas não pagam enquanto o produto estiver sendo ajustado com elas.
+> **Linha de honestidade (logo abaixo dos botões, fonte menor):** Ainda não está no ar em nenhuma igreja.
+> Estou escolhendo as primeiras — e elas não pagam, porque a cobrança ainda nem existe.
 
 **Alternate H1s** (same sub works for all three)
 - *A secretária da igreja que não dorme.* — mais curta, menos concreta; boa para anúncio, fraca para página.
@@ -125,22 +159,25 @@ voice, not like a callout.
 
 ## 3 — Como funciona, em 3 passos
 
-**Job:** end-to-end mental model in thirty seconds — and the chip objection lands in step 1, where it
-cannot be accused of hiding.
+**Job:** end-to-end mental model in thirty seconds — and the two hard entry truths (chip novo, cadastro
+na Meta) land in step 1, where they cannot be accused of hiding.
 
 **Copy**
 
 > ## Como funciona
 >
-> **1. Um chip novo, só para o robô.**
+> **1. Um chip novo só para o robô — e um cadastro na Meta.**
 > A igreja compra um chip pré-pago comum. O número que a igreja já usa continua funcionando exatamente
-> como está — ninguém encosta nele. O robô ganha um número só dele, e eu explico o porquê disso mais
-> abaixo, porque é importante e não é detalhe.
+> como está — ninguém encosta nele. Além do chip, a Meta exige que a igreja apareça como negócio dentro
+> de uma conta empresarial e passe pela **verificação de negócio da própria Meta** — envio de documentos,
+> alguns dias de espera, e a resposta é dela, não minha. Eu conduzo o processo com você, mas não controlo
+> o prazo nem a aprovação. Hoje esse é o passo mais lento da entrada, e eu explico os dois assuntos com
+> calma mais abaixo.
 >
 > **2. A gente monta o menu junto, com as palavras da sua igreja.**
 > Numa conversa, eu pergunto os horários, o endereço, como se chamam os seus grupos, o que entra em
 > Ofertas. Escrevo tudo no painel com você. Depois disso, qualquer pessoa da secretaria muda qualquer
-> palavra sozinha, de um celular, sem me chamar.
+> palavra do robô sozinha, de um celular, sem me chamar.
 >
 > **3. O membro manda mensagem e toca no assunto.**
 > Ele recebe a saudação da sua igreja e uma lista para tocar. Toca em "Horários de Culto", recebe os
@@ -153,6 +190,10 @@ Horizontal three-step rail with a thin connecting line. Numerals large and quiet
 inline phone thumbnail; steps 1 and 2 get a simple line icon (chip, painel). Do **not** make step 1
 red or warning-coloured — it is a normal step, told plainly. Making it look like a warning tells the
 reader it is a problem before they have decided whether it is one.
+
+> ⚠️ Step 2's "muda qualquer palavra do robô sozinha" is true and stays — menu and bot text are
+> self-service ([[Whats Left]]: menu editing is built). It is deliberately worded "qualquer palavra **do
+> robô**", because the one thing a secretary *cannot* change alone is her own panel password (§8).
 
 ---
 
@@ -200,9 +241,10 @@ of the panel is the real proof, and the panel does exist and does render ([[What
 > como a **sua** igreja e não como um sistema.
 
 > ## O membro não instala nada
-> Sem aplicativo para baixar. Sem cadastro. Sem senha para esquecer e recuperar. Ele já está no WhatsApp
-> — é lá que ele pergunta. O irmão de setenta anos que usa WhatsApp e mais nada consegue usar isto na
-> primeira tentativa, sem ninguém ensinar.
+> Sem aplicativo para baixar. Sem cadastro. Sem senha para esquecer. Ele já está no WhatsApp — é lá que
+> ele pergunta. O irmão de setenta anos que usa WhatsApp e mais nada consegue usar isto na primeira
+> tentativa, sem ninguém ensinar. *(Isso vale para o membro. Quem trabalha no painel tem login e senha —
+> e sobre senha eu tenho uma coisa desconfortável para te contar lá embaixo.)*
 
 > ## O robô não inventa. De propósito.
 > Ele não tem inteligência artificial, e isso é uma escolha, não uma falta. O robô só diz o que a sua
@@ -221,17 +263,33 @@ of the panel is the real proof, and the panel does exist and does render ([[What
 > painel existe uma lista com "novo" e "orado", que é exatamente o que uma igreja faz com pedidos de
 > oração. Quem organiza a lista de oração da semana abre uma tela e vê o que chegou.
 
-> ## Número oficial da Meta. Sem risco de banimento, sem custo por mensagem.
-> Muita automação de WhatsApp por aí usa caminho não oficial, que é justamente o que faz um número ser
-> bloqueado. Aqui é a API oficial da Meta, com credenciais próprias da sua igreja. E como o robô só
-> responde quem falou com ele primeiro, a conversa é gratuita na Meta — o preço não sobe quando a sua
-> congregação cresce.
+> ## Número oficial da Meta, sem custo por mensagem — e o número é da igreja
+> Muita automação de WhatsApp por aí usa caminho não oficial, e é justamente esse caminho que faz um
+> número ser bloqueado. Aqui é a API oficial da Meta. Não vou te prometer que nenhum número nunca é
+> restringido — quem decide isso é a Meta, ela avalia a qualidade de qualquer número, e eu não mando
+> nisso. O que eu posso dizer com segurança é que o motivo mais comum de bloqueio, a automação não
+> oficial, não existe aqui.
+> O chip e o número são da igreja. As chaves técnicas de acesso à Meta, hoje, quem opera sou eu: no
+> painel a sua equipe vê "✓ Conectado" e nada mais. Isso tem um lado bom — ninguém da secretaria precisa
+> aprender o que é um token — e um lado ruim, que é a igreja não administrar sozinha essa conexão hoje.
+> É exatamente por isso que eu faço questão de deixar por escrito o que acontece se eu parar de operar.
+> E como o robô só responde quem falou com ele primeiro, essa conversa não é cobrada pela Meta.
 
 **Visual**
 Alternating image/text rows, 6 blocks. Only blocks 1, 4 and 5 need a visual, and all three should be
 **real panel screenshots** (edit field, caixa de entrada, lista de pedidos com os selos novo/orado).
 Blocks 2, 3 and 6 are text-only with a single line icon — resisting the urge to illustrate everything is
 what keeps the page from looking like every other SaaS site.
+
+> ⚠️ **Production rule.** Blocks 4 and 5 describe code that is written and typechecked but that **no
+> human has ever driven against real data** ([[Whats Left]] — caixa de entrada, pedidos de oração, menu
+> editing, the 24h handoff revert). Nothing here is false, but drive all four in a browser before this
+> page goes public — which the promised panel screenshots force anyway. If a flow breaks when driven,
+> the copy changes before publication, not after a pastor finds it.
+
+> ⚠️ **"não é cobrada pela Meta" is an external fact with no recorded source.** See *Fatos externos a
+> verificar*. Meta has changed WhatsApp pricing more than once; publish only after the pricing page is
+> read, and record the URL and the date.
 
 ---
 
@@ -247,14 +305,17 @@ the reader got excited.
 > Prefiro que você descubra agora e não na terceira reunião:
 >
 > - **Não é aplicativo.** Os membros não baixam nada, e por isso mesmo não existe "app da igreja" aqui.
-> - **Não é sistema de membresia.** Não guarda cadastro de membro, nem frequência, nem célula.
+> - **Não é sistema de secretaria.** Não guarda rol de membros, nem frequência, nem célula.
 > - **Não controla ofertas.** Ele mostra a chave PIX que vocês escreverem. Ele não recebe, não registra
 >   e não soma nada.
 > - **Não manda recado para a congregação.** O robô só responde quem falou com ele primeiro. Ele nunca
 >   dispara mensagem para ninguém — e essa é justamente a razão de ele não custar por mensagem e nunca
 >   parecer spam.
-> - **Não substitui quem cuida do WhatsApp da igreja.** Tira dela a mesma pergunta pela quadragésima vez.
+> - **Não substitui quem cuida do WhatsApp da igreja.** Tira dela a mesma pergunta pela milésima vez.
 >   O que precisa de gente continua chegando em gente.
+> - **Não avisa ninguém.** Não existe notificação nem alarme neste produto hoje — nem quando um membro
+>   está esperando atendimento, nem quando o próprio robô para de funcionar. Alguém da equipe precisa
+>   abrir o painel. Está detalhado logo abaixo, porque é a limitação que mais pesa no dia a dia.
 
 **Visual**
 Plain list, no icons, no red X marks. Typographic restraint here reads as confidence. A monospace or
@@ -262,14 +323,15 @@ serif accent for this one section makes it feel like a note written by hand rath
 
 ---
 
-## 7 — O chip novo
+## 7 — O chip novo e o cadastro na Meta
 
 **Job:** the hardest objection in the sale ([[Decisions Log]], [[Meta WhatsApp Setup]]). Own section,
-mid-page, said flatly. Framed as **protection**, not as cost.
+mid-page, said flatly. Framed as **protection**, not as cost. The Meta verification half is the second
+hardest truth and lives here for the same reason.
 
 **Copy**
 
-> ## Sobre o chip novo, sem rodeio
+> ## Sobre o chip novo, sem rodeios
 >
 > **Precisa de um chip novo. Não dá para usar o número que a igreja já usa.**
 >
@@ -280,6 +342,20 @@ mid-page, said flatly. Framed as **protection**, not as cost.
 >
 > Então funciona assim: **o número da igreja continua exatamente como está**, com as conversas, os
 > grupos e as pessoas de sempre. O robô ganha um chip só dele. Um pré-pago comum resolve.
+>
+> **Quem compra o chip, e o que ele precisa ter:** quem compra é a igreja, e ele fica no nome da igreja
+> ou de alguém da diretoria — o número é de vocês, não meu. Serve um pré-pago comum de qualquer
+> operadora. Ele precisa continuar ativo, porque é nele que chega o código de confirmação quando a
+> conexão é feita e refeita. O robô não gasta o crédito no dia a dia: quem manda e recebe as mensagens é
+> a Meta, não o chip. Sobre quanto custa manter uma linha pré-paga ativa, quem sabe é a operadora, e eu
+> prefiro te dizer para conferir com ela a chutar um valor aqui.
+>
+> **A segunda parte, que dá mais trabalho que o chip: o cadastro na Meta.**
+> Para um número atender de verdade, a Meta exige que a igreja exista como negócio dentro de uma conta
+> empresarial dela e passe pela **verificação de negócio**. É burocracia da Meta: mandar documento,
+> esperar análise, às vezes mandar de novo. Leva dias, o CNPJ ajuda, e quem aprova é a Meta — não eu e
+> não você. Eu faço o processo junto com você, mas não vou fingir que controlo o prazo. Se alguém te
+> vender entrada em WhatsApp automatizado "hoje mesmo", ou não é a API oficial, ou não te contou isso.
 >
 > **O que isso custa de verdade, e eu não vou fingir que é zero:**
 > a igreja passa a ter dois números, e o número novo começa do zero — ninguém tem ele salvo. Divulgar
@@ -293,11 +369,18 @@ Two phone silhouettes side by side, labelled `O número de sempre — continua i
 `O número do robô — novo`. An arrow between them is wrong; they are parallel, not sequential. Use a
 calm background tint, not an alert colour. This section should read grown-up, not scary.
 
+> ⚠️ **Two external facts here have no recorded source:** the permanence of the Cloud API migration and
+> the exact shape of Meta's business verification. Both are load-bearing for the whole section. See
+> *Fatos externos a verificar* before publishing. Business verification is also **Rafael's own current
+> blocker** ([[Whats Left]] — "Blocked on Rafael"), which is why the copy never implies it is quick.
+
 ---
 
 ## 8 — Perguntas difíceis
 
-**Job:** answer the four objections that decide the sale, in the buyer's own words, before the FAQ.
+**Job:** answer the objections that decide the sale, in the buyer's own words, before the FAQ. The last
+three exist because [[Whats Left]] says they exist. A page whose entire currency is "I tell you the
+uncomfortable things" cannot survive a pastor finding one I did not tell him.
 
 **Copy**
 
@@ -305,7 +388,7 @@ calm background tint, not an alert colour. This section should read grown-up, no
 >
 > **"A gente já responde o WhatsApp. A irmã Cida cuida disso."**
 > Ótimo — e ela continua cuidando. Isto não tira a Cida do WhatsApp. Tira dela responder "o culto é 19h"
-> pela quadragésima vez, e faz o visitante de sábado à noite não ficar sem resposta até segunda. O que
+> pela milésima vez, e faz o visitante de sábado à noite não ficar sem resposta até segunda. O que
 > precisa de gente continua chegando nela. Se hoje ninguém está cansado e ninguém está sem resposta, eu
 > prefiro te dizer para não contratar.
 >
@@ -329,12 +412,32 @@ calm background tint, not an alert colour. This section should read grown-up, no
 > cultos. Notificação está na lista do que vou construir, mas eu não vou te vender uma coisa que não
 > existe. Se ninguém encostar na conversa em 24 horas, o robô volta a atender aquela pessoa, para que
 > ela não fique falando com o silêncio.
+> Tem um detalhe prático junto com esse: **a Meta só permite responder em texto livre até 24 horas
+> depois da última mensagem da pessoa.** Passou disso, o painel bloqueia o envio e explica o porquê em
+> português. Ou seja: abrir a caixa de entrada todo dia não é zelo, é o que faz o atendimento funcionar.
+>
+> **"E se o robô parar de funcionar de madrugada? Como vocês descobrem?"**
+> Pela igreja me avisando. **Não existe monitoramento nem alarme hoje**: se a conexão cair às duas da
+> manhã, nada avisa vocês e nada me avisa. O robô fica calado até alguém perceber. Isso e a notificação
+> são as duas primeiras coisas da minha lista de construção — antes de qualquer recurso novo e bonito.
+> Eu poderia ter deixado isso escondido nesta página. Se eu deixasse, você descobriria numa madrugada.
+>
+> **"E se a secretária esquecer a senha do painel?"**
+> Ela me chama e eu troco na mão. Hoje o painel **não tem "esqueci minha senha" e não deixa ninguém
+> trocar a própria senha**: quem cria a conta é quem define a senha daquela pessoa, e ela fica assim até
+> eu mudar. Para uma igreja que quer ser autossuficiente, isso é ruim, e eu sei. É a terceira coisa da
+> lista, junto com as duas de cima. Fora a senha, todo o resto — texto, menu, horário, saudação — a sua
+> equipe muda sozinha, sem mim.
 
 **Visual**
 Q&A blocks, question in bold at a larger size, answer in body. No accordions here — these must be
-readable without a click. The notification admission gets a subtle left border in a neutral tone so a
-skimmer's eye lands on it. Do not hide the weakest answer; a reader who finds it *after* deciding will
-distrust everything above it.
+readable without a click. The three admissions (notificação, monitoramento, senha) get a subtle left
+border in a neutral tone so a skimmer's eye lands on them. Do not hide the weakest answers; a reader who
+finds them *after* deciding will distrust everything above them.
+
+> ⚠️ These three answers are load-bearing and expire the moment the features ship. When notification,
+> monitoring, or password reset is built, this section is edited **the same day** — an admission that is
+> no longer true is a different kind of lie.
 
 ---
 
@@ -360,16 +463,16 @@ refusal is itself the strongest line on the page ([[Decisions Log]], [[Multi-Ten
 >
 > **Uma igreja nunca enxerga os dados de outra.** Isso não é promessa: é uma bateria de testes
 > automáticos que tenta, de propósito, ler os dados de uma igreja usando a identidade de outra, e
-> verifica que não vem nada. Roda a cada mudança no sistema. Eu prefiro te mostrar um teste que ataca o
-> sistema do que te dar a minha palavra.
+> verifica que não vem nada. Eu rodo essa bateria antes de publicar qualquer mudança no sistema. Prefiro
+> te mostrar um teste que ataca o sistema a te dar a minha palavra.
 >
 > **A igreja é a dona dos dados dos seus membros.** Quem responde ao membro é a igreja, e é a igreja
 > quem manda no que está guardado. Eu opero o sistema para vocês.
 >
 > **O que ainda não existe, e você precisa saber antes:** os botões de exportar e de apagar os dados a
-> pedido de um membro, e a limpeza automática das conversas antigas. Está tudo desenhado e é o próximo
-> bloco de trabalho — mas hoje ainda não está pronto, e enquanto não estiver, esses pedidos passam por
-> mim, na mão.
+> pedido de um membro, e a limpeza automática das conversas antigas. Está tudo desenhado e é um dos
+> próximos blocos de trabalho — mas hoje ainda não está pronto, e enquanto não estiver, esses pedidos
+> passam por mim, na mão.
 >
 > Uma observação que o advogado da sua congregação vai fazer, então faço eu: a lista de quem frequenta
 > uma igreja revela convicção religiosa, o que a LGPD trata como **dado sensível**. É por isso que este
@@ -379,6 +482,11 @@ refusal is itself the strongest line on the page ([[Decisions Log]], [[Multi-Ten
 Single column, narrower measure than the rest of the page (~60ch), no icons, no shield graphics, no
 padlock illustrations. Security iconography reads as marketing here and undercuts the one section whose
 entire value is that it does not sound like marketing. Plain text, generous line height.
+
+> ⚠️ The isolation line used to say the suite "roda a cada mudança no sistema", which reads as
+> continuous integration. **There is no CI in this repo** (no `.github/workflows`); the suites run when
+> Rafael runs them. The copy now says exactly that. If CI is set up later, the stronger sentence becomes
+> available — and only then.
 
 ---
 
@@ -391,8 +499,9 @@ entire value is that it does not sound like marketing. Plain text, generous line
 > Sou o Rafael. Sou uma pessoa só — não tem equipe, não tem central de atendimento, não tem robô de
 > suporte. Isso tem um lado bom e um lado ruim, e você merece os dois.
 >
-> **O lado bom:** você fala direto com quem construiu. Mudar uma palavra é uma mensagem, não um chamado.
-> Quando você pedir alguma coisa, quem decide sou eu, e normalmente no mesmo dia.
+> **O lado bom:** você fala direto com quem construiu. Mudar uma palavra do robô você mesmo faz, no
+> painel; e quando precisar de mim, você me manda uma mensagem — não abre protocolo, não entra em fila,
+> não explica o caso três vezes. Quem decide sou eu, e a decisão não passa por comitê nenhum.
 >
 > **O lado ruim:** sou uma pessoa só. Por isso eu deixo por escrito, no contrato, quem procurar, o que
 > acontece com os dados da igreja e como a igreja recupera o controle do próprio número se eu parar de
@@ -407,7 +516,9 @@ would be the exact fabrication this whole page is built to avoid. Small, left-al
 > ⚠️ **This section makes a promise the product must keep:** a written contract with a named contact, a
 > data statement, and a documented path for the church to take over its own Meta credentials. None of
 > the three exists today ([[Whats Left]]). Do not publish this section until they do — or cut the second
-> paragraph's specifics down to what is actually true on publication day.
+> paragraph's specifics down to what is actually true on publication day. The first paragraph is safe to
+> publish alone; the response-time promise it used to carry ("normalmente no mesmo dia") was removed,
+> because this page forbids SLA claims and Rafael is one person.
 
 ---
 
@@ -424,16 +535,17 @@ churches to build this with, and they don't pay" is a different sentence entirel
 > pastor para você ligar. Inventar isso seria fácil e eu não vou fazer.
 >
 > O que eu tenho é o seguinte: estou escolhendo poucas igrejas para colocar no ar comigo, e elas **não
-> pagam enquanto a gente estiver ajustando o produto junto**. Em troca, eu quero o que dinheiro não
-> compra — vocês usando de verdade, achando os defeitos e me dizendo o que falta. Eu monto o menu, eu
-> configuro o número, eu acompanho as primeiras semanas de perto.
+> pagam nada até existirem duas coisas que hoje não existem: a cobrança automática e a nota fiscal.**
+> Não é generosidade encenada — hoje eu não teria nem como cobrar de você. Em troca, eu quero o que
+> dinheiro não compra: vocês usando de verdade, achando os defeitos e me dizendo o que falta. Eu monto o
+> menu, eu conduzo o cadastro na Meta com vocês, eu acompanho as primeiras semanas de perto.
 >
 > Se isso funcionar na sua igreja, você vai ser a igreja para a qual a próxima vai ligar.
 >
 > **[ Quero conversar 20 minutos ]**
 >
-> Vinte minutos, no seu WhatsApp ou numa chamada. Eu te mostro o robô funcionando, você me diz o que a
-> sua igreja pergunta o dia inteiro, e a gente decide junto se faz sentido. Se não fizer, eu falo.
+> Vinte minutos, no seu WhatsApp ou numa chamada. Eu te mostro por dentro o que já existe, você me diz o
+> que a sua igreja pergunta o dia inteiro, e a gente decide junto se faz sentido. Se não fizer, eu falo.
 
 **Form microcopy**
 
@@ -451,6 +563,11 @@ on mobile), four fields, one button. Four fields is the ceiling — the last one
 a favour, which is why it can exist at all. The honesty paragraph must appear **above** the form, not
 after it: the offer is the reason the form is worth filling.
 
+> ⚠️ The CTA used to say "eu te mostro o robô funcionando". **No outbound message has ever succeeded**
+> ([[Whats Left]]), so a live end-to-end demo cannot be promised on a public page today. The copy now
+> promises what is demonstrable: the panel, the menu, the flows as built. Restore the stronger sentence
+> the day the first real conversation happens — not before.
+
 ---
 
 ## 12 — FAQ
@@ -462,70 +579,94 @@ treasurer without Rafael in the thread.
 
 > ## Perguntas frequentes
 >
-> **Quanto custa?**
+> **Quanto custa?** `#preco`
 > Uma mensalidade fixa por igreja. Não é por mensagem, não é por membro, e não sobe quando a igreja
 > cresce. Não tem taxa de instalação. O valor eu fecho na conversa — e, para as primeiras igrejas, ele é
-> zero enquanto durar o acompanhamento. Uma referência honesta para você comparar: pense no que a igreja
-> paga hoje ao escritório de contabilidade, não no preço de um sistema de gestão inteiro. Isto aqui é
-> uma peça, não é o sistema todo.
+> zero até a cobrança e a nota fiscal existirem, porque hoje não existe nem como cobrar. Uma referência
+> honesta para você comparar: pense no que a igreja paga hoje ao escritório de contabilidade, não no
+> preço de um sistema de gestão inteiro. Isto aqui é uma peça, não é o sistema todo.
 >
-> **Tem fidelidade? Contrato de 12 meses?**
+> **Tem fidelidade? Contrato de 12 meses?** `#fidelidade`
 > Não. É mensal. Se parar de fazer sentido, você para.
 >
-> **Como se paga?**
-> Cartão. Sei que a maioria das igrejas prefere PIX ou boleto, e essa é uma escolha que eu fiz para o
-> serviço se manter sozinho, sem ninguém precisar lembrar de pagar todo mês. Se a sua tesouraria só
-> trabalha com PIX ou boleto, me fala na conversa — prefiro saber disso no começo. Não vou fingir que
-> não é um incômodo.
+> **Como se paga?** `#pagamento`
+> Por cartão, numa mensalidade automática — e aqui eu preciso ser exato: **essa cobrança ainda não está
+> construída.** Está desenhada e é um dos próximos blocos de trabalho; hoje, na prática, não existe
+> cobrança nenhuma no sistema. Quando existir, será cartão. Sei que a maioria das igrejas prefere PIX ou
+> boleto, e essa é uma escolha que eu fiz para o serviço se manter sozinho, sem ninguém precisar lembrar
+> de pagar todo mês. Se a sua tesouraria só trabalha com PIX ou boleto, me fala na conversa — prefiro
+> saber disso no começo. Não vou fingir que não é um incômodo.
 >
-> **Vocês emitem nota fiscal? Meu contador vai pedir.**
+> **Vocês emitem nota fiscal? Meu contador vai pedir.** `#nota-fiscal`
 > Ainda não, e sei exatamente o que isso significa: sem nota, a sua tesouraria não consegue lançar a
 > despesa, e a conversa morre no contador por mais que o pastor tenha gostado. A emissão está sendo
-> construída agora. É por isso que as primeiras igrejas entram sem pagar — não existe cobrança, então
-> não existe nota a emitir. Quando a cobrança começar, a nota começa junto.
+> construída. É por isso que as primeiras igrejas entram sem pagar — não existe cobrança, então não
+> existe nota a emitir. Quando a cobrança começar, a nota começa junto.
 >
-> **E se a igreja atrasar o pagamento?**
-> O robô não desliga no mesmo dia. São sete dias de prazo. Depois disso ele fica em silêncio — mas
-> **nada é apagado**: as mensagens continuam sendo registradas, o painel continua legível, e no dia em
-> que o pagamento entrar volta tudo exatamente como estava, com a caixa de entrada certa. Você nunca
-> perde o que escreveu.
+> **E se a igreja atrasar o pagamento?** `#atraso`
+> Antes de responder, o mesmo aviso de cima: **não existe cobrança funcionando hoje**, então o que vem
+> aqui é como está desenhado, não como está funcionando. O desenho é: o robô não desliga no mesmo dia,
+> são sete dias de prazo, e depois disso ele fica em silêncio — mas **nada é apagado**: as mensagens
+> continuam sendo registradas, o painel continua legível, e no dia em que o pagamento entrar volta tudo
+> como estava, com a caixa de entrada certa. Se alguma coisa mudar quando isso for construído de fato,
+> esta página muda junto.
 >
-> **Precisa de computador? A secretária consegue usar pelo celular?**
+> **Precisa de computador? A secretária consegue usar pelo celular?** `#celular`
 > O painel abre no navegador, no celular ou no computador. Não instala nada.
 >
-> **Quantas pessoas da igreja podem usar o painel?**
-> Quantas vocês quiserem. Cada uma com o login dela. Quando alguém sai da equipe, o acesso dela cai na
-> mesma hora — não fica valendo até o fim do dia.
+> **Quantas pessoas da igreja podem usar o painel?** `#equipe`
+> Quantas vocês quiserem. Cada uma com o login dela. Quando alguém sai da equipe, vocês removem a conta
+> dela no próprio painel, e o acesso acaba na próxima tela que ela tentar abrir — não fica valendo até o
+> fim do dia nem até o fim do prazo do login. Duas coisas para você já saber: quem cria a conta é quem
+> define a senha da pessoa, e hoje ninguém troca a própria senha sozinho — isso ainda passa por mim.
 >
-> **A gente consegue mudar os textos sozinho depois?**
-> Consegue tudo. Horários, endereço, os nomes dos grupos, a saudação, até a frase que o robô diz quando
-> não entende. Essa é a ideia inteira do produto: você não fica dependendo de mim para trocar o horário
-> do culto de domingo.
+> **A gente consegue mudar os textos sozinho depois?** `#textos`
+> Consegue tudo o que o robô fala. Horários, endereço, os nomes dos grupos, a saudação, até a frase que
+> o robô diz quando não entende. Essa é a ideia inteira do produto: você não fica dependendo de mim para
+> trocar o horário do culto de domingo. A exceção é senha de painel, que hoje ainda passa por mim.
 >
-> **E se a gente quiser mais de dez assuntos no menu?**
+> **E se a gente quiser mais de dez assuntos no menu?** `#dez-assuntos`
 > O limite de dez é do WhatsApp, não meu. Quando uma igreja chegar perto disso, a saída são submenus —
 > "Grupos" abrindo uma segunda lista. Ainda não construí, porque nenhuma igreja chegou lá. Quando
 > chegar, a gente resolve.
 >
-> **Dá para atender por esse número pelo celular, como a gente faz hoje?**
+> **Dá para atender por esse número pelo celular, como a gente faz hoje?** `#atendimento`
 > Não. Um número da API oficial não abre no aplicativo do WhatsApp — é a mesma razão pela qual ele
-> precisa ser um chip novo. O atendimento humano acontece no painel, pelo navegador. É diferente do que
-> a sua equipe faz hoje e vale você saber disso antes.
+> precisa ser um chip novo. O atendimento humano acontece no painel, pelo navegador. E vale saber de uma
+> regra da Meta que muda a rotina: só dá para responder em texto livre **até 24 horas depois da última
+> mensagem da pessoa**. Passou disso, o painel bloqueia e explica. Como também não existe notificação,
+> na prática isso quer dizer que alguém precisa abrir a caixa de entrada todo dia.
 >
-> **O robô responde qualquer pergunta escrita?**
+> **O robô responde qualquer pergunta escrita?** `#perguntas-livres`
 > Não. Ele entende as opções do menu. Quando alguém escreve uma pergunta fora do menu, ele responde com
 > uma frase que a sua igreja escreveu e mostra a lista de novo — ou a pessoa pede para falar com alguém.
 > Ele não tenta adivinhar.
 >
-> **Quais igrejas já usam?**
-> Nenhuma, hoje. Está tudo construído e testado, mas nada está no ar com membros reais. Se você
+> **Quanto tempo leva para entrar no ar?** `#prazo`
+> A parte que depende de mim é rápida: o menu a gente monta numa conversa. A parte que não depende de
+> mim é a verificação da igreja na Meta, que leva dias e é decidida por eles. Eu não vou te dar um prazo
+> que não é meu para dar.
+>
+> **Quais igrejas já usam?** `#igrejas`
+> Nenhuma, hoje. A plataforma está construída e testada, mas nada está no ar com membros reais. Se você
 > perguntar isso de novo daqui a alguns meses, espero ter um pastor para você ligar. Hoje eu não tenho,
 > e não vou inventar um.
 
 **Visual**
 Single-column accordion, all closed by default except the first. Question text must be large enough to
-scan while closed — this is the section a treasurer reads. Keep an anchor link per question so Rafael
-can send a church straight to "Nota fiscal" or "Chip novo" in a WhatsApp message.
+scan while closed — this is the section a treasurer reads. **Every question carries the anchor slug
+shown after it** (`#nota-fiscal`, `#atraso`, `#equipe`…), so Rafael can send a church straight to one
+answer inside a WhatsApp message. The slugs are part of the spec, not decoration — they must not be
+renamed once a link has been sent.
+
+> ⚠️ **"Tem fidelidade? Não. É mensal." is UNVERIFIED.** It is not in [[Decisions Log]] and it is not a
+> code fact — it is a commercial policy only Rafael can set. **Rafael: decide this and record it in the
+> Decisions Log before publishing.** If it is not decided by publication day, cut the question rather
+> than soften it; a vague answer about contract terms is worse than no answer.
+
+> ⚠️ Billing answers (`#pagamento`, `#atraso`) describe a **specced, unbuilt** subsystem ([[Whats Left]]
+> — Stripe). Both now say so in their first clause. When Stripe ships, remove the disclaimers in the
+> same commit that ships it.
 
 ---
 
@@ -545,16 +686,41 @@ there is no Ltda.
 
 ---
 
+## Fatos externos a verificar antes de publicar
+
+Rule 7 of this page: an external fact carries a source URL and the date it was read, or it is marked
+unverified here. **None of the four below has a recorded source in this brain yet.** They are not
+deleted, because each one is load-bearing — deleting them would hide the dependency.
+
+| Claim on the page | Where | Status |
+|---|---|---|
+| Conversas iniciadas pelo membro não são cobradas pela Meta | §5 bloco 6, §6, §8 | **UNVERIFIED** — Meta has changed WhatsApp pricing before. Read Meta's WhatsApp pricing page, paste the URL and the date read here, and re-check before each publish. If it ever becomes paid, §5, §6 and §8 all change. |
+| Um número na Cloud API para de funcionar no app do WhatsApp, para sempre | §7, FAQ `#atendimento` | **UNVERIFIED source**, though it is the basis of the whole chip decision ([[Decisions Log]]). Cite Meta's own documentation with URL + date. This is the page's most consequential factual claim. |
+| A lista interativa do WhatsApp para em 10 linhas | §4, FAQ `#dez-assuntos` | **UNVERIFIED source** — enforced in code (`menu-admin-rules.ts`) and recorded in [[Menu Inventory]], but the number is Meta's. Cite the docs page with URL + date. |
+| Verificação de negócio é exigida e leva dias | §3, §7, FAQ `#prazo` | **UNVERIFIED source** — recorded in [[Meta WhatsApp Setup]] from experience, not from a cited page. Cite Meta's business-verification docs with URL + date; never state a specific number of days. |
+
+Pattern to copy: the nota fiscal spec, which sources every external assertion with a URL and a date read
+and carries a staleness caveat. Do the same here before this page goes public.
+
+No competitor is named anywhere on this page, and no competitor price appears. If one is ever added, it
+carries a URL and the date read, in this table, with a staleness caveat — or it does not go on the page.
+
+---
+
 ## What this page deliberately does not say
 
 Kept here so a future edit does not "helpfully" add them back:
 
-- No price, no "a partir de R$".
+- No price, no "a partir de R$", and no guess at what a prepaid chip costs.
 - No number of churches, hours saved, messages answered, or percentage of anything.
 - No "conformidade com a LGPD", "seguro e em conformidade", "dados protegidos por lei".
 - No "dízimo" — anywhere, in any inflection.
-- No claim of notifications, alerts, export or delete buttons, or automatic data purge.
-- No promise of support hours, SLA, or response time.
+- No claim of notifications, alerts, monitoring, password reset or self-service password change, export
+  or delete buttons, automatic data purge, working billing, submenus, or church offboarding.
+- No "sem risco de banimento". Meta restricts numbers on its own criteria; the honest claim is narrower.
+- No claim that the church holds or manages its own Meta credentials — Rafael operates them today.
+- No promise of a live end-to-end bot demo until an outbound message has actually succeeded.
+- No promise of support hours, SLA, or response time — including soft ones like "no mesmo dia".
 - No logo wall, no "usado por", no invented pastor quote.
 - No comparison table naming a competitor. Rafael would lose it: they have more features and
   published prices. The page competes on trust and channel, not on a checklist.
@@ -571,3 +737,86 @@ Kept here so a future edit does not "helpfully" add them back:
   Blocker for publishing that section as written.
 - **Every phone-screen visual depends on an outbound message that has never succeeded** ([[Whats Left]]).
   The page cannot ship real screenshots until the Meta app exists.
+- **The page now confesses three unbuilt things in §8 (notificação, monitoramento, senha).** That is
+  correct today and wrong the moment they ship. Whoever builds them edits §8, §6 and §12 in the same
+  commit.
+- **Four external facts still have no source** — see the table above. Publishing before they are sourced
+  breaks this page's own rule 7, on a page whose entire argument is that it does not overstate.
+
+---
+
+## Revisões
+
+**Revisão 1 — 2026-08-08.** Against `.superpowers/sdd/critique-mkt-landing.md`, with
+[[Whats Left]] (2026-08-08) as the deciding source wherever the two disagreed.
+
+**Blocking, closed**
+1. *Selective honesty.* Added two admissions to §8 next to the existing notification one, plus a line in
+   §6: **no monitoring or alerting** (the bot can die at 2am and nothing tells anyone) and **no password
+   reset and no self-service password change** (a secretary who forgets hers messages Rafael, who runs a
+   script by hand). Both are ❌-list items in [[Whats Left]]. §3 step 2 and FAQ `#textos` were reworded to
+   "muda qualquer palavra **do robô** sozinha" so the self-service claim no longer collides with the
+   password truth.
+2. *Meta business verification was absent from the whole page.* Now in §3 step 1, in a dedicated half of
+   §7, in a new FAQ `#prazo`, and in the external-facts table. It is Rafael's own current blocker, so the
+   copy never implies speed and never gives a number of days.
+3. *"Sem risco de banimento" cut.* [[Decisions Log]] claims no ban risk only *relative to Baileys*. §5
+   block 6 now says the common cause of blocking (unofficial automation) is absent here, and states
+   plainly that Meta decides restrictions and Rafael does not control that.
+
+**High, closed**
+4. *Billing described in present tense.* FAQ `#pagamento` and `#atraso` now open by saying the charge
+   does not exist yet; Stripe is specced, not built ([[Whats Left]]). The hero honesty line, §11 and FAQ
+   `#preco` say the same thing in the buyer's words: today there is no way to charge at all.
+5. *"Credenciais próprias da sua igreja" fixed.* Per [[Multi-Tenancy]] and the code
+   (`CredentialsForm.tsx` renders only "✓ Conectado"), the church sees a status indicator and nothing
+   else. §5 block 6 now says the chip and number are the church's and that Rafael operates the access
+   keys today, with the downside named.
+6. *"Sem fidelidade" and instant revocation.* Split, because the critique was right about one and wrong
+   about the other. **Fidelidade:** left in place and marked **UNVERIFIED** with an instruction for
+   Rafael to decide and record it, rather than deleted — deleting it would hide a commercial decision the
+   page depends on. **Revocation: the critique is wrong on the code.** `removeStaff` exists and is wired
+   to a "Remover" button per row in `configuracoes/StaffManager.tsx`; `requireReadableSession()` in
+   `src/lib/auth/writable.ts` re-reads the admin row on every protected page. So the panel *can* remove a
+   staff user. What was inaccurate was "na mesma hora": access ends on that person's **next page load**,
+   which is what [[Decisions Log]] says and what the guard does. FAQ `#equipe` now says exactly that.
+
+**Medium, closed**
+7. Free-pilot duration bound to a real event — free until billing and nota fiscal exist, which is both
+   honest and the true answer to the treasurer's "e depois?".
+8. §7 now answers the secretary's real questions: the church buys the chip, it stays in the church's
+   name, any prepaid line works, it must stay active because the confirmation code arrives on it, and the
+   bot does not consume its credit. **No price is invented** — the copy tells the reader to check with the
+   operator, per the governing rule against invented prices.
+9. Added §0 with `<title>`, meta description and OG copy for the WhatsApp link preview, keeping the
+   "ainda não está no ar" clause inside `og:description`. Every FAQ question now carries a named anchor
+   slug so `#nota-fiscal` can be sent tomorrow.
+10. Added a production rule to §5: the flows described there are built but never driven by a human
+    ([[Whats Left]] ⚠️ list). Drive them in a browser before publishing; if one breaks, the copy changes
+    first.
+
+**Portuguese, closed**
+"responde as perguntas" → **"às perguntas"** (crase, hero sub and meta description); "pela quadragésima
+vez" ×2 → **"pela milésima vez"**; "sem rodeio" → **"sem rodeios"**; "não é um chamado" replaced with
+plain language ("não abre protocolo, não entra em fila"); "sistema de membresia" → **"sistema de
+secretaria… não guarda rol de membros"**. "Você" kept throughout, per the critique.
+
+**Found here, not in the critique**
+- §9 said the isolation suite "roda a cada mudança no sistema", which reads as CI. **There is no CI in
+  this repo** (no `.github/workflows`), so the claim was softened to what actually happens: Rafael runs
+  the suite before publishing a change.
+- §11 promised "eu te mostro o robô funcionando". **No outbound message has ever succeeded**
+  ([[Whats Left]]), so a live demo cannot be promised. Now: he shows what exists.
+- §10 promised "normalmente no mesmo dia", a response-time promise the page's own rules forbid. Removed.
+- The **24h Meta reply window** was nowhere on the page. Combined with "no notification", it is a real
+  daily constraint: a secretary who opens the inbox two days later is blocked from replying by Meta, and
+  the panel says so in Portuguese (`caixa/actions.ts`). Added to §8 and FAQ `#atendimento`. This is a
+  limitation, not a feature — it removes a surprise rather than adding a promise.
+- Added a **Fatos externos a verificar** table and hard rule 7. Four Meta facts the page rests on have no
+  cited source anywhere in this brain; all four are marked unverified with instructions to record URL +
+  date, following the nota fiscal spec's pattern.
+
+**Explicitly not done:** no new capability was promised anywhere in this pass. Every edit either removed
+a claim, narrowed a claim to what the code does, or added a limitation. The only additions of new text
+are §0 (meta/OG copy, which promises nothing), the anchor slugs, the external-facts table, and two FAQ
+entries (`#prazo`, and the disclosure clauses) — all of which reduce what the page claims.

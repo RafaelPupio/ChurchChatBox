@@ -37,7 +37,13 @@ export const PRIVACY_ITEM = {
     '',
     '*Por quê:* para responder às suas dúvidas e atender aos seus pedidos.',
     '',
-    '*Por quanto tempo:* as conversas são apagadas após 12 meses.',
+    // Deliberately NOT "apagadas após 12 meses" until the retention purge exists.
+    // That sentence shipped before anything deleted anything, which made the one
+    // menu item whose whole job is telling members the truth about their data the
+    // one place the product lied. A promise you do not keep is worse under LGPD
+    // than one you never made. Restore the 12-month wording in the same commit
+    // that ships the purge — see docs/superpowers/specs/2026-08-07-lgpd-data-subject-tooling.md
+    '*Por quanto tempo:* enquanto a igreja precisar deles para te atender. Você pode pedir a exclusão a qualquer momento.',
     '',
     '*Seus direitos:* você pode pedir acesso, correção ou exclusão dos seus dados a qualquer momento. Para isso, entre em contato com a secretaria da igreja.',
     '',
