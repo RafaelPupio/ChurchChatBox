@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 15.5 App Router · React 19 · TypeScript strict · plain CSS in one stylesheet · `next/og` `ImageResponse` for icons (ships with Next; no new dependency) · Vitest
 
-**Scope:** Two parts, sequential. **Part 1 (Tasks 1–11)** makes every screen good on a phone. **Part 2 (Tasks 12–15)** makes it installable and honest offline. Part 1 must land first — see the sequencing note in Global Constraints. Branch this work from `main`.
+**Scope:** Two parts, sequential, behind one reconnaissance gate. **Task 0** reconciles this plan with a bug-fix pass that has been touching the same screens while this sat unreviewed — do it first, it changes what several later tasks are allowed to write. **Part 1 (Tasks 1–11)** makes every screen good on a phone. **Part 2 (Tasks 12–15)** makes it installable and honest offline. Part 1 must land first — see the sequencing note in Global Constraints. Branch this work from `main`.
 
 ---
 
@@ -19,7 +19,7 @@
 - **This plan changes no bot output.** It touches the panel's chrome and layout only. `church.greetingText` and its nine siblings are re-grouped in the UI (Task 9) but their values, names and the `saveTexts` action are untouched.
 - **Any new page under `src/app/admin` MUST call `requireReadableSession`, or the suite fails.** `tests/privilege-boundary.test.ts` has a second describe block, `admin read guard`, that walks every `page.tsx` under `src/app/admin/(protected)` and asserts each one both imports `@/lib/auth/writable` and contains the literal identifier `requireReadableSession`. Read that test before starting. **This plan adds no page under `src/app/admin`** — the one new page, `/offline`, lives at `src/app/offline/page.tsx`, deliberately outside the admin tree because it must render with no session, no database and no network. New *components* under `(protected)` (`TabBar.tsx`, `AutoRefresh.tsx`, `ThreadBottom.tsx`, `KeyboardInset.tsx`) are not `page.tsx` files and are not covered by that test — but they are also not guards, and none of them fetch data.
 - **Every church-owned query stays `church_id`-scoped.** Task 3 adds one repository read (`countHandoffContacts`) and it takes `churchId` as its first argument like every other function in `src/lib/repo/inbox.ts`. `src/lib/repo/platform.ts` remains owner-only; nothing in this plan imports it.
-- **No CSS framework, no UI kit — and that is a decision, not an omission.** The existing stylesheet already has design tokens (`--bg`, `--card`, `--border`, `--text`, `--muted`, `--primary`, `--primary-contrast`, `--danger`, `--ok`), global `box-sizing: border-box`, and inputs that inherit 16px so iOS never zooms on focus. The whole vocabulary is flat (`.card`, `.row`, `.grow`, `.chip`, `.bubble`, `.thread`, `.conv`, `.btnlink`) with no specificity wars, so a media query appended to the file wins on source order alone. Adopting Tailwind or a component library would mean rewriting the markup of all eleven screens and re-verifying a 212-test suite and a privilege-boundary guard, in exchange for tokens and utilities this file already provides at 57 lines. **The answer is no.** If a future task genuinely needs one, it must argue against that cost first.
+- **No CSS framework, no UI kit — and that is a decision, not an omission.** The existing stylesheet already has design tokens (`--bg`, `--card`, `--border`, `--text`, `--muted`, `--primary`, `--primary-contrast`, `--danger`, `--ok`), global `box-sizing: border-box`, and inputs that inherit 16px so iOS never zooms on focus. The whole vocabulary is flat (`.card`, `.row`, `.grow`, `.chip`, `.bubble`, `.thread`, `.conv`, `.btnlink`) with no specificity wars, so a media query appended to the file wins on source order alone. Adopting Tailwind or a component library would mean rewriting the markup of all eleven screens and re-verifying the entire suite and a privilege-boundary guard, in exchange for tokens and utilities this file already provides at 57 lines. **The answer is no.** If a future task genuinely needs one, it must argue against that cost first.
 - **Never fix overflow with `overflow-x: hidden` on `body` or `html`.** It hides the bug rather than fixing it, and an `overflow` value other than `visible` on an ancestor silently breaks `position: sticky` for every descendant — which this plan relies on for the app bar, the reply composer and the save bar. Fix the flex rule that overflows.
 - **No input font-size below 16px, ever.** Below 16px, iOS Safari zooms the page when the field takes focus and never zooms back. The current stylesheet gets this right by accident (inheritance from an unstyled `body`); Task 1 makes it explicit and adds a test.
 - **Every interactive control is at least 44×44 CSS px**, with at least 8px between adjacent targets. The `▲`/`▼` reorder pair is the case that matters most: each press is an immediate server write, so a mis-tap silently reorders the live WhatsApp menu the wrong way.
@@ -47,7 +47,7 @@ Six of these files (`globals.css`, `MenuList.tsx`, `conteudo/page.tsx`, `prepare
 | `src/lib/repo/inbox.ts` | **modify** — `countHandoffContacts`; `listConversations` puts waiting conversations first |
 | `tests/inbox-badge.test.ts` | **new** — PGlite test for the count and the ordering |
 | `src/app/admin/(protected)/conteudo/MenuList.tsx` | **modify** — label first, 44px controls, 8px apart |
-| `src/app/admin/(protected)/conteudo/page.tsx` | **modify** — header row that wraps |
+| `src/app/admin/(protected)/conteudo/page.tsx` | **unchanged** — its header row already wraps once `.row` wraps; the full-width `+ Novo item` is a phone-only CSS rule, not a class on the link |
 | `src/app/admin/(protected)/oracao/PrayerList.tsx` | **modify** — prayer text is the content, not a ribbon |
 | `src/app/admin/(protected)/caixa/page.tsx` | **modify** — conversation rows + auto-refresh |
 | `src/app/admin/(protected)/caixa/[contactId]/page.tsx` | **modify** — compact header, back link, scrolling thread |
@@ -703,12 +703,25 @@ describe('no desktop regression from the phone rules', () => {
 - [ ] **Step 3: Run the new test**
 
 Run: `npm test -- tests/mobile-css.test.ts`
-Expected: all PASS. If `block()` throws "No CSS rule for selector", the selector text in `globals.css` does not match the test byte-for-byte — fix the stylesheet, not the test.
+Expected: **1 file, 28 tests, all passing** (the `it.each` over `button`, `.btnlink`, `.tabbar a`, `.back` counts as four).
+
+**Why that is the expected output, and not just a hope.** An earlier draft of this file used `block(selector, scope = CSS)` over the raw stylesheet, and that version could not pass. The regex `/([^{}]+)\{([^{}]*)\}/` captures *everything* between the previous `}` and the `{` as the selector, so any comment above a rule becomes part of its selector text. Against this exact stylesheet, the old helper resolved as follows — and every row here was reproduced by running it, not reasoned about:
+
+| Lookup | Old helper | Why | Corrected helper |
+|---|---|---|---|
+| `.row`, `.grow`, `body`, `.iconbtn`, `.composer`, the input deny-list | **throws** `No CSS rule for selector` | each is documented by a comment directly above it, which the capture swallows | resolves — comments are stripped first |
+| `.container` with `scope = mobile` | **throws** | the `/* Bottom padding clears the fixed tab bar… */` comment inside the media block | resolves |
+| `.thread` | **silently returns the phone override** `max-height: 52vh; max-height: 52dvh;` | the base rule is comment-prefixed so it is skipped, and the override inside `@media` is not — a *passing-looking* assertion against the wrong rule | resolves to the base rule, because the default scope is `BASE`, which has every `@media` block removed |
+| `:root`, `button`, `.btnlink`, `.tabbar a`, `.back`, `.item-actions`, `input[type=file]` | resolved correctly | no comment immediately above them | unchanged |
+
+So the two changes are not cosmetic: **comment stripping** turns 7 hard failures into lookups, and **`BASE` as the default scope** is what makes `expect(block('.thread')).toMatch(/max-height:\s*60vh/)` an assertion about `60vh` rather than an assertion about `52vh` that happens to fail. Note that "take the *last* match" — the other obvious repair — would be **wrong** here: the last `.thread` in the file is the phone override, which is precisely the rule we must not be looking at.
+
+Running the corrected helper against this task's stylesheet resolves all 34 selector lookups and satisfies all 28 assertions. If `block()` does throw, the selector text in `globals.css` does not match the test after whitespace normalisation — fix the stylesheet, not the helper.
 
 - [ ] **Step 4: Run everything**
 
 Run: `npm test && npm run typecheck && npm run build`
-Expected: 20 test files, 212 + new tests passing; typecheck exits 0; build succeeds.
+Expected: the Task 0 baseline file count + 1, and the Task 0 baseline test count + 28, all passing; typecheck exits 0; build succeeds. **No previously passing test may now fail** — if the tap-target fix was already in the tree and you reconciled rather than pasted, this is where a dropped declaration shows up.
 
 **Manual check** (`npm run dev`, devtools device toolbar at 320px, then 375px): the panel will still look wrong — the nav is not fixed until Task 2 — but tap into any `Configurações` field and confirm iOS/Chrome device emulation does not zoom.
 
@@ -724,12 +737,12 @@ git commit -m "feat(ui): responsive CSS foundation — wrapping rows, 44px targe
 ### Task 2: App bar + bottom tab bar
 
 **Files:**
-- Create: `src/app/admin/(protected)/TabBar.tsx`
+- Create: `src/app/admin/(protected)/TabBar.tsx`, `src/app/admin/(protected)/KeyboardInset.tsx`
 - Modify: `src/app/admin/(protected)/layout.tsx`
 
 **Interfaces:**
-- Consumes: `--tap`, `.appbar`, `.tabbar`, `.tab-icon`, `.tab-badge` from Task 1
-- Produces: `TabBar({ waiting })`
+- Consumes: `--tap`, `--kb`, `.appbar`, `.tabbar`, `.tab-icon`, `.tab-badge`, `html.keyboard-open` from Task 1
+- Produces: `TabBar({ waiting })`, `KeyboardInset()`
 
 Today the nav is eight non-wrapping flex children measuring 666px against a 375px viewport: `Pedidos de Oração` is clipped, and `Configurações`, the admin's name and `Sair` render entirely off-screen with no scrollbar cue that they exist. Splitting identity (app bar) from destinations (tab bar) fixes it with the same DOM at every width — desktop stacks the two bars, the phone pins the tab bar to the bottom where a thumb reaches.
 
@@ -787,7 +800,63 @@ export function TabBar({ waiting }: { waiting: number }) {
 }
 ```
 
-- [ ] **Step 2: Rewrite the layout**
+- [ ] **Step 2: Publish the software keyboard's height**
+
+The bottom-pinned chrome this task introduces is exactly what an iOS keyboard breaks: **iOS does not shrink the layout viewport when the keyboard opens**, only the visual viewport, so a `position: fixed` tab bar and a `position: sticky` composer both stay pinned to a bottom edge that is now *behind the keys*. Chrome on Android can be told to shrink the layout viewport (Task 12 sets `interactiveWidget: 'resizes-content'` for exactly that); Safari cannot. `visualViewport` is the only API that reports the difference, so one component measures it and the stylesheet from Task 1 does the rest.
+
+`src/app/admin/(protected)/KeyboardInset.tsx`:
+```tsx
+'use client';
+
+import { useEffect } from 'react';
+
+/** Publishes the software keyboard's height as --kb on <html>, and toggles the
+ *  .keyboard-open class Task 1's media query keys off.
+ *
+ *  Without this, on an iPhone: she taps the reply box, the keyboard slides up, and
+ *  the composer she is typing into is underneath it — because iOS shrinks only the
+ *  VISUAL viewport, while `position: sticky; bottom: …` resolves against the
+ *  LAYOUT viewport, which iOS leaves at its full height.
+ *
+ *  Everything degrades to today's behaviour: no visualViewport (or no keyboard, or
+ *  a desktop) means --kb stays at its 0px default and every calc() in the
+ *  stylesheet collapses to what it would have been anyway. */
+export function KeyboardInset(): null {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const root = document.documentElement;
+
+    const update = () => {
+      // offsetTop matters as well as height: iOS both shrinks the visual viewport
+      // and scrolls it up, and the covered strip is what is left over.
+      const covered = window.innerHeight - vv.height - vv.offsetTop;
+      // Under ~80px this is Safari's collapsing toolbar, not a keyboard. Reacting
+      // to that would make the composer jitter every time she scrolls.
+      const keyboard = covered > 80 ? Math.round(covered) : 0;
+      root.style.setProperty('--kb', `${keyboard}px`);
+      root.classList.toggle('keyboard-open', keyboard > 0);
+    };
+
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      root.style.removeProperty('--kb');
+      root.classList.remove('keyboard-open');
+    };
+  }, []);
+
+  return null;
+}
+```
+
+It is mounted once in the layout below, so the reply composer (Task 7) and the Configurações save bar (Task 8) both get it without either of them knowing it exists.
+
+- [ ] **Step 3: Rewrite the layout**
 
 `src/app/admin/(protected)/layout.tsx`:
 ```tsx
@@ -796,6 +865,7 @@ import { getSession, isAuthenticated } from '@/lib/auth/session';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { effectiveStatus } from '@/lib/church-status';
 import { logout } from './actions';
+import { KeyboardInset } from './KeyboardInset';
 import { TabBar } from './TabBar';
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -809,6 +879,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   return (
     <div>
+      <KeyboardInset />
       {/* Identity and logout only. Destinations live in the tab bar below, which on
           a phone is pinned to the bottom of the viewport — the eight-child nav this
           replaces rendered Configurações and Sair 291px past the right edge. */}
@@ -841,21 +912,22 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [ ] **Step 4: Verify**
 
 Run: `npm test && npm run typecheck && npm run build`
-Expected: all pass. In particular `tests/privilege-boundary.test.ts` must still pass — `TabBar.tsx` is not a `page.tsx`, so the `admin read guard` block does not cover it, and the layout's own auth check is unchanged.
+Expected: all pass. In particular `tests/privilege-boundary.test.ts` must still pass — neither `TabBar.tsx` nor `KeyboardInset.tsx` is a `page.tsx`, so the `admin read guard` block does not cover them, and the layout's own auth check is unchanged.
 
 **Manual check** at 320px and 375px, on `/admin/conteudo`:
 - `document.documentElement.scrollWidth === window.innerWidth` (no horizontal overflow).
 - All four tabs visible, each ≥44px tall, none clipped.
 - `Sair` visible in the app bar without scrolling.
 - Navigate to `/admin/caixa/<id>` — the Caixa tab stays highlighted.
+- On a **real iPhone** (device emulation has no software keyboard, so it cannot show this): open `/admin/configuracoes`, tap any field, and confirm in the console that `getComputedStyle(document.documentElement).getPropertyValue('--kb')` becomes a value well over 200px and `document.documentElement.classList.contains('keyboard-open')` is `true`; dismiss the keyboard and confirm both go back to `0px` / `false`. On desktop and Android-with-`resizes-content` it stays `0px` — that is correct, not a failure.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add "src/app/admin/(protected)/TabBar.tsx" "src/app/admin/(protected)/layout.tsx"
+git add "src/app/admin/(protected)/TabBar.tsx" "src/app/admin/(protected)/KeyboardInset.tsx" "src/app/admin/(protected)/layout.tsx"
 git commit -m "feat(ui): app bar + bottom tab bar replace the overflowing admin nav"
 ```
 
@@ -1028,6 +1100,8 @@ after the `status` line, add:
 ```
 and change `<TabBar waiting={0} />` to `<TabBar waiting={waiting} />`.
 
+**Acknowledged, deliberately, and worth writing down: this read sits behind a weaker guard than every page does.** The protected layout gates on `getSession`/`isAuthenticated`, not `requireReadableSession`, so a staffer who has been removed but whose session cookie is still live will see a waiting *count* on the tab until the cookie is rejected. That is a count — one integer, no name, no phone number, no message — and it is the same exposure the layout's existing `getChurchById` call already has, so this task does not change the shape of the boundary, only what rides on it. **It is not moved**, because the badge belongs to the tab bar and the tab bar belongs to the layout; putting the count on each page would mean four fetches, four prop drills, and a badge that flickers to zero on any screen that forgot one. If that trade ever stops being acceptable, the fix is to raise the *layout's* guard to `requireReadableSession` — one call site — not to relocate the count. Recorded as a follow-up.
+
 - [ ] **Step 5: Verify**
 
 Run: `npm test && npm run typecheck && npm run build`
@@ -1045,13 +1119,19 @@ git commit -m "feat(caixa): badge and sort conversations waiting on a person"
 ### Task 4: Conteúdo — readable menu rows
 
 **Files:**
-- Modify: `src/app/admin/(protected)/conteudo/MenuList.tsx`, `src/app/admin/(protected)/conteudo/page.tsx`
+- Modify: `src/app/admin/(protected)/conteudo/MenuList.tsx`
+- Read-only: `src/app/admin/(protected)/conteudo/page.tsx` (Step 2 explains why it is not edited)
 
 **Interfaces:**
-- Consumes: `.item-card`, `.item-head`, `.item-label`, `.item-meta`, `.item-actions`, `.iconbtn` from Task 1
+- Consumes: `.item-card`, `.item-head`, `.item-label`, `.item-meta`, `.item-actions`, `.iconbtn`, `.row > .btnlink.primary` from Task 1
 - Produces: nothing new
 
 At 375px the item name currently measures 61.6px wide by 92px tall — four lines in a 62px ribbon — because the controls claim 281px of a 341px content box and `.grow` collapses to min-content. The name is the only way to know which row you are about to hide, reorder or edit, so it goes first and gets the full width; the controls wrap beneath it.
+
+> **Reconcile first — the reorder arrows may already have been fixed.**
+> The in-flight bug-fix pass was raising tap targets to 44px, and the `▲`/`▼` spacing in this exact file was called out as part of it. Check Task 0's table, then `git diff main -- "src/app/admin/(protected)/conteudo/MenuList.tsx"`.
+> **This plan's intent for that overlap:** each arrow is at least 44×44, they are at least 8px apart, each carries an `aria-label` that *names the item* (on a phone they sit on their own line, away from the label a screen reader would otherwise associate with them), and `▲` is disabled on the first row and `▼` on the last.
+> If a shipped version already does that, **keep its markup for the arrows** and take from Step 1 only the parts it does not have: the `.item-card`/`.item-head`/`.item-label` restructure that puts the name first and full-width, and the `.item-actions` wrapper. If it used inline styles for the 44px instead of the `.iconbtn` class, move it to `.iconbtn` so there is one definition — and say so in the task report. If nothing landed, Step 1 as written is the whole change.
 
 - [ ] **Step 1: Rewrite the list**
 
@@ -1142,34 +1222,32 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
 }
 ```
 
-- [ ] **Step 2: Let the page header wrap**
+- [ ] **Step 2: Let the page header wrap — and change nothing in the markup**
 
-In `src/app/admin/(protected)/conteudo/page.tsx`, the header is already `<div className="row">` with an `<h1 className="grow">`, so Task 1's `.row { flex-wrap: wrap }` plus `.row > .grow { flex-basis: 100% }` already move the `+ Novo item` button onto its own line at 640px and below. Only one change: make that button full-width on a phone so it is unmissable.
+In `src/app/admin/(protected)/conteudo/page.tsx`, the header is already `<div className="row">` with an `<h1 className="grow">`, so Task 1's `.row { flex-wrap: wrap }` plus `.row > .grow { flex-basis: 100% }` already move the `+ Novo item` button onto its own line at 640px and below, and Task 1's `@media (max-width: 640px) { .row > .btnlink.primary { flex: 1 1 100%; } }` already makes it full width there. **`page.tsx` needs no edit at all.**
 
-Replace:
-```tsx
-        <Link className="btnlink primary" href="/admin/conteudo/novo">+ Novo item</Link>
-```
-with:
-```tsx
-        <Link className="btnlink primary grow" href="/admin/conteudo/novo">+ Novo item</Link>
-```
+**Do not add `grow` to that link.** It is the obvious move and it is wrong: `.grow` is `flex: 1; min-width: 0` at *every* width, so at ≥641px the link becomes a second flex grower beside `<h1 className="grow">` and the two split the 880px container 50/50 — a ~430px "+ Novo item" button next to a half-width heading, on the screen most likely to be used from a desk. Full-width-on-a-phone is a media-query job, and Task 1 does it in one line scoped to `.row > .btnlink.primary`, which matches exactly one element in the panel. `tests/mobile-css.test.ts` asserts both halves of this: that the rule exists inside the phone media query, that it does **not** exist outside it, and that `page.tsx` never contains `btnlink primary grow`.
 
 - [ ] **Step 3: Verify**
 
 Run: `npm test && npm run typecheck && npm run build`
-Expected: all pass.
+Expected: all pass, including the `no desktop regression from the phone rules` block in `tests/mobile-css.test.ts`.
 
 **Manual check** at 320px on `/admin/conteudo`, with an item named "Horários dos Cultos" that has an image:
 - The label reads on one or two full-width lines, never a narrow column.
 - `document.querySelector('.card').scrollWidth === document.querySelector('.card').clientWidth` (no 10px spill).
 - `▲` and `▼` each measure ≥44×44 with ≥8px between them.
-- At ≥641px the card is a single row again.
+- `+ Novo item` spans the full content width.
+
+**And at 1280px, on the same page** — this is the check that catches the regression this step exists to avoid:
+- `document.querySelector('.row > .btnlink.primary').getBoundingClientRect().width` is roughly the width of its own text (~130px), **not** ~430px.
+- The `<h1>` and the button share one line, with the heading taking the space.
+- At ≥641px the item card is a single row again.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add "src/app/admin/(protected)/conteudo/MenuList.tsx" "src/app/admin/(protected)/conteudo/page.tsx"
+git add "src/app/admin/(protected)/conteudo/MenuList.tsx"
 git commit -m "feat(conteudo): menu rows put the item name first and give reorder 44px targets"
 ```
 
@@ -1274,6 +1352,12 @@ git commit -m "feat(oracao): prayer text gets the full card width instead of a 7
 - Produces: `AutoRefresh({ intervalMs })`
 
 Nothing pushes an inbound message into an open panel: the webhook writes the row, `revalidatePath` fires only inside the admin's own actions, and there is no `setInterval` and no `revalidate` export anywhere in `src/app/admin/`. A secretary watching the inbox sees nothing until she reloads by hand. `AutoRefresh` is created here and reused by the thread in Task 7.
+
+> **Reconcile first — a poller may already exist.** "The inbox never refreshes" was one of the three bugs the in-flight pass took on, and visibility-aware polling was explicitly part of its scope. Task 0 Step 2's probe B is the check; the file may be named anything (`AutoRefresh`, `usePoll`, `useAutoRefresh`, an inline `useEffect` in `caixa/page.tsx`).
+> **This plan's intent for that overlap** — a shipped poller satisfies it if it: calls `router.refresh()` rather than reloading the page (so what she has typed in the reply box survives a refresh landing mid-sentence); **stops while `document.hidden`** and catches up immediately on `visibilitychange`; refreshes on `online`; clears its interval and removes its listeners on unmount; and ticks on the order of every 10s.
+> **If it exists: do not create `AutoRefresh.tsx` beside it.** Keep it, add only the missing intent bullets to it, and use its name everywhere this plan says `AutoRefresh` — including Task 7, which mounts the same component on the thread. Record the substituted name in the task report so Task 7 and Task 15 use it too.
+> **If it exists but reloads the page or polls while hidden:** those are the two bullets that matter most — a full reload discards a half-typed reply, and polling while hidden queries Neon all night from a panel left open on a desk. Fix them in place; do not replace the component.
+> If nothing landed, Step 1 as written is the whole change.
 
 - [ ] **Step 1: Create the poller**
 
@@ -1408,6 +1492,11 @@ git commit -m "feat(caixa): readable conversation rows and a self-refreshing lis
 - Produces: `ThreadBottom({ count })`
 
 This is the time-critical screen and the worst one today. `.thread` has `max-height: none` and `overflow-y: visible`, so it grows without bound; the reply box lives below the whole history, which puts it roughly 1800px down a 30-message thread; there is no scroll-to-newest anywhere in `src/app/admin/`; and the header alone burns ~180px of an 812px screen on a three-line name beside a two-line button. Four fixes: the thread scrolls inside itself, the composer sticks to the bottom of the viewport, the newest message is what you land on, and Enter sends.
+
+> **Reconcile first — auto-scroll may already exist.** "Auto-scroll" was named as part of the in-flight inbox fix; Task 0 Step 2's probe B (`scrollTop`, `scrollIntoView`) finds it.
+> **This plan's intent for that overlap** — a shipped auto-scroll satisfies it if it: lands on the **newest** message with no touch required; re-runs when the message count changes, so a poll that brings in a new message also lands at the bottom; and moves **only the thread**, not the page — `scrollIntoView` scrolls every scrollable ancestor and would push the app bar off-screen, which is why this plan assigns `scrollTop` directly.
+> **If it exists:** keep it and skip Step 1. It will only work once `.thread` is an actual scroll container, which is Task 1's `max-height` + `overflow-y: auto` — so if it shipped against today's unbounded `.thread` it may currently be scrolling the *page*; re-verify it after Task 1 and correct the target element if so. If it re-runs on every render rather than on the message count, give it the count dependency.
+> Also check whether the composer already exists in some form before pasting Step 3 — reconcile the same way. If nothing landed, Steps 1–4 as written are the whole change.
 
 - [ ] **Step 1: Create the scroll anchor**
 
@@ -1611,6 +1700,18 @@ Expected: all pass.
 - The header (back link + name + Encerrar) is under ~80px tall.
 - With the thread open, wait 15s while a message is inserted server-side: it appears and the view scrolls to it, and text already typed in the box is still there.
 
+**Manual check with the keyboard OPEN — on a real iPhone, and this one is not optional.** Answering a member while standing in a hallway *is* the headline scenario for this whole plan, and every check above measures the screen at rest, which is the state she is in for about two seconds. Device emulation cannot show this: it has no software keyboard, so `visualViewport` never shrinks and `--kb` never leaves `0px`. Safari on iOS, in the browser **and** again after Task 13 in a home-screen standalone launch:
+
+- Tap the reply box. The composer rises with the keyboard and stays fully visible — check it, do not assume: with the keyboard up, `document.querySelector('.composer').getBoundingClientRect().bottom <= window.visualViewport.height + window.visualViewport.offsetTop`.
+- `getComputedStyle(document.documentElement).getPropertyValue('--kb')` reads well over `200px`, and `document.documentElement.classList.contains('keyboard-open')` is `true`.
+- The bottom tab bar is **gone** while typing (it would otherwise sit under the keys, unreachable, stealing thumb space).
+- At least the last message is still readable above the composer — the thread shrank rather than sliding behind the keyboard.
+- Type a few lines so the textarea grows: the send button `➤` stays on screen and reachable.
+- Dismiss the keyboard. `--kb` returns to `0px`, `keyboard-open` is gone, the tab bar comes back, and the thread returns to its full height with the newest message still visible.
+- Repeat once on Android Chrome. There `interactiveWidget: 'resizes-content'` (Task 12) shrinks the layout viewport itself, so `--kb` correctly stays near `0px` and the tab bar stays visible above the keyboard — that is a different-looking but equally correct result, not a failure. If the composer *is* hidden there, `interactiveWidget` did not take effect; say so in the task report.
+
+If Task 12 has not landed yet when you run this, the iOS half is still valid — `--kb` does not depend on the viewport export. The Android half must be repeated after Task 12.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -1765,6 +1866,7 @@ Expected: all pass.
 - Editing a field in a collapsed-then-opened section shows `alterado` on its summary and `● Alterações não salvas` in the save bar.
 - **Critically:** collapse every section, change only the church name, save, reload — all ten texts still hold their previous values (nothing was blanked).
 - With unsaved changes, attempt to navigate away and confirm the browser prompts.
+- **On a real iPhone, with the keyboard open:** tap into any textarea and confirm `Salvar textos` is still visible above the keyboard, and that the tab bar has stepped out of the way. This is the same `--kb` mechanism as the reply composer (Task 2 Step 2), and `.savebar` is its second consumer — so if it works here and in Caixa, it works.
 
 - [ ] **Step 3: Commit**
 
@@ -1789,12 +1891,21 @@ This is the flow for posting the month's calendar, so it is routine. Today the r
 
 **The obvious fix is wrong.** Adding `image/heic` to `allowedContentTypes` would let the upload succeed and then fail silently downstream: the WhatsApp Cloud API does not accept HEIC, so the church's calendar would be stored and never delivered. Convert instead. Safari decodes HEIC natively, so `createImageBitmap` reads the file and the canvas re-encodes it as JPEG — which also downscales a 4–8 MB camera photo to a few hundred KB, fixing the 10 MB cap and the "looks frozen on church wifi" problem in the same pass. **`src/app/api/blob/upload/route.ts` is deliberately left unchanged.**
 
+> **Reconcile first — and this is the one overlap with a real conflict.**
+> "HEIC upload rejection" was one of the three bugs the in-flight pass took on. Task 0 Step 2's probe C tells you which way it went, and the two ways are not equivalent:
+>
+> **(a) It converted in the browser** (`createImageBitmap` / `toBlob` under `conteudo/`). Then it reached the same conclusion this task did. **Keep it.** Check it against this plan's intent: applies EXIF orientation (`imageOrientation: 'from-image'`), downscales to a ~1600px long edge, checks the result against the 10 MB cap, returns a **specific pt-BR message** naming the iPhone *Ajustes › Câmera › Formatos › "Mais Compatível"* path when decoding fails rather than "tente novamente", and — see Step 1 below — **does not flatten a transparent PNG or freeze an animated GIF.** Add only the missing bullets.
+>
+> **(b) It widened `allowedContentTypes` in `src/app/api/blob/upload/route.ts` to include `image/heic`.** That is the fix this task exists to argue against, and it is worth being precise about why rather than just reverting it: it makes the *upload* succeed and the *delivery* fail, so the church posts its calendar, sees a success message, and no member ever receives it. Once the client-side conversion in Step 1 lands, no HEIC can reach that route from the panel anyway, so the widening is dead permission that only re-opens the invisible failure for any other caller. **Narrow the route back to `png/jpeg/webp/gif`** in the same commit as Step 1, and say in the task report that you did and why. If the parallel pass had a reason for it that is not visible from the code, do not silently revert — raise it.
+>
+> **(c) It did something else entirely** (rejected HEIC with a better error message, say). Keep the improved copy, and layer Step 1's conversion under it.
+
 - [ ] **Step 1: Create the converter**
 
 `src/app/admin/(protected)/conteudo/prepare-image.ts`:
 ```ts
-/** Browser-only: turns whatever the phone's photo picker hands over into a
- *  WhatsApp-safe JPEG before it is uploaded.
+/** Browser-only: turns whatever the phone's photo picker hands over into something
+ *  the blob route accepts and WhatsApp will actually deliver.
  *
  *  Why convert rather than widen the accepted content types: HEIC is the iPhone
  *  camera default, and the WhatsApp Cloud API does NOT accept HEIC. Allowing it
@@ -1804,7 +1915,10 @@ This is the flow for posting the month's calendar, so it is routine. Today the r
  *
  *  Downscaling to 1600px is the same fix twice: it keeps a 12 MP camera photo well
  *  under the 10 MB blob cap, and turns a multi-minute upload on church wifi into a
- *  couple of seconds. */
+ *  couple of seconds.
+ *
+ *  It does NOT re-encode everything to JPEG, and both exceptions are real church
+ *  assets rather than hypotheticals — see GIF_PASSTHROUGH and keepPng below. */
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
@@ -1818,6 +1932,26 @@ function looksLikeHeic(file: File): boolean {
 }
 
 export async function prepareImage(file: File): Promise<PreparedImage> {
+  /* GIF goes through untouched. createImageBitmap decodes the FIRST FRAME ONLY, so
+     re-encoding an animated convite would silently turn it into a still picture —
+     and the route already accepts image/gif, and WhatsApp delivers it. There is
+     nothing to fix, so fixing it can only do harm. It still has to clear the cap
+     on its own, because nothing is going to shrink it. */
+  if (file.type === 'image/gif') {
+    return file.size <= MAX_UPLOAD_BYTES
+      ? { file }
+      : { error: 'Este GIF é grande demais para enviar (limite de 10 MB). Tente uma imagem parada ou um arquivo menor.' };
+  }
+
+  /* PNG in, PNG out. Re-encoding a transparent PNG as JPEG fills every transparent
+     pixel BLACK, because JPEG has no alpha channel and a fresh canvas is
+     transparent — a logo or a poster exported with a transparent background would
+     arrive on every member's phone as a black slab. JPEG for everything else,
+     because that is what turns an 8 MB HEIC camera photo into a few hundred KB. */
+  const keepPng = file.type === 'image/png';
+  const outputType = keepPng ? 'image/png' : 'image/jpeg';
+  const outputName = keepPng ? 'imagem.png' : 'imagem.jpg';
+
   let bitmap: ImageBitmap;
   try {
     // imageOrientation: 'from-image' applies the EXIF rotation, so a photo taken
@@ -1845,16 +1979,28 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   bitmap.close();
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY);
+    // The quality argument is meaningless for image/png, so it is not passed.
+    if (keepPng) canvas.toBlob(resolve, outputType);
+    else canvas.toBlob(resolve, outputType, JPEG_QUALITY);
   });
   if (!blob) return { error: 'Não foi possível preparar a imagem. Tente outra foto.' };
+
+  // A PNG round-trip through a canvas can come out LARGER than the original: the
+  // canvas has none of the source encoder's palette or filter choices. If it did,
+  // and the original needed no downscaling and already fits, send the original.
+  if (keepPng && scale === 1 && blob.size >= file.size && file.size <= MAX_UPLOAD_BYTES) {
+    return { file };
+  }
+
   if (blob.size > MAX_UPLOAD_BYTES) {
     return { error: 'A imagem continua grande demais mesmo depois de reduzida. Tente uma foto menor.' };
   }
 
-  return { file: new File([blob], 'imagem.jpg', { type: 'image/jpeg' }) };
+  return { file: new File([blob], outputName, { type: outputType }) };
 }
 ```
+
+**Why the two exceptions are worth the branches.** A church's two most common non-camera uploads are a logo or event poster exported with a transparent background, and an animated convite. Flattening the first to JPEG paints its transparency black; re-encoding the second through `createImageBitmap` keeps frame one and throws the rest away. Both would ship as "the image looks wrong on WhatsApp and nobody knows why", which is the same class of invisible failure this whole task exists to prevent — so they are handled here, not filed as a follow-up. Camera photos, which is what this flow is mostly for, are unaffected: HEIC and JPEG both take the JPEG path exactly as before.
 
 - [ ] **Step 2: Rewrite the upload section of the form**
 
@@ -1947,6 +2093,11 @@ Expected: all pass.
 - A sideways-shot photo appears upright in the thumbnail.
 - The file input itself is ≥44px tall with a legible 16px label.
 - `Remover` is ≥44px and clears the thumbnail; saving then really removes the image.
+
+**Manual check of the two exceptions** (a laptop is fine for these — no HEIC needed):
+- Upload a **PNG with a transparent background** (a church logo works). The blob URL ends in `.png`, and the thumbnail shows the page background through the transparent area — **not black**. Send it to a test WhatsApp number and confirm it arrives with its transparency intact.
+- Upload an **animated GIF** under 10 MB. It uploads byte-for-byte (same size as the source file) and still animates in the preview and on WhatsApp — it did not become a single frame.
+- Upload a plain **JPEG over 1600px**: it is downscaled and re-encoded as `.jpg`, as before.
 
 - [ ] **Step 4: Commit**
 
@@ -2053,9 +2204,11 @@ git commit -m "feat(login): responsive login cards for both panels"
 
 **Files:** none expected. This task is a verification gate, not a code change.
 
+**Task 1's changes are global, and `/owner` shares the stylesheet.** `.row { flex-wrap: wrap }`, `.row > .grow { flex-basis: 100% }`, `.grow { min-width: 0 }`, the `button { min-height: 44px; padding: 10px 16px }` bump and the `label` / `.hint` / `.chip` size changes are declared once and apply to the owner console too — it uses `.row` in `owner/(protected)/[churchId]/page.tsx` and `StatusControls.tsx`, `.conv` in `owner/(protected)/page.tsx`, and buttons and labels everywhere including `configuracoes/StaffManager.tsx`. Every one of those changes should be an improvement or a no-op there, but "should be" is not a check, and the owner console is the screen the vendor runs the business from. **So it is swept too.** It keeps the old `.nav` rather than gaining the app bar and tab bar — that is deliberate (it is a desktop tool for one person), and `flex-wrap` on `.nav` is its safety net.
+
 - [ ] **Step 1: Walk every screen at 320px**
 
-`npm run dev`, devtools device toolbar at **320×568**, logged in as a church admin. On each of `/admin/login`, `/admin/conteudo`, `/admin/conteudo/novo`, `/admin/conteudo/<id>`, `/admin/caixa`, `/admin/caixa/<id>`, `/admin/oracao`, `/admin/configuracoes`, run in the console:
+`npm run dev`, devtools device toolbar at **320×568**. Logged in as a church admin, on each of `/admin/login`, `/admin/conteudo`, `/admin/conteudo/novo`, `/admin/conteudo/<id>`, `/admin/caixa`, `/admin/caixa/<id>`, `/admin/oracao`, `/admin/configuracoes` — then logged in as the owner, on each of `/owner/login`, `/owner`, `/owner/<churchId>` — run in the console:
 
 ```js
 // 1. No horizontal overflow anywhere on the page.
@@ -2068,11 +2221,13 @@ document.documentElement.scrollWidth <= window.innerWidth
 [...document.querySelectorAll('input, textarea, select')].filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16).map((el) => el.id)
 ```
 
-Expected: (1) `true`; (2) empty (the `.thread` is allowed — it scrolls vertically, and its `overflow-x` is not `visible`); (3) empty; (4) empty.
+Expected on the admin screens: (1) `true`; (2) empty (the `.thread` is allowed — it scrolls vertically, and its `overflow-x` is not `visible`); (3) empty; (4) empty.
+
+Expected on the three `/owner` screens: (1) and (4) must be `true` and empty — a horizontal overflow or an iOS-zooming field is a bug there too. (2) and (3) are **recorded, not gated**: the owner console is a desktop tool and this plan does not restyle it, so a sub-44px control there is a finding for a later pass rather than a blocker for this one. What must not happen is a *regression* — a row that used to lay out correctly at 1280px and now wraps wrongly, or a control that Task 1's padding bump pushed out of its container. Compare against the same page on `main` if anything looks off.
 
 Fix anything that shows up before continuing. Any fix belongs in `globals.css` or the component that owns the element — not in a new stylesheet, and not with `overflow-x: hidden`.
 
-- [ ] **Step 2: Repeat at 390×844 and 430×932** (iPhone 14 / 14 Pro Max) and confirm nothing regressed at desktop width 1280.
+- [ ] **Step 2: Repeat at 390×844 and 430×932** (iPhone 14 / 14 Pro Max), and confirm nothing regressed at desktop width 1280 — **on the `/owner` screens as well as the admin ones**, since 1280 is where the owner console actually lives.
 
 - [ ] **Step 3: Commit any fixes**
 
@@ -2097,6 +2252,11 @@ Everything below is greenfield: there is no `public/` directory, no manifest, no
 **Interfaces:**
 - Consumes: `ImageResponse` from `next/og` (ships with Next 15.5; no new dependency)
 - Produces: `/icons/192`, `/icons/512`, `/icons/maskable-512`, the auto-linked favicon and apple-touch-icon
+
+> **Reconcile first — the viewport tag may already be here.** The in-flight bug-fix pass may have added it while working on tap targets; it is the natural companion fix, and it is this task's foundation. Task 0 Step 2's probe A is the check.
+> **This plan's intent for that overlap:** `width: 'device-width'`, `initialScale: 1`, `viewportFit: 'cover'` (without it `env(safe-area-inset-*)` resolves to `0` and the app bar and tab bar lose their safe-area padding), a `themeColor` of `#075e54`, and — non-negotiable — **no `maximumScale` and no `userScalable`**, because pinch-zoom is how an older volunteer reads a small label.
+> **If it landed as a raw `<meta name="viewport">` in the layout's JSX:** move it to the `export const viewport` object below. Next injects a default viewport meta of its own, and two competing tags is a coin-flip. This is a relocation, not a revert — keep every value it had, then add the missing ones.
+> **If it landed as an `export const viewport` already:** keep it and add only the missing keys. If it set `maximumScale` or `userScalable: false`, remove them and note it — `tests/pwa-manifest.test.ts` (Task 13) asserts those strings never appear, so leaving them in fails the suite, and that assertion is deliberate.
 
 The artwork is a white cross on `--primary` (`#075e54`), drawn as two rectangles. Deliberately no text: `ImageResponse` needs an embedded font to render glyphs, and shapes need none — one less thing that can fail a build.
 
@@ -2258,6 +2418,11 @@ export const viewport: Viewport = {
   // values, which the app bar and the bottom tab bar both depend on.
   viewportFit: 'cover',
   themeColor: '#075e54',
+  // The Android half of the keyboard fix. 'resizes-content' asks Chrome to shrink
+  // the LAYOUT viewport when the keyboard opens, so the sticky composer and the
+  // fixed tab bar move up by ordinary layout and --kb correctly stays at 0px.
+  // Safari ignores it, which is exactly why KeyboardInset.tsx exists for iOS.
+  interactiveWidget: 'resizes-content',
   // Deliberately NOT setting maximumScale or userScalable: pinch-zoom is how an
   // older volunteer reads a small label, and taking it away is a real harm.
 };
@@ -2274,7 +2439,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 - [ ] **Step 5: Verify**
 
 Run: `npm run typecheck && npm run build && npm test`
-Expected: build succeeds and prints `/icons/192`, `/icons/512`, `/icons/maskable-512` as static routes.
+Expected: build succeeds and prints `/icons/192`, `/icons/512`, `/icons/maskable-512` as static routes. (`interactiveWidget` is part of Next's `Viewport` type from 15.x — verified present in this repo's installed `next`. If typecheck rejects the key after a downgrade, drop it and note it: Android then keeps the pre-existing overlay behaviour and `KeyboardInset` still covers iOS.)
 
 If `ImageResponse` fails at build (a satori/resvg WASM problem in this environment), do **not** paper over it with an SVG manifest icon — iOS will not accept an SVG apple-touch-icon, and installability on the target device is the whole point. Generate the four PNGs once with any local tool, commit them under `public/icons/`, point `apple-icon` and the manifest at those static paths, and record the substitution in the task report.
 
@@ -2511,8 +2676,15 @@ export default function OfflinePage() {
         <p style={{ fontSize: 16, lineHeight: 1.5, margin: '0 0 8px' }}>
           O painel precisa de internet para mostrar as conversas, o menu e os pedidos de oração.
         </p>
+        {/* Careful with this sentence. An earlier draft said "Nada do que você já
+            enviou foi perdido", which is true of sent messages and false of a
+            reply she was still typing when the page reloaded — nothing in this
+            plan saves a draft, and promising otherwise on the one screen she
+            reads while something has just gone wrong is the worst place to be
+            wrong. It says what is actually true, in both directions. */}
         <p style={{ fontSize: 15, lineHeight: 1.5, color: '#6b7280', margin: '0 0 18px' }}>
-          Verifique o Wi-Fi ou os dados do celular e tente de novo. Nada do que você já enviou foi perdido.
+          Verifique o Wi-Fi ou os dados do celular e tente de novo. As respostas que você já enviou
+          chegaram normalmente; um texto que ainda estava sendo digitado não fica guardado.
         </p>
         <a
           href="/admin"
@@ -2791,9 +2963,9 @@ git commit -m "feat(pwa): honest offline page, data-free service worker, connect
 - [ ] **Step 1: Full suite**
 
 Run: `npm test && npm run typecheck && npm run build`
-Expected: 22 test files; 212 original tests plus the new `mobile-css`, `inbox-badge` and `pwa-manifest` tests, **all passing**. Confirm the original 212 count did not drop.
+Expected: the **Task 0 baseline** file count + 3 (`mobile-css`, `inbox-badge`, `pwa-manifest`) and the baseline test count + those files' tests, **all passing**. Do not measure against 212 — that was the count before the parallel bug-fix pass, and Task 0 recorded the real one. Confirm no previously passing test now fails; a *drop* in the baseline count means this plan deleted or overwrote a test the other pass added, which is the failure mode Task 0 exists to prevent.
 
-- [ ] **Step 2: Repeat the 320px sweep from Task 11**, now including `/offline` and a `display: standalone` launch.
+- [ ] **Step 2: Repeat the 320px sweep from Task 11**, now including `/offline`, the three `/owner` routes, and a `display: standalone` launch.
 
 - [ ] **Step 3: Real-device pass** — one iPhone and one Android, on the deployed preview:
 
@@ -2803,13 +2975,27 @@ Expected: 22 test files; 212 original tests plus the new `mobile-css`, `inbox-ba
 | Launched standalone, every destination and `Sair` are reachable | all |
 | No sideways rubber-band while scrolling vertically | all |
 | Thread opens at the newest message; reply box on screen | Caixa |
+| **Keyboard open: composer visible above the keys, tab bar hidden, last message still readable** | Caixa |
+| **Keyboard open: save button visible above the keys** | Configurações |
+| **Keyboard dismissed: tab bar returns, thread returns to full height** | Caixa |
 | Keyboard's "enviar" key sends | Caixa |
 | Member's new message appears within ~10s without reloading | Caixa |
 | Badge on the Caixa tab matches the number in Atendimento | all |
 | A camera-roll photo uploads and previews | Conteúdo |
+| **A transparent PNG keeps its transparency; an animated GIF still animates** | Conteúdo |
 | Reorder ▲▼ hits the intended item every time | Conteúdo |
 | One text edited and saved without hunting for the button | Configurações |
 | Airplane mode → offline page, then recovery | all |
+| **`+ Novo item` is a normal-width button, not half the header** | Conteúdo at 1280px |
+
+**Owner console** — same two devices plus a 1280px desktop. It is not restyled by this plan, but it shares the stylesheet, so this confirms Task 1 did not break the screen the vendor runs the business from:
+
+| Check | Screen |
+|---|---|
+| No horizontal overflow at 320px | `/owner/login`, `/owner`, `/owner/<id>` |
+| Login fields are 16px; focusing one does not zoom iOS | `/owner/login` |
+| The church list rows and the status controls still read correctly | `/owner`, `/owner/<id>` |
+| Nothing wrapped or spilled that did not wrap or spill on `main` | all three, at 1280px |
 
 - [ ] **Step 4: Commit any fixes and finish**
 
@@ -2836,28 +3022,38 @@ Explicitly out of scope, and deliberately so:
 
 There is no browser harness in this repo and this plan does not add one — jsdom has no layout engine, so it cannot measure an overflow, a tap target or a wrapped row, and adding it would buy a false sense of coverage. What is genuinely automated here is:
 
-- `tests/mobile-css.test.ts` — every responsive declaration this plan depends on, asserted against the real stylesheet. It catches the regression that actually happens: someone tidying `globals.css` and dropping `flex-wrap` or the 16px floor.
+- `tests/mobile-css.test.ts` — every responsive declaration this plan depends on, asserted against the real stylesheet. It catches the regression that actually happens: someone tidying `globals.css` and dropping `flex-wrap` or the 16px floor. Its `block()` helper strips comments before matching and defaults to a media-query-free copy of the stylesheet, and both of those are correctness requirements rather than tidiness — Task 1 Step 3 shows what the naive version resolved `.thread` to, and why an assertion that *looks* like it is checking `60vh` can silently be checking `52dvh`. **A static contract test that reads the wrong rule is worse than no test**, so if this helper is ever changed, re-derive the resolutions before trusting the green.
 - `tests/inbox-badge.test.ts` — the badge count and the conversation ordering, against a real Postgres engine via PGlite.
 - `tests/pwa-manifest.test.ts` — installability invariants, the no-zoom-disabling rule, and the service worker's promise not to cache church data. Installability fails silently in the field, so these are the only signal.
 - `npm run typecheck` and `npm run build` for everything else, including the generated icons, which are rendered at build time and so fail the build rather than production.
 
-Everything visual — the actual pixel widths, the actual tap accuracy, HEIC conversion, the home-screen install, and the standalone launch — is verified **only** by the manual checks in each task and the device matrix in Task 15. HEIC conversion in particular cannot be verified in device emulation at all, because emulation has no HEIC files. State plainly in each task report which checks were run on real hardware and which were not.
+Everything visual — the actual pixel widths, the actual tap accuracy, HEIC conversion, the software keyboard, the home-screen install, and the standalone launch — is verified **only** by the manual checks in each task and the device matrix in Task 15. Two of those cannot be verified in device emulation at all: HEIC conversion, because emulation has no HEIC files, and the keyboard behaviour, because emulation has no software keyboard and so `visualViewport` never shrinks. State plainly in each task report which checks were run on real hardware and which were not — and if the iPhone keyboard checks in Task 7 were not run on an iPhone, say so in those words, because that is the plan's headline scenario going unverified.
 
 ## Self-Review
 
-**Audit coverage:** nav overflow (Task 2) · crushed MenuList label (Tasks 1, 4) · unbounded thread, no scroll-to-newest, no polling (Tasks 6, 7) · sub-44px tap targets everywhere including the 2px-apart reorder pair and the 13px checkbox (Tasks 1, 4, 9) · the 1458px Configurações form (Task 8) · ribbon-shaped prayer text (Tasks 1, 5) · the 180px thread header (Tasks 1, 7) · HEIC rejection, generic error, no thumbnail, no progress, unstyled file input (Task 9) · the login card's 7.5px gutters (Task 10) · 11–13px decision-relevant labels (Task 1) · the input allow-list trap (Task 1) · no `@media` anywhere (Task 1) · PWA greenfield, all of it (Tasks 12–14) · the sequencing caution that standalone display must not ship before the nav fix (Global Constraints, and Part 1 precedes Part 2).
+**Reconciliation coverage (added after review):** the three in-flight fixes are mapped to the tasks they collide with, and each of those tasks opens with a `Reconcile first` block stating the intent to check against rather than code to re-paste — HEIC → Task 9 (with the one genuine conflict, a widened `allowedContentTypes`, called out and decided) · inbox polling → Task 6 · auto-scroll → Task 7 · tap targets → Tasks 1 and 4 · viewport meta → Task 12. Task 0 does the reconnaissance once, records the real test baseline, and decides up front whether Task 1 may paste `globals.css` or must reconcile into it. The plan no longer hard-codes 212 anywhere.
+
+**Audit coverage:** nav overflow (Task 2) · crushed MenuList label (Tasks 1, 4) · unbounded thread, no scroll-to-newest, no polling (Tasks 6, 7) · sub-44px tap targets everywhere including the 2px-apart reorder pair and the 13px checkbox (Tasks 1, 4, 9) · the 1458px Configurações form (Task 8) · ribbon-shaped prayer text (Tasks 1, 5) · the 180px thread header (Tasks 1, 7) · HEIC rejection, generic error, no thumbnail, no progress, unstyled file input (Task 9) · the login card's 7.5px gutters (Task 10) · 11–13px decision-relevant labels (Task 1) · the input allow-list trap (Task 1) · no `@media` anywhere (Task 1) · the iOS software keyboard hiding the composer (Tasks 1, 2, 7) · PWA greenfield, all of it (Tasks 12–14) · the sequencing caution that standalone display must not ship before the nav fix (Global Constraints, and Part 1 precedes Part 2).
 
 **Placeholder scan:** none. Every step carries complete code and every command states its expected result. Task 11 and Task 15 are verification gates with concrete console snippets rather than code, which is what they are for.
 
-**Type consistency:** `countHandoffContacts(churchId)` has one signature, produced in `src/lib/repo/inbox.ts` and consumed only by the protected layout. `TabBar({ waiting })` is `number`, non-optional, passed `0` in Task 2 and the real count in Task 3. `AutoRefresh({ intervalMs })` defaults to `10_000` and is called with no props from both Caixa screens. `PreparedImage` is the discriminated `{ file } | { error }` union narrowed by `'error' in prepared`. `useOnline(): boolean` has one definition, consumed by `ConnectionBanner` and `ReplyForm`. `manifest()` returns `MetadataRoute.Manifest` and the test imports the same default export the route serves.
+**Type consistency:** `KeyboardInset()` takes no props and returns `null`, is mounted exactly once (the protected layout, Task 2), and is consumed by nobody — its entire interface is the `--kb` custom property and the `keyboard-open` class, both declared in Task 1's stylesheet and both asserted by `tests/mobile-css.test.ts`. `countHandoffContacts(churchId)` has one signature, produced in `src/lib/repo/inbox.ts` and consumed only by the protected layout. `TabBar({ waiting })` is `number`, non-optional, passed `0` in Task 2 and the real count in Task 3. `AutoRefresh({ intervalMs })` defaults to `10_000` and is called with no props from both Caixa screens. `PreparedImage` is the discriminated `{ file } | { error }` union narrowed by `'error' in prepared`. `useOnline(): boolean` has one definition, consumed by `ConnectionBanner` and `ReplyForm`. `manifest()` returns `MetadataRoute.Manifest` and the test imports the same default export the route serves.
 
 **Decisions worth challenging:**
 
 - **A bottom tab bar rather than a wrapping nav.** A wrapped nav would have been a two-line CSS fix, but at 320px it produces a ~120px header on every screen that scrolls away the moment she starts reading, and it leaves `Sair` competing with four destinations for the same row. The tab bar costs one client component and one duplicated concept (identity above, destinations below) and gives thumb-reachable navigation that survives `display: standalone`, where there is no browser back button to fall back on. The cost is the short tab labels — "Ajustes" for Configurações — which is the one place in this plan where a phone constraint overrides naming consistency. Each page's `<h1>` still says the full name, so the tap confirms itself.
 - **Enter sends in the reply box.** This is a real risk: a half-composed message can leave for a member. It matches WhatsApp Web, the hint says so in pt-BR, Shift+Enter still breaks the line, and `isComposing` protects Android suggestion input. The alternative — dismissing the keyboard to aim at a button — is the slowest possible way to answer someone who is waiting, which is the exact task this plan says matters most.
 - **Converting HEIC in the browser rather than accepting it at the route.** The obvious fix (add `image/heic` to `allowedContentTypes`) makes the upload succeed and the *delivery* fail, because the WhatsApp Cloud API does not accept HEIC — trading a visible error for an invisible one, on the flow used to post the month's calendar. Converting also fixes the 10 MB cap and the frozen-looking upload. It depends on Safari's native HEIC decoding, and when that is unavailable the failure path is a specific, actionable pt-BR message rather than the old "tente novamente".
+- **But the converter is not "re-encode everything to JPEG".** That version had the same shape of bug it was written to fix: a transparent PNG loses its alpha to a black background, and an animated GIF loses every frame but the first, both silently, both on assets a church actually uploads (a logo with transparency, an animated convite). So PNG stays PNG, GIF is passed through byte-for-byte, and only the camera-photo path — HEIC and JPEG, which is the common case — is re-encoded. The cost is two branches and a size check for the PNG round-trip; the alternative was a class of failure nobody would ever report as a bug, only as "WhatsApp is weird".
+- **Handling the iOS keyboard with `visualViewport` rather than living with it.** A sticky composer that hides behind the keyboard is not a cosmetic flaw on this product — answering a member from a hallway is the scenario the whole plan is justified by, and the keyboard is open for the entire part that matters. Android can be told to shrink the layout viewport declaratively (`interactiveWidget: 'resizes-content'`); Safari cannot, so iOS needs the ~25-line `KeyboardInset` component. It is mounted once, publishes one custom property, degrades to today's behaviour everywhere the API is missing, and keeps every consumer in CSS. The alternative — a full flex app shell with the thread as the only scroller — is a larger rewrite of the thread page for the same outcome, and it was already listed as a follow-up rather than done.
 - **The service worker caches nothing but `/offline`.** The tempting version — cache the shell, cache the last inbox — would make the panel feel faster and would leave members' phone numbers and message bodies on a shared parish phone after logout, and would show a stale conversation as current. Rejected on both LGPD and correctness grounds, and the test asserts the restriction so a future "quick perf win" cannot quietly undo it.
 - **Polling every 10 seconds rather than nothing or a socket.** Nothing is the status quo, and it is a page-refresh loop. A socket needs infrastructure Vercel's serverless functions do not give for free. Polling costs one lightweight query per visible tab per 10s, pauses while hidden, and is trivially replaced when push lands.
-- **No CSS framework.** Restated in Global Constraints with the cost laid out: rewriting eleven screens' markup and re-verifying 212 tests plus a privilege-boundary guard, to obtain tokens the 57-line stylesheet already defines.
+- **No CSS framework.** Restated in Global Constraints with the cost laid out: rewriting eleven screens' markup and re-verifying the whole suite plus a privilege-boundary guard, to obtain tokens the 57-line stylesheet already defines.
 
-**Known follow-ups (not blocking):** push notifications, as scoped above · a per-request memo for `countHandoffContacts` if the extra count per page load ever shows up in Neon's metrics · `.thread`'s `60vh` is a fixed fraction and could become a flex app shell if the composer ever needs to hug the keyboard on Android · the owner console keeps the old `.nav` and gets only `flex-wrap` as a safety net, since it is a desktop tool for one person.
+**Known follow-ups (not blocking):**
+
+- Push notifications, as scoped above.
+- A per-request memo for `countHandoffContacts` if the extra count per page load ever shows up in Neon's metrics.
+- **Raise the protected layout's guard from `getSession`/`isAuthenticated` to `requireReadableSession`.** One call site. It would close the gap acknowledged in Task 3 — a removed staffer with a live cookie currently still sees the waiting *count* and the church name — for both the badge and the pre-existing `getChurchById`. Out of scope here because it is an auth change, not a layout change, and it deserves its own test.
+- `.thread` is still a fixed fraction of the viewport rather than a flex app shell. `--kb` makes the keyboard case behave; a shell would make it structural. Worth revisiting only if a third bottom-pinned element appears.
+- The owner console keeps the old `.nav` and gets only `flex-wrap` as a safety net, since it is a desktop tool for one person. Task 11 and Task 15 now sweep it for regressions, but nothing in this plan improves it — sub-44px controls found there are recorded, not fixed.
