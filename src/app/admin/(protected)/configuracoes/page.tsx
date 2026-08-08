@@ -3,6 +3,7 @@ import { getChurchById } from '@/lib/repo/church-admin';
 import { listAdmins } from '@/lib/repo/admin';
 import { TextsForm } from './TextsForm';
 import { ConnectionStatus } from './CredentialsForm';
+import { PasswordForm } from './PasswordForm';
 import { StaffManager, type StaffRow } from './StaffManager';
 
 export default async function ConfiguracoesPage() {
@@ -12,6 +13,8 @@ export default async function ConfiguracoesPage() {
 
   const admins = await listAdmins(churchId);
   const staff: StaffRow[] = admins.map((a) => ({ id: a.id, email: a.email, name: a.name, isSelf: a.id === adminUserId }));
+  // Already church-scoped by listAdmins; this is the caller's own row.
+  const me = admins.find((a) => a.id === adminUserId);
 
   const textValues: Record<string, string> = {
     name: church.name,
@@ -37,6 +40,7 @@ export default async function ConfiguracoesPage() {
       <ConnectionStatus
         connected={!!church.phoneNumberId && !!church.accessToken && !!church.appSecret}
       />
+      {me && <PasswordForm email={me.email} />}
       <StaffManager staff={staff} />
     </div>
   );
