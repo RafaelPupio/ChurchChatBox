@@ -24,6 +24,9 @@ export function threadAnchorKey(messages: readonly { id: string }[]): string | n
 
 export interface ScrollDecision {
   firstRun: boolean;
+  /** False when she is looking at a widened window: she asked for older
+   *  messages, so the newest one is not where she wants to be put. */
+  landOnOpen: boolean;
   distanceFromBottomPx: number;
 }
 
@@ -36,11 +39,13 @@ export interface ScrollDecision {
  *  it; that would happen every time the poll ticked, on the exact screen where
  *  she is trying to read something.
  *
- *  So: land on open, and after that only when she was already at the bottom. */
+ *  So: land unconditionally on open, and after that only when she was already at
+ *  the bottom. Loading older messages is neither — see landOnOpen. */
 export function shouldScrollToNewest({
   firstRun,
+  landOnOpen,
   distanceFromBottomPx,
 }: ScrollDecision): boolean {
-  if (firstRun) return true;
+  if (firstRun) return landOnOpen;
   return distanceFromBottomPx <= NEAR_BOTTOM_PX;
 }

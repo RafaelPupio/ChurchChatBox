@@ -89,6 +89,11 @@ button.danger { color: var(--danger); border-color: var(--danger); background: #
 .chip.on { background: #d1fae5; color: var(--ok); }
 .chip.off { background: #fee2e2; color: var(--danger); }
 .thread { display: flex; flex-direction: column; gap: 6px; background: #eef2f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; min-height: 180px; }
+/* The head of a truncated thread: what is being hidden, and the way back into it.
+   Centred and set apart from the bubbles so it reads as a boundary in the
+   conversation rather than as a message in it. The link inherits .btnlink, so it
+   is already a full 44px tap target. */
+.thread-older { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 6px; text-align: center; }
 .bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; line-height: 1.4; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
 .bubble.in { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
 .bubble.out { align-self: flex-end; background: #dcf8c6; color: #111; }

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireReadableSession } from '@/lib/auth/writable';
 import { effectiveStatus } from '@/lib/church-status';
@@ -5,17 +6,28 @@ import { getChurchById } from '@/lib/repo/church-admin';
 import { loadConversation } from '@/lib/repo/inbox';
 import { isReplyWindowOpen, hoursRemaining } from '@/lib/reply-window';
 import { threadAnchorKey } from '@/lib/thread-scroll';
-import { THREAD_WINDOW } from '@/lib/thread-window';
+import { requestedThreadWindow } from '@/lib/thread-window';
 import { AutoRefresh } from '../../AutoRefresh';
 import { ReplyForm } from './ReplyForm';
 import { EndHandoffButton } from './EndHandoffButton';
 import { ThreadBottom } from './ThreadBottom';
 
-export default async function ConversationPage({ params }: { params: Promise<{ contactId: string }> }) {
+export default async function ConversationPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ contactId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { contactId } = await params;
+  const { anteriores } = await searchParams;
   const { churchId } = await requireReadableSession();
 
-  const convo = await loadConversation(churchId, contactId);
+  // How far back she has asked to see. Parsed and clamped in thread-window.ts —
+  // this value reaches a SQL LIMIT, so it is never trusted from the URL.
+  const view = requestedThreadWindow(anteriores);
+
+  const convo = await loadConversation(churchId, contactId, view.limit);
   if (!convo) notFound();
 
   const now = new Date();
@@ -60,12 +72,30 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
       <div className="thread">
         {/* Said out loud, never silent: she may well be scrolling back looking for
             something older, and a thread that simply begins partway through with no
-            explanation reads as lost history. */}
+            explanation reads as lost history. Now it is also a way back INTO that
+            history — a notice that older messages exist and cannot be opened is
+            only marginally better than losing them. */}
         {convo.truncated && (
-          <span className="hint">
-            Mostrando as {THREAD_WINDOW} mensagens mais recentes desta conversa. As anteriores não
-            aparecem aqui.
-          </span>
+          <div className="thread-older">
+            <span className="hint">
+              Mostrando as {view.limit} mensagens mais recentes desta conversa.
+            </span>
+            {view.nextStep === null ? (
+              <span className="hint">Este é o máximo que o painel carrega de uma vez.</span>
+            ) : (
+              <Link
+                className="btnlink"
+                // scroll={false} is load-bearing, not tidiness: Next resets the
+                // scroll to the top of the page on navigation by default, which
+                // on a thread would throw her away from what she was reading at
+                // the exact moment she asked for more of it.
+                scroll={false}
+                href={`/admin/caixa/${contactId}?anteriores=${view.nextStep}`}
+              >
+                Carregar mensagens anteriores
+              </Link>
+            )}
+          </div>
         )}
         {convo.messages.length === 0 && <span className="hint">Sem mensagens.</span>}
         {convo.messages.map((m) => (
@@ -76,7 +106,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
         {/* The NEWEST MESSAGE'S ID, not the count. A truncated thread returns
             exactly THREAD_WINDOW rows forever, so the count stops changing the
             moment the bound bites and the anchor silently dies with it. */}
-        <ThreadBottom newestId={threadAnchorKey(convo.messages)} />
+        <ThreadBottom newestId={threadAnchorKey(convo.messages)} landOnOpen={!view.expanded} />
       </div>
 
       {/* Reply only for an active handoff: a reply to a bot-mode contact would send,
