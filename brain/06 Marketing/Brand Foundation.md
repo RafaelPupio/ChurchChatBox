@@ -60,9 +60,13 @@ Lead candidate: **Átrio**. Three checks before it becomes a decision — an INP
 
 > For **small and mid-size Brazilian churches** that answer the church WhatsApp by hand and lose the message that arrives at 22h on a Saturday, **[Marca]** is **a WhatsApp number that answers on its own** — replying to the questions that repeat, in words the church itself wrote, and going silent so a real person can take over when a real person is what's needed.
 >
-> Unlike **church-management platforms with a member app**, nothing gets installed, no account is created, no password is forgotten — the 70-year-old member who uses WhatsApp and nothing else can use it on the first try.
+> Unlike **church-management platforms with a member app**, nothing gets installed, no account is created and **the member** never has a password to forget — the 70-year-old who uses WhatsApp and nothing else can use it on the first try.
 >
-> Unlike **generic WhatsApp chatbot builders**, it arrives with the menu already built and the Portuguese already written, and the panel speaks church, not sales.
+> Unlike **generic WhatsApp chatbot builders**, there is no flow to draw and no English to translate: the bot's own Portuguese — saudação, cabeçalho do menu, "Ver opções", erro, oração, atendimento — is seeded and editable ([[Decisions Log]]), and the panel speaks church, not sales.
+
+⚠️ **"no password is forgotten" is true of members and false of staff** — see §6 on password recovery. The sentence is safe here only because the member framing is adjacent to it; do not lift the clause into pt-BR site copy on its own.
+
+⚠️ **The third paragraph used to say the product "arrives with the menu already built."** It does not: a provisioned church starts with one menu row, 🔒 Privacidade, and every content item is typed by hand afterwards. See the gap list below and §4.
 
 ### What we are explicitly not positioned as
 
@@ -71,7 +75,9 @@ Not church management. Not a member database. Not a giving platform. Not a broad
 ### The pt-BR lines
 
 - **Short line:** *A secretária da igreja, disponível às 22h de terça.*
-- **One sentence:** *É um número de WhatsApp da igreja que responde sozinho as perguntas de sempre — horários, endereço, agenda, ofertas — com as palavras que a própria igreja escreveu, e chama uma pessoa quando é uma pessoa que precisa atender.*
+- **One sentence:** *É um número de WhatsApp da igreja que responde sozinho as perguntas de sempre, com as palavras que a própria igreja escreveu — e, quando é uma pessoa que precisa atender, ele para de responder e a conversa fica guardada na Caixa de Entrada do painel até alguém da igreja abrir.*
+
+  Two things were cut from this line and must not come back. **"chama uma pessoa"** — nothing calls anyone; there are no notifications (§6), and the conversation sits in an inbox someone has to open, which is why the honest ending names the opening. **"horários, endereço, agenda, ofertas"** — those four are rows in a local development fixture, not in any real church's menu; naming them implies the product ships with them written.
 - **Alternate short line:** *A pergunta de sempre, respondida na hora, onde o povo já está.*
 
 ### The four beats, in this order, in any first-contact asset
@@ -88,6 +94,7 @@ Beat 2 sits second **on purpose**. The chip is the hardest objection in the sale
 The statement above describes the product **as designed**, and every public asset derived from it will be read as a description of the product **as it runs today**. Those are not the same thing yet, per [[Whats Left]]:
 
 - **The outbound half has never succeeded once.** The inbound half is proven against live infrastructure — a member's message is received, verified, deduped and recorded. The reply has never actually left, because it needs real Meta credentials. "Responde sozinho" is therefore an unexercised claim until one real end-to-end conversation happens.
+- **The menu arrives empty.** `provisionChurch()` creates a church with exactly **one** menu row — 🔒 Privacidade — and nine free slots under WhatsApp's 10-row ceiling ([[Whats Left]]). Every content item is typed by hand afterwards, through a menu editor **never driven in a browser** ([[Whats Left]]). What is genuinely pre-written is the bot's own voice: greeting, menu header, button label, fallback, unsupported-media, error, prayer and handoff strings, all as editable seed rows ([[Decisions Log]]). Claim that, not a ready-made menu.
 - **Caixa de Entrada and Pedidos de Oração are built but never exercised** — no real conversation has landed in either.
 - **Meta business verification is a blocker** for a real chip and for production. Do not promise an install date, a "em uma semana já está no ar", or any onboarding timeline that depends on it.
 
@@ -157,7 +164,7 @@ The panel is operated by a volunteer who is afraid of breaking something.
 
 Note the impersonal *"não deu para salvar"* rather than *"não consegui salvar"*. The written first person singular belongs to **Rafael** (see the register table); the panel is not Rafael, and a system failure narrated in his voice is ventriloquism. The panel states facts calmly and never blames the volunteer.
 
-> **Billing copy does not exist yet and must not be written from imagination.** Stripe is specced, not built ([[Whats Left]]) — there is no automatic `past_due`, no grace period, no automatic suspension and no reactivation. A previous version of this note carried an approved panel string promising *"o robô continua respondendo por mais 7 dias"* and *"nada é apagado em nenhum momento"*; both described a subsystem that does not run, and the second was an unbounded retention promise that also contradicts the 12-month deletion the 🔒 Privacidade item already promises members. **Both are withdrawn.** When billing exists, write the copy against the shipped behaviour and scope any retention statement to the cause: *"nada é apagado por causa da cobrança"*, never *"nada é apagado"*.
+> **Billing copy does not exist yet and must not be written from imagination.** Stripe is specced, not built ([[Whats Left]]) — there is no automatic `past_due`, no grace period, no automatic suspension and no reactivation. A previous version of this note carried an approved panel string promising *"o robô continua respondendo por mais 7 dias"* and *"nada é apagado em nenhum momento"*; both described a subsystem that does not run, and the second was an unbounded retention promise nothing in the product could honour — no purge exists ([[Whats Left]]). **Both are withdrawn.** When billing exists, write the copy against the shipped behaviour and scope any retention statement to the cause: *"nada é apagado por causa da cobrança"*, never *"nada é apagado"*.
 
 ### Religious language: use the vocabulary, never borrow the authority
 
@@ -230,11 +237,13 @@ Both faces must be free and must carry full Latin-Extended — **ã õ ç é ê 
 
 ### Imagery
 
-- **The hero image is a real WhatsApp conversation on a phone.** It is the product, it is instantly legible to a non-technical pastor, and it costs nothing. Nothing beats it — not an illustration, not a laptop mockup.
+- **The hero image is a WhatsApp conversation on a phone.** It is the product, it is instantly legible to a non-technical pastor, and it costs nothing. Nothing beats it — not an illustration, not a laptop mockup. ⚠️ **It cannot be a photograph of the bot working, yet.** No outbound message has ever succeeded ([[Whats Left]]), so a genuine screenshot of the bot replying does not exist today; until one does, any hero is a constructed mock-up with demo data, and pre-flight 9 governs what it may be captioned to claim.
 - **Second tier: Brazilian church spaces at rest** — empty plastic chairs, the bulletin board, the secretaria's desk, the sound table, a ceiling fan, tiled floor. Rafael should shoot these on a phone at a real church. American stock photography of churches reads as fake to a Brazilian pastor within a second.
 - No crowds, no worship-hands, no pastor-in-a-photo (it implies he is a customer — see §5).
-- **Icons:** monoline, 1.5px stroke, rounded joins. But where the product already uses an emoji, **show the emoji**, don't draw a competing icon. The marketing must look like the screenshots. The nine seed emoji are ⛪ 📍 📅 🗓️ 🔥 👥 💚 🙏 💬 ([[Menu Inventory]]); the tenth, 🔒 Privacidade, is **not in that note** — it is created by `provisionChurch()` ([[Whats Left]]).
-- **The menu a real church actually starts with has 10 rows, not 9 — the WhatsApp ceiling, with no slot left.** [[Menu Inventory]] counts 9 and says one slot remains; provisioning adds 🔒 Privacidade, making 10. Where the two disagree, [[Whats Left]] wins, because it records what ran against the live database. Marketing screenshots depend on this count, and so does any copy suggesting a church can add an item — **it cannot, without hiding one first.** Never write *"é só adicionar o que a sua igreja precisar"*. [[Menu Inventory]] needs updating; that is not this note's edit to make.
+- **Icons:** monoline, 1.5px stroke, rounded joins. But where the product already uses an emoji, **show the emoji**, don't draw a competing icon. The marketing must look like the screenshots. The only emoji a real church is guaranteed to have is **🔒** — read the next bullet before putting any other one in an asset.
+- **A real church starts with one menu row, not nine and not ten.** `provisionChurch()` creates the church, its admin and the single 🔒 Privacidade item ([[Whats Left]]), leaving **nine free slots** under WhatsApp's 10-row list ceiling. The nine-item menu in [[Menu Inventory]] — ⛪ 📍 📅 🗓️ 🔥 👥 💚 🙏 💬 — is `src/db/seed.ts`, labelled in the file itself as a local development fixture that must never run against production. It is a *plausible* menu, not a shipped one. Where the two notes disagree, [[Whats Left]] wins, because it records what ran against the live database.
+
+  Three consequences for marketing. **(a)** A screenshot of a full menu is a **mock-up of a configured church** and must be captioned as one, never as what a church sees on day one. **(b)** The previous version of this note said the opposite — 10 rows, no slot free, "never write *é só adicionar o que a sua igreja precisar*" — and that was **false**; it forbade the one honest sentence and mandated a screenshot no church could produce. **(c)** The correction does not license the sentence either: adding items runs through a menu editor **never driven in a browser** ([[Whats Left]]), so it stays out of any asset shipping before someone has actually used it. [[Menu Inventory]]'s "we're at 9 — exactly one slot left" describes the fixture, not a church, and needs correcting there; that is not this note's edit to make.
 - **The cross:** keep it out of the vendor's mark entirely. We stand next to many denominations and are not a ministry. Where a cross appears inside the product it is because the church put it there.
 
 ### Logo and layout
@@ -277,7 +286,9 @@ Forbidden variants: *100% compatível com a LGPD* · *em conformidade com a LGPD
 
 **This note's version supersedes every other.** [[Sales Kit]] carries a longer variant of the same paragraph that adds *"esse isolamento é testado por uma suíte que ataca o próprio sistema"*. That clause is dropped here on purpose: the isolation is proven **in tests and against the live database** ([[Whats Left]], [[Multi-Tenancy]]) — not in production with real traffic, because there is no production traffic. Said aloud to a congregation's lawyer, "testado" invites the follow-up "testado onde?", and the honest answer is weaker than the sentence sounded. The version above claims only the observable fact (*cada igreja enxerga só os dados dela*). The Sales Kit variant must be replaced with this one when that note is next revised; it is not this note's edit to make.
 
-**One live gap to name if pressed, never to volunteer as if solved:** the 🔒 Privacidade item already tells the member his data is kept for 12 months, and the Art. 18 tooling that would actually delete it **is not built** ([[Whats Left]], [[Multi-Tenancy]]). Do not write copy that implies deletion, export or access requests work today. If a pastor asks, the answer is that it is a manual process by hand, today.
+**One live gap to name if pressed, never to volunteer as if solved:** the seeded 🔒 Privacidade text tells the member he may ask for access, correction or deletion **by contacting the church's secretaria** — and the Art. 18 tooling that would carry any of that out **is not built** ([[Whats Left]], [[Multi-Tenancy]]). Today it is a manual job, by hand. Do not write copy implying deletion, export or access requests are automated.
+
+⚠️ **A previous version of this note said that item promises deletion after 12 months. It does not, and an asset repeating that would put a false retention promise in front of a church's lawyer.** The 12-month sentence was removed from the product on 2026-08-08, precisely because nothing deleted anything ([[Decisions Log]]); it returns only in the commit that ships the purge. Never restore the figure to an asset while it is absent from the product — check the live seed text, not this note's memory of it.
 
 ---
 
@@ -293,7 +304,7 @@ Forbidden variants: *100% compatível com a LGPD* · *em conformidade com a LGPD
 - **No notifications of any kind exist.** Never write or imply that staff are alerted when a member asks for a person or sends a prayer request. Someone has to open the panel. This is the product's most serious operational gap and copy must not paper over it.
 - **Nothing watches the bot.** There is no monitoring and no alerting: if the webhook starts failing at 2am, nobody is told, and the bot is silently dead until a member complains to the church ([[Whats Left]]). Never write *"a gente monitora"*, *"funciona 24 horas por dia"* as a reliability claim, or any uptime figure. "Responde a qualquer hora" describes the menu, which is honest; "está sempre no ar" is a claim nobody is in a position to make.
 - No broadcasts / avisos. No AI. No member app. No membership, giving or event registration. No multi-language. No analytics — nobody can tell a church which menu items its members actually use.
-- **No password reset, and no way to change your own password — not just no self-service reset.** A secretary who forgets hers messages Rafael, who runs a script by hand, and every church's first admin starts on a password the vendor generated and she cannot change ([[Whats Left]]). Do not show a "esqueci minha senha" link in a demo or a screenshot; there isn't one. If it comes up, say what actually happens.
+- **Password recovery: describe only what has shipped, and re-read the source before you do.** [[Whats Left]] records no password reset and no way to change your own password: a locked-out secretary messages Rafael, who runs a script by hand, and every church's first admin starts on a vendor-generated password. **This area is being actively worked on**, so this note may be stale on the day you use it — check [[Whats Left]] rather than quoting the line above. The rule holds either way: never show a recovery flow in a demo or a screenshot before you have used it yourself, and if a locked-out secretary still has to message Rafael, say so plainly.
 - **No onboarding flow.** A new admin logs in to a bare menu with no guidance. Do not describe a guided setup, a wizard, or a first-run tour.
 - No pricing. **The price is not set.** Sell the structure (mensalidade fixa por igreja, sem cobrança por mensagem, sem cobrança que cresce com o número de membros) and say plainly that the number isn't closed. Never invent one, never say *grátis* or *teste grátis* until a trial is an actual decision.
 - **No billing behaviour of any kind.** Stripe is specced, not built. The grace period, the automatic suspension and the reactivation-on-retry all exist on paper only — never describe them as how billing works, in copy, in a demo, or in a proposal.
@@ -303,10 +314,10 @@ Forbidden variants: *100% compatível com a LGPD* · *em conformidade com a LGPD
 
 | Flow | Method | Where it shows |
 |---|---|---|
-| **Member → church** (ofertas) | the church's **PIX key**, plus bank details | inside the 💚 Ofertas menu item, visible in every hero screenshot ([[Menu Inventory]]) |
+| **Member → church** (ofertas) | the church's **PIX key**, plus bank details | inside an Ofertas menu item **the church creates and fills in itself** — not seeded, but the item most demos will show |
 | **Church → Rafael** (mensalidade) | **card only.** No PIX, no boleto | the proposal, the invoice |
 
-So the product **displays PIX and does not accept PIX**. Nobody is deceived by this, but discovering it unassisted looks like a hidden term. The rule: whoever is presenting names it before the pastor does, in the same breath as the card decision, and names the asymmetry honestly — **this decision optimises for the vendor**, because a card is what makes the lifecycle automatic and PIX would put Rafael in the loop for every renewal ([[Decisions Log]]). Expect to lose churches to it; many have no card on the CNPJ. Do not argue. And never suggest the pastor's personal card as the workaround — that creates the exact CNPJ-vs-pessoa-física mismatch the nota fiscal exists to fix.
+So the product **displays PIX and does not accept PIX**. Nobody is deceived by this, but discovering it unassisted looks like a hidden term. The rule: whoever is presenting names it before the pastor does, in the same breath as the card decision, and names the asymmetry honestly — **this decision optimises for the vendor**, because a card is what **would make** the lifecycle automatic once billing exists — none of it runs today, so it is described in the conditional, never the present — and PIX would put Rafael in the loop for every renewal ([[Decisions Log]]). Expect to lose churches to it; many have no card on the CNPJ. Do not argue. And never suggest the pastor's personal card as the workaround — that creates the exact CNPJ-vs-pessoa-física mismatch the nota fiscal exists to fix.
 
 **No screenshots containing real member data.** Ever. Not a real phone number, not a real prayer request, not a real name — a church's membership is sensitive data under Art. 5 II and our own marketing is not exempt. Demo data only, and it should look like demo data.
 
@@ -328,15 +339,37 @@ So the product **displays PIX and does not accept PIX**. Nobody is deceived by t
 8. Is everything a church reads in pt-BR?
 9. **Has one real end-to-end conversation succeeded yet?** The outbound send has never worked once ([[Whats Left]]). Until it does, no public asset may claim the bot answers.
 10. **Does the asset mention nota fiscal?** A CNPJ buyer's treasurer will ask. Use the §5 sentence; never imply it exists.
-11. **Does a screenshot show the 💚 Ofertas PIX key while the asset asks for card payment?** Then the presenter names the collision first — see §6.
-12. **Does anything imply a notification, an alert, a password reset, a password change, a guided setup, or billing behaviour?** None of these exist. → remove.
+11. **Does a screenshot or demo show an Ofertas item with a PIX key while the asset asks for card payment?** Then the presenter names the collision first — see §6.
+12. **Does anything imply a notification, an alert, a guided setup, or billing behaviour?** None of these exist. → remove. **Anything about password reset or password change** → do not answer from this note; check [[Whats Left]], and describe only what has actually shipped.
 13. **Do the colours used carry text at AA on Papel escuro `#EFE8DE`, not just on Papel?** Cards are the worst case.
+14. **Does any screenshot or sentence imply the church opens the panel to a ready-made menu?** It opens to one row, 🔒 Privacidade. Label a fuller menu as a mock-up of a configured church, and check the emoji you show against §4, not against [[Menu Inventory]].
 
 ---
 
 ## Revisões
 
-**2026-08-08 — revision against `critique-mkt-brand.md`.** Findings closed, and what the source of truth changed on top of them.
+**2026-08-08 (second pass) — revision against `recheck-mkt-brand.md`.** The re-check exists because the first pass closed ten findings and **introduced a new false claim while doing it**. All three of its blockers were verified independently against [[Whats Left]] and the code, and all three are real.
+
+| # | Finding | Verified against | What changed |
+|---|---|---|---|
+| 1 | **The 10-row menu claim was false** — introduced by the previous pass | [[Whats Left]] §❌ *"a bare menu with one item"*; `provisionChurch()` creates church + admin + the single 🔒 item; `src/db/seed.ts` carries the comment *"LOCAL DEVELOPMENT FIXTURE ONLY — never run this against production"* | §4 rewritten: a real church starts at **1 row, 9 slots free**. The nine-emoji menu is the dev fixture. The derived ban on *"é só adicionar o que a sua igreja precisar"* is withdrawn as backwards — **and not replaced with permission to write it**, because menu editing was never driven in a browser. The retraction is stated in the note so the error is not silently laundered. |
+| 2 | **"arrives with the menu already built and the Portuguese already written"** (§2) | `src/lib/church-defaults.ts` seeds system strings only; `PRIVACY_ITEM` is the sole seeded row | Split into the true half and the false half. The bot's own Portuguese **is** seeded and editable ([[Decisions Log]]) — that claim stays. "Menu already built" is cut, and §2's gap list now carries the empty menu, plus pre-flight 14. |
+| 3 | **"chama uma pessoa"** in the shipping pt-BR sentence | [[Whats Left]] §❌3; the note's own §6 and pre-flight 12 | Rewritten to what happens: the bot goes silent and the conversation waits in the Caixa de Entrada **until someone opens the panel**. The four named menu items were cut with it; both cuts are annotated in place so they cannot drift back. |
+| 4 | Minor — *"a card is what makes the lifecycle automatic"*, present tense | Stripe is specced, not built | → *"would make … none of it runs today"*. |
+| 5 | Minor — hero image mandated as *"a real WhatsApp conversation"* | No outbound send has ever succeeded | Kept as direction, gated: no honest photograph of the bot replying exists yet; any hero today is a demo-data mock-up under pre-flight 9. |
+| 6 | Minor — *"no password is forgotten"* true of members, false of staff | — | Scoped to **the member** in the sentence, with a ⚠️ forbidding the clause from being lifted alone into pt-BR copy. |
+
+**Found in this pass, missed by both the critique and the re-check — and the most dangerous single line in the note:** §5 claimed *"the 🔒 Privacidade item already tells the member his data is kept for 12 months."* **It does not.** [[Decisions Log]] 2026-08-08 records that sentence being removed from the product because nothing deleted anything, and `church-defaults.ts` now says *"enquanto a igreja precisar"* with a comment forbidding its return until the purge ships. The note was inviting an asset to publish a retention promise the product had already retracted. Corrected in §5, and the stale figure in §3's billing paragraph corrected with it.
+
+**Where the re-check and the source of truth disagree:** they do not, on anything material — every claim it made was confirmed. The one place it slightly overreaches is finding 1's *"forbids the one true sentence"*: *"é só adicionar o que a sua igreja precisar"* is now **permitted by the row count and still blocked by the editor never having been exercised**, so the previous ban was wrong for the wrong reason rather than simply wrong. §4 records both halves.
+
+**Departures from the re-check's suggested fixes:** none of its wording was adopted verbatim where doing so would have traded one claim for another. Nothing was added to this note that the product does not do.
+
+**Still not fixed here, deliberately, and still not lost:** [[Menu Inventory]]'s *"we're at 9 — exactly one slot left"* (it describes the fixture, not a church), and [[Sales Kit]]'s longer LGPD paragraph. Both are sibling notes under concurrent revision.
+
+---
+
+**2026-08-08 (first pass) — revision against `critique-mkt-brand.md`.** Findings closed, and what the source of truth changed on top of them. ⚠️ **Row "Minor" below is retracted** — see the second pass.
 
 | # | Finding | What changed |
 |---|---|---|
@@ -350,13 +383,13 @@ So the product **displays PIX and does not accept PIX**. Nobody is deceived by t
 | 8 | "Seven words:" labelling a nine-word line | Label dropped; the line is unchanged. |
 | 9 | *"converse com a diretoria"* assumes Assembleia governance | → *"converse com quem decide junto com o senhor"*, with the denominational note. |
 | 10 | Panel speaking in the first person | *"Não consegui salvar"* → *"Não deu para salvar agora"*, plus the rule that the written first person belongs to Rafael and the panel is not Rafael. |
-| Minor | §4 cited [[Menu Inventory]] for the 🔒 emoji, which that note doesn't list | Citation corrected, and the underlying discrepancy surfaced: a provisioned church starts at **10 rows — the WhatsApp ceiling, zero slots free**, not 9 with one free. Copy may no longer suggest a church can just add an item. |
+| Minor | §4 cited [[Menu Inventory]] for the 🔒 emoji, which that note doesn't list | Citation corrected. ⚠️ **RETRACTED:** this row then concluded a provisioned church starts at *"10 rows — the WhatsApp ceiling, zero slots free"* and banned copy suggesting a church can add an item. **Both were false** — it starts at 1 row with 9 free. Corrected in the second pass; kept here so the error stays visible rather than disappearing from the record. |
 | Honesty | §1.2 competitor claim asserted as fact | Marked ⚠️ **UNVERIFIED** with the searches to run and where to record the URL + date. Not deleted — the naming recommendation partly rests on it, so the dependency stays visible. Reasons 1, 3 and 4 stand without it. |
 
 **Added beyond the critique, from [[Whats Left]] — all removals of claims, no new promises:**
 - §2 now states that the **outbound half has never succeeded once**, that Caixa de Entrada and Pedidos de Oração are built but unexercised, and that **Meta business verification blocks production** — so no asset may claim the bot answers before one real send works (pre-flight 9).
 - §6 now bans claims about **monitoring/alerting** (none exists — a 2am failure is silent), corrects "no self-service password reset" to **no password change at all**, and adds **no onboarding flow** and **no billing behaviour**.
-- §5 names the live gap between the 12-month deletion the 🔒 Privacidade item promises members and the Art. 18 tooling that is not built.
+- §5 names the live gap around the Art. 18 tooling that is not built. ⚠️ **PARTLY RETRACTED:** this pass described the gap as sitting against *"the 12-month deletion the 🔒 Privacidade item promises members"*. That item promises no such thing — the sentence had already been removed from the product. Corrected in the second pass.
 
 **Where the critique and the source of truth disagreed, the source of truth won** — finding 4 is the case, and it is recorded above as such. Nothing in the critique was found to be wrong about the code; the contrast maths it asserted was recomputed and matched to 2dp.
 

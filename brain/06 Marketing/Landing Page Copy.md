@@ -21,7 +21,8 @@ Breaking any of these makes the asset unusable, not just weaker.
 5. **No feature that isn't built** is described in the present tense. Everything on the not-built list
    is labelled out loud, on the page, in the reader's words. As of 2026-08-08 that list is:
    **notificação, monitoramento/alerta, troca e recuperação de senha, cobrança (Stripe), nota fiscal,
-   exportar/apagar dados a pedido, expurgo automático, submenus, offboarding de igreja.**
+   exportar/apagar dados a pedido, expurgo automático, submenus, offboarding de igreja, redesenho mobile
+   do painel.**
    ([[Whats Left]] — re-read it before adding any capability sentence to this page.)
 6. **No price.** The CTA is a conversation, which is what makes the missing price survivable.
 7. **Every external fact carries a source and a date read, or it is marked unverified.** Meta's pricing,
@@ -205,7 +206,8 @@ reader it is a problem before they have decided whether it is one.
 
 > ## O menu é seu — inclusive os nomes
 >
-> O robô responde uma lista de assuntos que a sua igreja define. Um menu comum começa assim:
+> O robô responde uma lista de assuntos que a sua igreja define. Um menu montado numa conversa comigo
+> costuma ficar parecido com este:
 >
 > ⛪ Horários de Culto · 📍 Endereço e Contato · 📅 Agenda de Eventos · 🗓️ Calendário do Mês (uma imagem
 > que vocês trocam todo mês) · 🔥 O seu grupo de jovens, com o nome que ele tem · 👥 Os seus grupos de
@@ -216,9 +218,15 @@ reader it is a problem before they have decided whether it is one.
 > só existe em dezembro, isso vira um item do menu — criado pela secretaria, em português, sem chamar
 > ninguém. E o item de dezembro pode dormir o ano inteiro sem perder o texto.
 >
-> **Cabe até 10 assuntos.** Esse limite é do próprio WhatsApp, não meu — a lista que aparece para o
-> membro é a lista nativa do aplicativo, e ela para em 10. Um desses lugares já é fixo: o item de
-> Privacidade, que explica ao membro o que é guardado.
+> **Cabem 10 assuntos ao todo.** Esse limite é do próprio WhatsApp, não meu — a lista que aparece para o
+> membro é a lista nativa do aplicativo, e ela para em 10. Um desses dez lugares já vem ocupado pelo item
+> de Privacidade, que explica ao membro o que é guardado — e ele é o único item que já existe no dia em
+> que a igreja entra; todo o resto a gente escreve junto no passo 2.
+>
+> Faça a conta comigo, porque ela importa na hora de montar o seu: o exemplo acima tem nove assuntos, e
+> com a Privacidade ele já ocupa os dez. Um menu assim está cheio — para entrar um assunto novo, outro
+> precisa sair ou ficar oculto. Por isso a gente escolhe junto o que entra, em vez de você receber uma
+> lista pronta e descobrir depois que não cabe mais nada.
 
 **Visual**
 Two columns. Left: the menu rendered as WhatsApp's own list UI (illustrated is fine here — it is
@@ -369,8 +377,9 @@ Two phone silhouettes side by side, labelled `O número de sempre — continua i
 `O número do robô — novo`. An arrow between them is wrong; they are parallel, not sequential. Use a
 calm background tint, not an alert colour. This section should read grown-up, not scary.
 
-> ⚠️ **Two external facts here have no recorded source:** the permanence of the Cloud API migration and
-> the exact shape of Meta's business verification. Both are load-bearing for the whole section. See
+> ⚠️ **Four external facts here have no recorded source:** the permanence of the Cloud API migration, the
+> exact shape of Meta's business verification, the confirmation code arriving on the chip, and the claim
+> that the bot does not consume the chip's credit. All four are load-bearing for the section. See
 > *Fatos externos a verificar* before publishing. Business verification is also **Rafael's own current
 > blocker** ([[Whats Left]] — "Blocked on Rafael"), which is why the copy never implies it is quick.
 
@@ -425,9 +434,9 @@ uncomfortable things" cannot survive a pastor finding one I did not tell him.
 > **"E se a secretária esquecer a senha do painel?"**
 > Ela me chama e eu troco na mão. Hoje o painel **não tem "esqueci minha senha" e não deixa ninguém
 > trocar a própria senha**: quem cria a conta é quem define a senha daquela pessoa, e ela fica assim até
-> eu mudar. Para uma igreja que quer ser autossuficiente, isso é ruim, e eu sei. É a terceira coisa da
-> lista, junto com as duas de cima. Fora a senha, todo o resto — texto, menu, horário, saudação — a sua
-> equipe muda sozinha, sem mim.
+> eu mudar. Para uma igreja que quer ser autossuficiente, isso é ruim, e eu sei — está junto com as duas
+> respostas de cima nas primeiras coisas da minha lista de construção. Fora a senha, todo o resto —
+> texto, menu, horário, saudação — a sua equipe muda sozinha, sem mim.
 
 **Visual**
 Q&A blocks, question in bold at a larger size, answer in body. No accordions here — these must be
@@ -437,7 +446,11 @@ finds them *after* deciding will distrust everything above them.
 
 > ⚠️ These three answers are load-bearing and expire the moment the features ship. When notification,
 > monitoring, or password reset is built, this section is edited **the same day** — an admission that is
-> no longer true is a different kind of lie.
+> no longer true is a different kind of lie. **The password answer is the one at risk right now:** as of
+> 2026-08-08 [[Whats Left]] still lists password reset as missing (❌ #1) and that is what this copy
+> follows, but it is under active construction. Re-read [[Whats Left]] the day this page is published;
+> if reset has landed, this answer, FAQ `#equipe` and FAQ `#textos` all change together, and none of the
+> three may be edited without the other two.
 
 ---
 
@@ -459,7 +472,10 @@ refusal is itself the strongest line on the page ([[Decisions Log]], [[Multi-Ten
 >
 > **O membro é avisado, em português, dentro do próprio menu.** Existe um item 🔒 Privacidade que conta a
 > ele o que é guardado, para quê, por quanto tempo e com quem falar. Ele não precisa procurar isso num
-> site — está na mesma lista dos horários de culto.
+> site — está na mesma lista dos horários de culto. E ele não promete um prazo que o sistema ainda não
+> cumpre: enquanto a limpeza automática não existir, o texto diz que os dados ficam enquanto a igreja
+> precisar deles, e que o membro pode pedir a exclusão a qualquer momento — pedido que hoje passa por
+> mim, na mão.
 >
 > **Uma igreja nunca enxerga os dados de outra.** Isso não é promessa: é uma bateria de testes
 > automáticos que tenta, de propósito, ler os dados de uma igreja usando a identidade de outra, e
@@ -482,6 +498,14 @@ refusal is itself the strongest line on the page ([[Decisions Log]], [[Multi-Ten
 Single column, narrower measure than the rest of the page (~60ch), no icons, no shield graphics, no
 padlock illustrations. Security iconography reads as marketing here and undercuts the one section whose
 entire value is that it does not sound like marketing. Plain text, generous line height.
+
+> ⚠️ **Do not restore a retention period here, and do not delete "por quanto tempo".** The re-check of
+> 2026-08-08 called this line blocking on the grounds that the seeded 🔒 Privacidade text promises
+> *"as conversas são apagadas após 12 meses"* while no purge exists. **That is out of date.**
+> `src/lib/church-defaults.ts` now reads *"enquanto a igreja precisar deles para te atender"*, with a
+> comment forbidding the 12-month sentence until the purge ships, and [[Decisions Log]] records the
+> change on 2026-08-08. So the page is accurate and the fix has already landed in the product. The
+> sentence above now says which of the two it is, so the next reader does not have to open the code.
 
 > ⚠️ The isolation line used to say the suite "roda a cada mudança no sistema", which reads as
 > continuous integration. **There is no CI in this repo** (no `.github/workflows`); the suites run when
@@ -590,12 +614,13 @@ treasurer without Rafael in the thread.
 > Não. É mensal. Se parar de fazer sentido, você para.
 >
 > **Como se paga?** `#pagamento`
-> Por cartão, numa mensalidade automática — e aqui eu preciso ser exato: **essa cobrança ainda não está
-> construída.** Está desenhada e é um dos próximos blocos de trabalho; hoje, na prática, não existe
-> cobrança nenhuma no sistema. Quando existir, será cartão. Sei que a maioria das igrejas prefere PIX ou
-> boleto, e essa é uma escolha que eu fiz para o serviço se manter sozinho, sem ninguém precisar lembrar
-> de pagar todo mês. Se a sua tesouraria só trabalha com PIX ou boleto, me fala na conversa — prefiro
-> saber disso no começo. Não vou fingir que não é um incômodo.
+> Preciso ser exato antes de responder: **não existe cobrança nenhuma construída no sistema hoje.** O que
+> existe é o desenho, e é um dos próximos blocos de trabalho. No desenho de hoje são **cartão ou boleto**
+> — o cartão porque ele deixa a mensalidade correr sozinha, e o boleto porque muita igreja pequena
+> simplesmente não tem cartão no CNPJ, e eu não vou desenhar um produto que exclui essas. **PIX não
+> entra**, e sobre isso eu não tenho uma data para te dar. Se a sua tesouraria só trabalha com PIX, me
+> fala logo na conversa — prefiro saber disso no começo a descobrir na hora de cobrar. E enquanto a
+> cobrança não existir, nada disso te afeta: as primeiras igrejas não pagam.
 >
 > **Vocês emitem nota fiscal? Meu contador vai pedir.** `#nota-fiscal`
 > Ainda não, e sei exatamente o que isso significa: sem nota, a sua tesouraria não consegue lançar a
@@ -608,11 +633,15 @@ treasurer without Rafael in the thread.
 > aqui é como está desenhado, não como está funcionando. O desenho é: o robô não desliga no mesmo dia,
 > são sete dias de prazo, e depois disso ele fica em silêncio — mas **nada é apagado**: as mensagens
 > continuam sendo registradas, o painel continua legível, e no dia em que o pagamento entrar volta tudo
-> como estava, com a caixa de entrada certa. Se alguma coisa mudar quando isso for construído de fato,
-> esta página muda junto.
+> como estava, com a caixa de entrada certa. Uma parte desse desenho depende de mim e não de uma máquina:
+> um boleto que não é pago não é recobrado sozinho, então quem vai precisar perceber o atraso sou eu. Se
+> alguma coisa mudar quando isso for construído de fato, esta página muda junto.
 >
 > **Precisa de computador? A secretária consegue usar pelo celular?** `#celular`
-> O painel abre no navegador, no celular ou no computador. Não instala nada.
+> O painel abre no navegador, no celular ou no computador. Não instala nada. Sendo honesto sobre o
+> tamanho disso: ele funciona no celular — os botões são feitos para o dedo e nada fica escondido fora da
+> tela — mas ele ainda não foi *redesenhado* para o celular. Dá para trabalhar; não é o app bonitinho que
+> você imagina quando eu digo "abre no celular". Isso está na lista.
 >
 > **Quantas pessoas da igreja podem usar o painel?** `#equipe`
 > Quantas vocês quiserem. Cada uma com o login dela. Quando alguém sai da equipe, vocês removem a conta
@@ -659,6 +688,12 @@ shown after it** (`#nota-fiscal`, `#atraso`, `#equipe`…), so Rafael can send a
 answer inside a WhatsApp message. The slugs are part of the spec, not decoration — they must not be
 renamed once a link has been sent.
 
+> ⚠️ **`#preco`'s commercial terms are UNVERIFIED, exactly like `#fidelidade`.** "Mensalidade fixa por
+> igreja, não por mensagem, não por membro, não sobe quando a igreja cresce, sem taxa de instalação" is
+> nowhere in [[Decisions Log]] — it is a pricing *shape* only Rafael can set. No invented number appears,
+> so the no-price rule holds; rule 7 does not. **Decide and record it before publishing**, or cut the
+> sentence and leave only "o valor eu fecho na conversa".
+
 > ⚠️ **"Tem fidelidade? Não. É mensal." is UNVERIFIED.** It is not in [[Decisions Log]] and it is not a
 > code fact — it is a commercial policy only Rafael can set. **Rafael: decide this and record it in the
 > Decisions Log before publishing.** If it is not decided by publication day, cut the question rather
@@ -689,7 +724,7 @@ there is no Ltda.
 ## Fatos externos a verificar antes de publicar
 
 Rule 7 of this page: an external fact carries a source URL and the date it was read, or it is marked
-unverified here. **None of the four below has a recorded source in this brain yet.** They are not
+unverified here. **None of the seven below has a recorded source in this brain yet.** They are not
 deleted, because each one is load-bearing — deleting them would hide the dependency.
 
 | Claim on the page | Where | Status |
@@ -698,6 +733,9 @@ deleted, because each one is load-bearing — deleting them would hide the depen
 | Um número na Cloud API para de funcionar no app do WhatsApp, para sempre | §7, FAQ `#atendimento` | **UNVERIFIED source**, though it is the basis of the whole chip decision ([[Decisions Log]]). Cite Meta's own documentation with URL + date. This is the page's most consequential factual claim. |
 | A lista interativa do WhatsApp para em 10 linhas | §4, FAQ `#dez-assuntos` | **UNVERIFIED source** — enforced in code (`menu-admin-rules.ts`) and recorded in [[Menu Inventory]], but the number is Meta's. Cite the docs page with URL + date. |
 | Verificação de negócio é exigida e leva dias | §3, §7, FAQ `#prazo` | **UNVERIFIED source** — recorded in [[Meta WhatsApp Setup]] from experience, not from a cited page. Cite Meta's business-verification docs with URL + date; never state a specific number of days. |
+| A automação não oficial é o motivo *mais comum* de um número ser bloqueado | §5 bloco 6 | **UNVERIFIED** — added 2026-08-08. [[Decisions Log]] says Baileys violates WhatsApp's terms and can get a number banned, which supports "é um motivo", not "é o motivo mais comum". Either cite a source with URL + date, or narrow the copy to *"o motivo que eu vejo com mais frequência por aí"* — a statement about Rafael's observation, not about the world. |
+| O chip precisa continuar ativo porque é nele que chega o código de confirmação | §7 | **UNVERIFIED** — added 2026-08-08 under Revisão 1 item 8. True of the registration/re-registration flow as Rafael understands it, never verified against Meta's own docs, and never actually performed (no Meta app exists — [[Whats Left]]). Cite the Cloud API number-registration docs with URL + date, **or** verify it in practice during the first real onboarding and record that instead. |
+| Quem manda e recebe as mensagens é a Meta, não o chip — o robô não gasta o crédito | §7 | **UNVERIFIED** — added 2026-08-08. It follows from how the Cloud API works, but it is a promise about the church's phone bill and no source is recorded. Cite Meta's docs with URL + date, or soften to what is certain: as mensagens trafegam pela API da Meta, e a operadora quem sabe é ela. |
 
 Pattern to copy: the nota fiscal spec, which sources every external assertion with a URL and a date read
 and carries a staleness caveat. Do the same here before this page goes public.
@@ -721,6 +759,11 @@ Kept here so a future edit does not "helpfully" add them back:
 - No claim that the church holds or manages its own Meta credentials — Rafael operates them today.
 - No promise of a live end-to-end bot demo until an outbound message has actually succeeded.
 - No promise of support hours, SLA, or response time — including soft ones like "no mesmo dia".
+- No polished mobile panel. The panel is usable on a phone (44px controls, nothing pushed off a 375px
+  screen) and the page says exactly that much; the mobile *redesign* is requested and not started.
+- No PIX for the church's own mensalidade, and no date for one.
+- No menu that starts full of the church's own assuntos: a new church starts with the 🔒 Privacidade item
+  alone, and the rest is written together.
 - No logo wall, no "usado por", no invented pastor quote.
 - No comparison table naming a competitor. Rafael would lose it: they have more features and
   published prices. The page competes on trust and channel, not on a checklist.
@@ -740,8 +783,13 @@ Kept here so a future edit does not "helpfully" add them back:
 - **The page now confesses three unbuilt things in §8 (notificação, monitoramento, senha).** That is
   correct today and wrong the moment they ship. Whoever builds them edits §8, §6 and §12 in the same
   commit.
-- **Four external facts still have no source** — see the table above. Publishing before they are sourced
+- **Seven external facts still have no source** — see the table above. Publishing before they are sourced
   breaks this page's own rule 7, on a page whose entire argument is that it does not overstate.
+- **`#preco` and `#fidelidade` both rest on commercial terms Rafael has never recorded.** They are the
+  only two answers on the page that no code and no note can settle.
+- **The example menu in §4 is already full** (nine assuntos + Privacidade = 10). That is stated on the
+  page on purpose, but it means the example cannot double as a "look how much fits" illustration — if a
+  designer later adds a tenth visible row to the mock, the page contradicts itself.
 
 ---
 
@@ -820,3 +868,73 @@ secretaria… não guarda rol de membros"**. "Você" kept throughout, per the cr
 a claim, narrowed a claim to what the code does, or added a limitation. The only additions of new text
 are §0 (meta/OG copy, which promises nothing), the anchor slugs, the external-facts table, and two FAQ
 entries (`#prazo`, and the disclosure clauses) — all of which reduce what the page claims.
+
+---
+
+**Revisão 2 — 2026-08-08.** Against `.superpowers/sdd/recheck-mkt-landing.md`, with [[Whats Left]],
+[[Decisions Log]] and [[Menu Inventory]] (all 2026-08-08) as the deciding sources. Two of the re-check's
+four findings were accepted, one was accepted in part, one is **refuted** — and the two most important
+problems on this page were in neither the critique nor the re-check.
+
+**Found here, in neither review — the serious ones**
+1. *§4's example menu was already full while the copy invited you to add to it.* The illustrated menu has
+   nine assuntos; 🔒 Privacidade is a real `menu_item` row that counts against the same cap
+   (`provisioning.ts` seeds it; `canActivateAnotherItem` in `menu-admin-rules.ts` counts active items
+   against `WHATSAPP_LIST_MAX_ROWS`). Nine plus Privacidade is ten — the ceiling. So the page showed a
+   full list and, in the paragraph directly above, promised a church could add its Ministério de Louvor
+   to it. §4 now does the arithmetic out loud: a menu like the example is full, and something has to be
+   hidden for something new to enter. **This is the same error family the sibling brand doc introduced
+   ("a 10-row starting menu"), reached from the opposite direction.**
+2. *§4 implied a church starts with that menu.* It does not. `provisionChurch()` seeds exactly one item,
+   🔒 Privacidade ([[Whats Left]] ✅ list; [[Whats Left]] ❌ #5 describes the new admin landing on "a bare
+   menu with one item"). The nine-item list is what a menu *becomes* after the §3 step 2 conversation,
+   and §4 now says so. The [[Menu Inventory]] 9-row table is a v1 seed **spec**, not what the code plants.
+3. *FAQ `#pagamento` contradicted the newest decision in [[Decisions Log]].* The card-only call of
+   2026-08-07 was **reversed on 2026-08-08** — boleto alongside card, because many small churches have no
+   card on the CNPJ and the pastor's-personal-card workaround recreates the exact mismatch the nota
+   fiscal exists to prevent. The old copy still defended card-only as a deliberate choice. Rewritten to
+   the current design, still opening with "não existe cobrança nenhuma construída", still refusing PIX
+   without inventing a date. `#atraso` gained the cost that decision names: an unpaid boleto is not
+   retried, so the dunning is Rafael noticing, not a machine.
+
+**From the re-check — accepted**
+4. *`#preco`'s commercial terms escaped the flag `#fidelidade` got* (re-check 3). Correct: "mensalidade
+   fixa por igreja, não por mensagem, não por membro, sem taxa de instalação" is nowhere in
+   [[Decisions Log]]. Flagged UNVERIFIED with the same instruction, not deleted — deleting it would hide
+   a commercial decision the CTA depends on.
+5. *Three unsourced external facts added by Revisão 1* (re-check 4). Correct, and it was a regression
+   against rule 7 written in the same pass. The *Fatos externos* table went from four rows to seven: the
+   chip receiving the confirmation code, the bot not consuming the chip's credit, and "unofficial
+   automation is *the most common* cause of blocking" — that last one overstates what [[Decisions Log]]
+   supports ("can get a number banned" ≠ "most common"), so the table carries a narrower fallback wording
+   to use if no source is found. §7's own ⚠️ note now counts four, not two.
+
+**From the re-check — accepted in part, and corrected**
+6. *Mobile* (re-check 2). The re-check's evidence is **wrong**: it says `src/app/layout.tsx` exports no
+   `viewport` so "a phone renders it at desktop width", but Next 15's App Router emits
+   `width=device-width, initial-scale=1` by default when a route exports none, and this panel has since
+   been worked specifically at phone width — `globals.css` defines `--tap: 44px` for every control and
+   documents a measurement taken "at a real 375px viewport", with commits `52987b2` and `253b7fc` fixing
+   the nav and the flex floor that pushed the page wider than the screen. The absence of `@media` is not
+   evidence of a broken phone layout for a single-column panel. **But the conclusion survives its bad
+   evidence:** [[Whats Left]] lists mobile polish as requested and not started, and `#celular`'s bare
+   "abre no celular" let a pastor imagine a designed mobile app. `#celular` now says both halves — it
+   works on a phone, it has not been redesigned for one. §3 step 2's "de um celular" stays: it is true.
+
+**From the re-check — refuted**
+7. *The blocking finding is out of date.* It claims §9's "por quanto tempo" advertises a member-facing
+   promise the product breaks, citing `src/lib/church-defaults.ts:40` as saying *"as conversas são
+   apagadas após 12 meses"*. **That sentence is gone.** The seed now reads *"enquanto a igreja precisar
+   deles para te atender. Você pode pedir a exclusão a qualquer momento"*, above a comment that forbids
+   restoring the 12-month wording until the purge ships, and [[Decisions Log]] records the removal on
+   2026-08-08 ("The bot stopped promising a 12-month deletion it could not perform"). §9 was therefore
+   accurate as written. Rather than change the claim, §9 now states *which* answer the Privacidade item
+   gives, so the next reviewer can check it without opening the code, and a ⚠️ note records the refutation
+   and forbids both restoring a retention period and deleting "por quanto tempo".
+
+**Rule 2 check — did this pass add a promise while removing one?** No. Net capability change is negative:
+§4 lost "your menu starts like this" and gained a ceiling that constrains the buyer; `#pagamento` lost a
+payment method it never had and gained a "PIX não entra" with no date attached; `#celular` lost an
+implied mobile app; `#preco` lost its unflagged authority. The only genuinely new assertion is boleto in
+the *design*, which is sourced to [[Decisions Log]] 2026-08-08 and sits behind "não existe cobrança
+nenhuma construída" in the same sentence — a description of a plan, not an offer.
