@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { getSession, isAuthenticated } from '@/lib/auth/session';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { effectiveStatus } from '@/lib/church-status';
-import { logout } from './actions';
+import { LogoutButton } from './LogoutButton';
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -24,9 +24,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <Link href="/admin/configuracoes">Configurações</Link>
         <span className="grow" />
         <span className="hint">{session.name}</span>
-        <form action={logout}>
-          <button type="submit">Sair</button>
-        </form>
+        <LogoutButton />
       </nav>
       <div className="container">
         {status === 'suspended' && (
