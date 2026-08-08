@@ -52,6 +52,16 @@ export async function POST(request: Request): Promise<Response> {
       // check is UX only — it runs in a browser the caller controls. These two
       // values come from the same shared constants the panel's `accept` attribute
       // is built from, so the two can never drift apart.
+      //
+      // Read this as a FORMAT filter, not as validation of the bytes. @vercel/blob
+      // matches allowedContentTypes against the content type the client DECLARES,
+      // never against what was actually uploaded, so a caller who mislabels an
+      // unsupported photo as image/jpeg still gets a token. That is fine for the
+      // threat this list exists to stop — an honest iPhone offering its honest
+      // camera format, which WhatsApp would then fail to render for every member
+      // with no visible error. It is NOT a defence against a hostile upload, and
+      // nothing downstream may be written as though it were: anything that needs
+      // the real format has to sniff the bytes itself.
       onBeforeGenerateToken: async () => ({
         allowedContentTypes: [...ACCEPTED_IMAGE_TYPES],
         maximumSizeInBytes: IMAGE_MAX_BYTES,
