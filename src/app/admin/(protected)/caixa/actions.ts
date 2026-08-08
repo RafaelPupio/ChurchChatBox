@@ -1,6 +1,5 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
 import { loadConversation, updateContactModeScoped } from '@/lib/repo/inbox';
@@ -11,6 +10,12 @@ import { isReplyWindowOpen } from '@/lib/reply-window';
 
 export interface ReplyState {
   error?: string;
+  /** Set only once the message has actually left for WhatsApp and been recorded.
+   *  The reply box needs an explicit, positive signal for this: React empties the
+   *  textarea on EVERY dispatch, success or failure, so "the box is empty" says
+   *  nothing about whether the words were sent, and the draft mirror must not be
+   *  dropped on anything weaker. See src/lib/draft.ts. */
+  sent?: true;
 }
 
 export async function sendReplyToContact(
@@ -25,7 +30,10 @@ export async function sendReplyToContact(
   const body = String(formData.get('body') ?? '').trim();
   if (!body) return { error: 'Escreva uma mensagem.' };
 
-  const convo = await loadConversation(churchId, contactId);
+  // Only the CONTACT is read here (phone, lastInboundAt, mode) — the thread is
+  // not rendered by this action. The smallest legal window keeps a send from
+  // dragging the whole history back out of Postgres for nothing.
+  const convo = await loadConversation(churchId, contactId, 1);
   if (!convo) return { error: 'Conversa não encontrada.' };
 
   if (!isReplyWindowOpen(convo.contact.lastInboundAt, new Date())) {
@@ -56,7 +64,13 @@ export async function sendReplyToContact(
     await updateContactModeScoped(churchId, contactId, 'human');
   }
 
-  redirect(`/admin/caixa/${contactId}`);
+  // revalidatePath, not redirect. A redirect to the page the form is already on
+  // refreshed the thread but threw away the action's return value, leaving the
+  // reply box unable to tell a successful send from a failed one — and the box
+  // has to know, because that is the only safe moment to drop the saved draft.
+  // This refreshes the same tree and still answers.
+  revalidatePath(`/admin/caixa/${contactId}`);
+  return { sent: true };
 }
 
 export async function endHandoff(contactId: string): Promise<{ error?: string }> {
