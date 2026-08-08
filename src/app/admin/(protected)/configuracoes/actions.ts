@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
-import { getChurchById, updateChurch } from '@/lib/repo/church-admin';
+import { updateChurch } from '@/lib/repo/church-admin';
 import { createAdmin, deleteAdmin, findAdminByEmail } from '@/lib/repo/admin';
 import { hashPassword } from '@/lib/auth/password';
 import { validateButtonLabel, validateChurchText, validateLabel } from '@/lib/validation';

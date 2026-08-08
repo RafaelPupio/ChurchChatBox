@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 /** Keeps an open server-rendered screen current.
@@ -15,48 +15,58 @@ import { useRouter } from 'next/navigation';
  *  existing tree: client components are not unmounted, so a half-typed reply and
  *  the scroll position both survive a refresh that lands mid-sentence.
  *
+ *  WHAT A TICK ACTUALLY COSTS. The commit that introduced this said "4 a minute",
+ *  which is the tick rate, not the price — and the two were quietly read as the
+ *  same thing. A refresh refetches the whole route tree, so each tick re-runs the
+ *  layout AND the page: getChurchById, findAdminById, and loadConversation's two
+ *  queries. That is ~4 queries per tick and ~16 a minute per open thread, four
+ *  times the figure the commit message implies, plus the serialised thread itself
+ *  over her mobile data. Which is why the thread query is now bounded
+ *  (src/lib/thread-window.ts), why the church read is memoised per request so the
+ *  layout and the page share one query, and why page.tsx only mounts this
+ *  component when there is genuinely something to wait for.
+ *
  *  Polling PAUSES while the tab is hidden. Every tick is a real query against
  *  Neon, billed by compute time, and a phone left in a pocket with the panel open
  *  would otherwise poll all afternoon for a screen nobody is looking at. Coming
  *  back to the tab refreshes once immediately, so the pause is invisible. */
 export function AutoRefresh({ intervalMs = 15_000 }: { intervalMs?: number }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined;
-
-    const stop = () => {
-      if (timer !== undefined) {
-        clearInterval(timer);
-        timer = undefined;
-      }
+    const sync = () => {
+      const nowVisible = document.visibilityState === 'visible';
+      setVisible(nowVisible);
+      // Catch up on whatever arrived while the tab was in the background, before
+      // waiting out another full interval. This doubles as the recovery path if a
+      // refresh ever fails to settle: coming back to the tab always re-arms.
+      if (nowVisible) startRefresh(() => router.refresh());
     };
-    const start = () => {
-      if (timer === undefined) timer = setInterval(() => router.refresh(), intervalMs);
-    };
+    setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', sync);
+    return () => document.removeEventListener('visibilitychange', sync);
+  }, [router]);
 
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // Catch up on whatever arrived while the tab was in the background,
-        // before waiting out another full interval.
-        router.refresh();
-        start();
-      } else {
-        stop();
-      }
-    };
-
-    if (document.visibilityState === 'visible') start();
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    // Both the timer and the listener are torn down on unmount — navigating away
-    // from the thread must stop the queries, not leave a timer running behind a
-    // screen that no longer exists.
-    return () => {
-      stop();
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [router, intervalMs]);
+  /** A self-scheduling timeout, NOT setInterval.
+   *
+   *  setInterval fires on a fixed wall-clock schedule and does not care whether
+   *  the previous refresh came back. On a cold Neon compute a tick can take
+   *  several seconds, and the fixed schedule keeps stacking new ones behind it —
+   *  the slower the database, the harder this hammers it. Here the next timeout is
+   *  armed only from a state in which nothing is in flight, so the gap between
+   *  refreshes is always at least intervalMs of actual idle.
+   *
+   *  `refreshing` comes from useTransition wrapping router.refresh(), which stays
+   *  pending until the new RSC payload has landed. If a future Next release stops
+   *  propagating that, this degrades to a plain self-scheduling timeout — still
+   *  strictly better than a fixed interval, and never worse. */
+  useEffect(() => {
+    if (!visible || refreshing) return;
+    const timer = setTimeout(() => startRefresh(() => router.refresh()), intervalMs);
+    return () => clearTimeout(timer);
+  }, [visible, refreshing, router, intervalMs]);
 
   return null;
 }

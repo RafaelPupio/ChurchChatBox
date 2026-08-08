@@ -1,13 +1,29 @@
 import { eq } from 'drizzle-orm';
+import { cache } from 'react';
 import { db } from '@/db/client';
 import { church } from '@/db/schema';
 
 export type ChurchRecord = typeof church.$inferSelect;
 
-export async function getChurchById(churchId: string): Promise<ChurchRecord | undefined> {
-  const rows = await db.select().from(church).where(eq(church.id, churchId)).limit(1);
-  return rows[0];
-}
+/** Memoised for the lifetime of one render pass.
+ *
+ *  The admin layout reads the church on every render to decide the suspension
+ *  banner, and the conversation page now needs the same row to decide whether
+ *  polling is worth doing at all. Both re-run on every poll tick, so without this
+ *  the fix for the poll's cost would itself have added a query to each tick.
+ *  React's cache() scopes to a single request, so two callers in one render share
+ *  one round trip and a later request always re-reads — a church suspended in the
+ *  owner console still takes effect on the very next page load.
+ *
+ *  Safe because nothing writes the church row and then re-reads it in the same
+ *  request: updateChurch's only caller revalidates and returns. Outside a React
+ *  request (a test, a script) cache() simply calls through, memoising nothing. */
+export const getChurchById = cache(
+  async (churchId: string): Promise<ChurchRecord | undefined> => {
+    const rows = await db.select().from(church).where(eq(church.id, churchId)).limit(1);
+    return rows[0];
+  },
+);
 
 /** The only church columns a church admin may write: its name and the bot's
  *  user-facing strings. Everything else on the row is off limits to them —
