@@ -2,8 +2,10 @@ import { notFound } from 'next/navigation';
 import { requireReadableSession } from '@/lib/auth/writable';
 import { loadConversation } from '@/lib/repo/inbox';
 import { isReplyWindowOpen, hoursRemaining } from '@/lib/reply-window';
+import { AutoRefresh } from '../../AutoRefresh';
 import { ReplyForm } from './ReplyForm';
 import { EndHandoffButton } from './EndHandoffButton';
+import { ThreadBottom } from './ThreadBottom';
 
 export default async function ConversationPage({ params }: { params: Promise<{ contactId: string }> }) {
   const { contactId } = await params;
@@ -23,6 +25,11 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
         {convo.contact.mode === 'human' && <EndHandoffButton contactId={contactId} />}
       </div>
 
+      {/* A member's reply reaches the database through the webhook and nothing
+          tells this browser about it. Without a poll the thread is a snapshot of
+          whenever the page happened to load. */}
+      <AutoRefresh />
+
       <div className="thread">
         {convo.messages.length === 0 && <span className="hint">Sem mensagens.</span>}
         {convo.messages.map((m) => (
@@ -30,6 +37,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
             {m.body ?? (m.direction === 'inbound' ? '📎 mídia recebida' : '')}
           </div>
         ))}
+        <ThreadBottom count={convo.messages.length} />
       </div>
 
       {/* Reply only for an active handoff: a reply to a bot-mode contact would send,

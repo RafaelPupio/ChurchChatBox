@@ -383,7 +383,10 @@ button:disabled { opacity: 0.55; cursor: default; }
 .bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; line-height: 1.4; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
 .bubble.in { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
 .bubble.out { align-self: flex-end; background: #dcf8c6; color: #111; }
-.composer { position: sticky; bottom: 0; z-index: 10; margin-bottom: 0; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06); }
+/* bottom: var(--kb), not bottom: 0 — see --kb above. With no keyboard this is
+   identical to bottom: 0; with one open on iOS it is the difference between
+   typing into a visible box and typing into one hidden behind the keyboard. */
+.composer { position: sticky; bottom: var(--kb); z-index: 10; margin-bottom: 0; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06); }
 .composer-row { display: flex; align-items: flex-end; gap: 8px; }
 .composer-input { min-height: var(--tap); max-height: 40vh; }
 .composer-send { flex: 0 0 auto; min-width: var(--tap); padding: 10px 14px; font-size: 18px; }
@@ -396,7 +399,7 @@ button:disabled { opacity: 0.55; cursor: default; }
 .group-summary::-webkit-details-marker { display: none; }
 .group-summary::after { content: '▾'; color: var(--muted); }
 .group[open] > .group-summary::after { content: '▴'; }
-.savebar { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding: 12px 0 0; background: var(--card); border-top: 1px solid var(--border); }
+.savebar { position: sticky; bottom: var(--kb); z-index: 10; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding: 12px 0 0; background: var(--card); border-top: 1px solid var(--border); }
 
 /* --- Conteúdo: image upload --- */
 .image-preview { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
@@ -419,15 +422,35 @@ button:disabled { opacity: 0.55; cursor: default; }
   /* The growing child takes the whole first line; the controls wrap beneath it.
      .conv is excluded on purpose — its mode tag belongs beside the name. */
   .row > .grow { flex-basis: 100%; }
+  /* The one call to action on Conteúdo goes full width on a phone. This is a
+     MOBILE-ONLY rule on purpose: putting .grow on the link instead would give it
+     flex: 1 next to the <h1 class="grow"> at every width, and at ≥641px the two
+     siblings would split the 880px container 50/50 — a ~430px "+ Novo item".
+     Scoped to .btnlink.primary inside a .row, which is exactly one element in the
+     panel (conteudo/page.tsx). */
+  .row > .btnlink.primary { flex: 1 1 100%; }
   .bubble { max-width: 88%; }
-  .thread { max-height: 52vh; }
+  .thread { max-height: 52vh; max-height: 52dvh; }
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     border-bottom: 0; border-top: 1px solid var(--border);
     padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
     box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.07);
   }
-  .composer, .savebar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+  .composer, .savebar { bottom: calc(var(--kb) + var(--tabbar-h) + env(safe-area-inset-bottom)); }
+
+  /* --- Software keyboard open. KeyboardInset.tsx sets --kb and this class. --- */
+  /* The tab bar would only steal thumb space from the message being typed, and on
+     iOS it sits under the keyboard anyway, so it is unreachable while typing. */
+  html.keyboard-open .tabbar { display: none; }
+  /* With the tab bar gone there is nothing left to clear but the keyboard itself. */
+  html.keyboard-open .composer,
+  html.keyboard-open .savebar { bottom: var(--kb); }
+  /* The thread gives back the space the keyboard took, so the newest message stays
+     above the composer instead of being pushed behind it. .thread's min-height:
+     180px still wins if this goes small, so it cannot collapse to nothing. */
+  html.keyboard-open .thread { max-height: calc(52dvh - var(--kb)); }
+  html.keyboard-open .container { padding-bottom: calc(var(--kb) + 16px); }
 }
 
 /* --- Wide screens: menu item cards collapse back to a single row. --- */
@@ -457,32 +480,68 @@ import { join } from 'node:path';
  *  fix for a finding in the 2026-08-08 mobile audit; deleting any of them
  *  reintroduces a specific, named bug on a secretary's phone. */
 
-const CSS = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8');
+/** Comments are stripped FIRST, and that is load-bearing, not tidiness. The rule
+ *  regex below captures everything between the previous `}` and the `{` as the
+ *  selector, so a `/* ... *\/` sitting above a rule becomes part of its selector
+ *  text and the rule stops being findable. This stylesheet documents most of its
+ *  non-obvious declarations, so without this line `.row`, `.grow`, `body`,
+ *  `.iconbtn`, `.container` and the input deny-list are all unreachable.
+ *
+ *  Stripping first also keeps prose out of the whole-file assertions further
+ *  down — a comment that merely *mentions* `overflow` or a font size can no
+ *  longer trip them. */
+const CSS = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '');
 
-/** Body of the first rule whose selector list matches `selector` exactly.
- *  The regex deliberately matches only brace-free rule bodies, which means an
- *  @media prelude never matches as a rule — its inner rules do. */
-function block(selector: string, scope: string = CSS): string {
+/** Index just past the `}` that closes the block whose `{` is at `open`. */
+function endOfBlock(css: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  throw new Error(`Unbalanced braces starting at ${open}`);
+}
+
+/** The stylesheet with every @media block removed.
+ *
+ *  This is the default scope for block(), and it is the second half of the same
+ *  bug: `.thread`, `.container`, `.tabbar` and `.composer` are each declared twice
+ *  — once as the base rule and once as a phone override. A plain first-match over
+ *  the raw file happens to return the base rule for some and the override for
+ *  others, purely by which one a comment is sitting above. Asserting `60vh`
+ *  against a rule that says `52dvh` is a passing-looking test of the wrong thing,
+ *  so global lookups only ever see base rules, and overrides are asked for
+ *  explicitly via block(sel, media(...)). */
+const BASE = (() => {
+  let out = CSS;
+  for (let at = out.indexOf('@media'); at !== -1; at = out.indexOf('@media')) {
+    const open = out.indexOf('{', at);
+    if (open === -1) throw new Error('@media with no block');
+    out = out.slice(0, at) + out.slice(endOfBlock(out, open));
+  }
+  return out;
+})();
+
+/** Body of the first rule whose selector list matches `selector` exactly, ignoring
+ *  whitespace. Defaults to the media-free base stylesheet; pass media(...) as the
+ *  scope to assert a phone override. */
+function block(selector: string, scope: string = BASE): string {
   for (const [, sel, body] of scope.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (sel.replace(/\s+/g, ' ').trim() === selector) return body;
   }
   throw new Error(`No CSS rule for selector: ${selector}`);
 }
 
-/** Text inside `@media <prelude> { ... }`, found by brace counting. */
+/** Text inside `@media <prelude> { ... }`. */
 function media(prelude: string): string {
   const at = CSS.indexOf(`@media ${prelude}`);
   expect(at, `missing @media ${prelude}`).toBeGreaterThan(-1);
   const open = CSS.indexOf('{', at);
-  let depth = 0;
-  for (let i = open; i < CSS.length; i += 1) {
-    if (CSS[i] === '{') depth += 1;
-    else if (CSS[i] === '}') {
-      depth -= 1;
-      if (depth === 0) return CSS.slice(open + 1, i);
-    }
-  }
-  throw new Error(`Unbalanced braces after @media ${prelude}`);
+  return CSS.slice(open + 1, endOfBlock(CSS, open) - 1);
 }
 
 describe('layout primitives', () => {
@@ -496,6 +555,14 @@ describe('layout primitives', () => {
 
   it('the growing child claims a full line on phones', () => {
     expect(block('.row > .grow', media('(max-width: 640px)'))).toMatch(/flex-basis:\s*100%/);
+  });
+
+  it('the primary call to action goes full width on phones ONLY', () => {
+    // The tempting version of this was className="btnlink primary grow", which
+    // also gives the link flex: 1 at desktop width beside the <h1 class="grow">
+    // and splits the 880px header 50/50 — a 430px "+ Novo item" button.
+    expect(block('.row > .btnlink.primary', media('(max-width: 640px)'))).toMatch(/flex:\s*1 1 100%/);
+    expect(BASE).not.toMatch(/\.row\s*>\s*\.btnlink\.primary/);
   });
 
   it('never hides overflow on body or html', () => {
@@ -577,12 +644,58 @@ describe('conversation thread', () => {
     expect(body).toMatch(/overflow-y:\s*auto/);
   });
 
+  it('measures itself against the dynamic viewport, with a vh fallback', () => {
+    // vh is frozen at the tallest-chrome height on iOS; dvh follows the real one.
+    expect(block('.thread')).toMatch(/max-height:\s*60dvh/);
+  });
+
   it('does not rubber-band the page when it hits its end', () => {
     expect(block('.thread')).toMatch(/overscroll-behavior:\s*contain/);
   });
 
   it('the composer sticks to the bottom of the viewport', () => {
     expect(block('.composer')).toMatch(/position:\s*sticky/);
+  });
+});
+
+describe('software keyboard', () => {
+  const mobile = media('(max-width: 640px)');
+
+  it('declares the keyboard inset with a safe default', () => {
+    // 0px is the no-JS, no-keyboard, desktop value, so every calc() below stays
+    // valid even if KeyboardInset never mounts.
+    expect(block(':root')).toMatch(/--kb:\s*0px/);
+  });
+
+  it('the composer rides above the keyboard rather than under it', () => {
+    // iOS does not shrink the LAYOUT viewport when the keyboard opens, so
+    // bottom: 0 leaves the composer behind the keys.
+    expect(block('.composer')).toMatch(/bottom:\s*var\(--kb\)/);
+    expect(block('.savebar')).toMatch(/bottom:\s*var\(--kb\)/);
+    expect(block('.composer, .savebar', mobile)).toContain('var(--kb)');
+  });
+
+  it('the tab bar gets out of the way while typing', () => {
+    expect(block('html.keyboard-open .tabbar', mobile)).toMatch(/display:\s*none/);
+    expect(block('html.keyboard-open .composer, html.keyboard-open .savebar', mobile))
+      .toMatch(/bottom:\s*var\(--kb\)/);
+  });
+
+  it('the thread yields the space the keyboard took', () => {
+    expect(block('html.keyboard-open .thread', mobile)).toContain('var(--kb)');
+  });
+});
+
+describe('no desktop regression from the phone rules', () => {
+  const CONTEUDO = readFileSync(
+    join(process.cwd(), 'src/app/admin/(protected)/conteudo/page.tsx'),
+    'utf8',
+  );
+
+  it('the "+ Novo item" link is not a flex grower', () => {
+    // Full width on a phone is a media-query job. Putting .grow on the link makes
+    // it a 430px button beside the <h1 class="grow"> at 880px.
+    expect(CONTEUDO).not.toMatch(/btnlink primary grow/);
   });
 });
 ```
