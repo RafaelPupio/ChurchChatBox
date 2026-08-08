@@ -4,6 +4,7 @@ import { effectiveStatus } from '@/lib/church-status';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { loadConversation } from '@/lib/repo/inbox';
 import { isReplyWindowOpen, hoursRemaining } from '@/lib/reply-window';
+import { threadAnchorKey } from '@/lib/thread-scroll';
 import { THREAD_WINDOW } from '@/lib/thread-window';
 import { AutoRefresh } from '../../AutoRefresh';
 import { ReplyForm } from './ReplyForm';
@@ -72,7 +73,10 @@ export default async function ConversationPage({ params }: { params: Promise<{ c
             {m.body ?? (m.direction === 'inbound' ? '📎 mídia recebida' : '')}
           </div>
         ))}
-        <ThreadBottom count={convo.messages.length} />
+        {/* The NEWEST MESSAGE'S ID, not the count. A truncated thread returns
+            exactly THREAD_WINDOW rows forever, so the count stops changing the
+            moment the bound bites and the anchor silently dies with it. */}
+        <ThreadBottom newestId={threadAnchorKey(convo.messages)} />
       </div>
 
       {/* Reply only for an active handoff: a reply to a bot-mode contact would send,
