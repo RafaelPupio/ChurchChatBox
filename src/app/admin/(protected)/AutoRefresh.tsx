@@ -19,12 +19,18 @@ import { useRouter } from 'next/navigation';
  *  which is the tick rate, not the price — and the two were quietly read as the
  *  same thing. A refresh refetches the whole route tree, so each tick re-runs the
  *  layout AND the page: getChurchById, findAdminById, and loadConversation's two
- *  queries. That is ~4 queries per tick and ~16 a minute per open thread, four
- *  times the figure the commit message implies, plus the serialised thread itself
- *  over her mobile data. Which is why the thread query is now bounded
- *  (src/lib/thread-window.ts), why the church read is memoised per request so the
- *  layout and the page share one query, and why page.tsx only mounts this
- *  component when there is genuinely something to wait for.
+ *  queries. That is ~4 queries per tick and ~16 a minute per open thread at the
+ *  default 15s, four times the figure the commit message implies, plus the
+ *  serialised thread itself over her mobile data. Which is why the thread query
+ *  is now bounded (src/lib/thread-window.ts), and why the church read is memoised
+ *  per request so the layout and the page share one query.
+ *
+ *  `intervalMs` is how the caller buys that cost down WITHOUT switching the poll
+ *  off. An earlier attempt did switch it off for threads judged not worth
+ *  watching, and the judgement was wrong in the most expensive possible way — see
+ *  src/lib/thread-poll.ts. A screen that has silently stopped updating cannot be
+ *  told apart from a quiet conversation, so the answer is a slower tick, never no
+ *  tick.
  *
  *  Polling PAUSES while the tab is hidden. Every tick is a real query against
  *  Neon, billed by compute time, and a phone left in a pocket with the panel open

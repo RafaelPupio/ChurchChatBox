@@ -5,6 +5,7 @@ import { effectiveStatus } from '@/lib/church-status';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { loadConversation } from '@/lib/repo/inbox';
 import { isReplyWindowOpen, hoursRemaining } from '@/lib/reply-window';
+import { threadPollMs } from '@/lib/thread-poll';
 import { threadAnchorKey } from '@/lib/thread-scroll';
 import { requestedThreadWindow } from '@/lib/thread-window';
 import { AutoRefresh } from '../../AutoRefresh';
@@ -41,21 +42,19 @@ export default async function ConversationPage({
     ? effectiveStatus(church.status, church.graceUntil, now) === 'suspended'
     : false;
 
-  /** Poll only while there is genuinely something to wait for.
+  /** How fast, never whether. Every open thread polls.
    *
-   *  This used to be mounted unconditionally, which meant every open thread polled
-   *  forever — including the two cases where a tick can never produce anything the
-   *  secretary can act on. A bot-mode contact is being answered automatically;
-   *  nobody is standing by for that thread, and if the member does ask for a human
-   *  the handoff shows up the next time the inbox is opened. A suspended church is
-   *  read-only AND its bot is switched off, so no new message is coming at all —
-   *  and billing a stopped subscription for Neon compute every fifteen seconds is
-   *  the vendor paying to poll on behalf of someone who is not paying.
+   *  This replaced a boolean gate that switched polling OFF for a bot-mode
+   *  contact and for a suspended church. Both of those left a screen that stops
+   *  reflecting reality with nothing on it to say so — and the bot-mode case
+   *  killed the update for the escalation moment, the one event in this product
+   *  worth watching for. The cadences and the full reasoning for each case,
+   *  including suspension, are in src/lib/thread-poll.ts.
    *
-   *  Deliberately NOT gated on `open`: an expired 24h window is exactly when she is
-   *  waiting for the member to write back, and an inbound message reopens it. That
-   *  is the poll earning its cost, not wasting it. */
-  const worthPolling = convo.contact.mode === 'human' && !suspended;
+   *  Deliberately NOT gated on `open`: an expired 24h window is exactly when she
+   *  is waiting for the member to write back, and an inbound message reopens it.
+   *  That is the poll earning its cost, not wasting it. */
+  const pollMs = threadPollMs({ mode: convo.contact.mode, suspended, expanded: view.expanded });
 
   return (
     <div>
@@ -67,7 +66,7 @@ export default async function ConversationPage({
       {/* A member's reply reaches the database through the webhook and nothing
           tells this browser about it. Without a poll the thread is a snapshot of
           whenever the page happened to load. */}
-      {worthPolling && <AutoRefresh />}
+      <AutoRefresh intervalMs={pollMs} />
 
       <div className="thread">
         {/* Said out loud, never silent: she may well be scrolling back looking for
