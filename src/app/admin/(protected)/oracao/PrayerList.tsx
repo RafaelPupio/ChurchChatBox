@@ -28,17 +28,35 @@ export function PrayerList({ prayers }: { prayers: PrayerRow[] }) {
   return (
     <div>
       {error && <p className="error">{error}</p>}
-      {/* `wrap` for the same reason as MenuList: a prayer request, a status chip
-          and "Marcar como orado" are more than one phone line. */}
       {prayers.map((p) => (
-        <div key={p.id} className="card row wrap">
-          <span className="grow">
-            "{p.text}"<span className="hint"> — {p.who} · {p.when}</span>
-          </span>
-          <span className={`chip ${p.status === 'orado' ? 'on' : 'off'}`}>{p.status === 'orado' ? 'Orado ✓' : 'Novo'}</span>
-          <button disabled={pending} onClick={() => toggle(p.id, p.status)}>
-            {p.status === 'orado' ? 'Marcar como novo' : 'Marcar como orado'}
-          </button>
+        <div key={p.id} className="card prayer-card">
+          {/* The request is what this screen is for — it gets the full width, and
+              the button that used to take half the row goes underneath it. On a
+              375px phone the old `row wrap` layout left the text a ~70px ribbon
+              beside a 172px button: ten lines of one or two words each, for
+              something that exists to be read aloud. */}
+          <p className="prayer-text">“{p.text}”</p>
+          <p className="hint prayer-meta">{p.who} · {p.when}</p>
+          <div className="item-actions">
+            <span className={`chip ${p.status === 'orado' ? 'on' : 'off'}`}>
+              {p.status === 'orado' ? 'Orado ✓' : 'Novo'}
+            </span>
+            <span className="grow" />
+            <button
+              disabled={pending}
+              onClick={() => toggle(p.id, p.status)}
+              /* Names WHOSE request this button acts on: with the control now on
+                 its own line, "Marcar como orado" repeated down the screen is the
+                 only thing a screen reader announces otherwise. */
+              aria-label={
+                p.status === 'orado'
+                  ? `Marcar o pedido de ${p.who} como novo`
+                  : `Marcar o pedido de ${p.who} como orado`
+              }
+            >
+              {p.status === 'orado' ? 'Marcar como novo' : 'Marcar como orado'}
+            </button>
+          </div>
         </div>
       ))}
     </div>

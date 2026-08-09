@@ -135,8 +135,13 @@ describe('horizontal overflow', () => {
     expect(MENU_LIST).toMatch(/className="card item-card"/);
     expect(ruleFor('.item-label')).toMatch(/min-width:\s*0/);
     expect(ruleFor('.item-label')).toMatch(/overflow-wrap:\s*(break-word|anywhere)/);
-    // PrayerList still uses the wrapping single row; mobile-plan Task 5 owns it.
-    expect(PRAYER_LIST).toMatch(/className="card row wrap"/);
+    // PrayerList went the same way in mobile-plan Task 5: a prayer request is
+    // prose that has to be read aloud, so it owns the card's full width and the
+    // "Marcar como orado" button moved to its own line underneath. The wrapping
+    // single row it used to opt into left the text a ~70px ribbon at 375px.
+    expect(PRAYER_LIST).toMatch(/className="card prayer-card"/);
+    expect(PRAYER_LIST).not.toMatch(/className="card row wrap"/);
+    expect(ruleFor('.prayer-text')).toMatch(/overflow-wrap:\s*(break-word|anywhere)/);
   });
 });
 

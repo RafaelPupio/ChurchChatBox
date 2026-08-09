@@ -65,7 +65,9 @@ a { color: var(--primary); }
    `flex: 1` gives the growing child a zero basis, so without a floor it always
    "fits" by shrinking to nothing and no row ever breaks. 9em is about one
    readable label wide. Kept as the opt-in for rows whose growing child is prose
-   (PrayerList) rather than a heading. */
+   rather than a heading — AddBehaviourItems is the remaining consumer. PrayerList
+   used to be the other one and has since moved to .prayer-card, because its prose
+   deserved the whole card rather than a share of one line. */
 .row.wrap { flex-wrap: wrap; row-gap: 8px; }
 .row.wrap > .grow { min-width: 9em; }
 label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
@@ -192,8 +194,8 @@ button:disabled { opacity: 0.55; cursor: default; }
 .iconbtn { flex: 0 0 auto; min-width: var(--tap); min-height: var(--tap); padding: 0; font-size: 16px; line-height: 1; }
 
 /* --- Pedidos de Oração: the request is the content, not a ribbon beside a
-       button. Claimed here as part of Task 1's contract; PrayerList adopts it in
-       Task 5 and still uses .row.wrap until then. --- */
+       button. PrayerList renders these; the min-width: 641px block below turns the
+       card back into a single row on a desktop. --- */
 .prayer-card { display: flex; flex-direction: column; gap: 8px; }
 .prayer-text { margin: 0; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
 .prayer-meta { margin: 0; }
