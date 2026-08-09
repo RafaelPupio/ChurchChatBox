@@ -58,7 +58,11 @@ describe('tap targets', () => {
   });
 
   it('keeps the reorder arrows a thumb-width apart', () => {
-    const gap = MENU_LIST.match(/flexDirection:\s*'column',\s*gap:\s*(\d+)/);
+    // The spacing moved from an inline style to the .item-actions gap when the
+    // row became two lines. Assert it where it now lives, and assert the arrows
+    // actually opt into the class that carries it.
+    expect(MENU_LIST).toMatch(/className="iconbtn"/);
+    const gap = ruleFor('.item-actions').match(/gap:\s*(\d+)px/);
     expect(gap).not.toBeNull();
     // Each press is an immediate server write against the live WhatsApp menu.
     expect(Number(gap?.[1])).toBeGreaterThanOrEqual(8);
@@ -116,7 +120,13 @@ describe('horizontal overflow', () => {
   });
 
   it('the rows that were measured over-wide actually opt in', () => {
-    expect(MENU_LIST).toMatch(/className="card row wrap"/);
+    // MenuList no longer shares one line at all: the name gets its own row above
+    // the controls, so it opts into .item-card rather than .row.wrap. The floor
+    // that used to trigger the wrap is replaced by the label owning the line.
+    expect(MENU_LIST).toMatch(/className="card item-card"/);
+    expect(ruleFor('.item-label')).toMatch(/min-width:\s*0/);
+    expect(ruleFor('.item-label')).toMatch(/overflow-wrap:\s*(break-word|anywhere)/);
+    // PrayerList still uses the wrapping single row; mobile-plan Task 5 owns it.
     expect(PRAYER_LIST).toMatch(/className="card row wrap"/);
   });
 });

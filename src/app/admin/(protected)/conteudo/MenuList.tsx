@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { BEHAVIOUR_ITEM, isBehaviourKind } from '@/lib/behaviour-items';
 import { moveItem, setItemActive } from './actions';
 
 export interface MenuListItem {
@@ -27,32 +28,73 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
   return (
     <div>
       {error && <p className="error">{error}</p>}
-      {/* `wrap`: five controls plus a label do not fit one 375px line. Without it
-          the label is squeezed to min-content and, once .grow stopped refusing to
-          shrink, down to a 33.6px column of single letters — measured. See the
-          .row.wrap rule in globals.css. */}
-      {items.map((item, index) => (
-        <div key={item.id} className="card row wrap">
-          {/* 10px apart, not 2px. Each arrow is an immediate server write that
-              reorders the live WhatsApp menu, and 44px targets 2px apart on a
-              phone means the mis-tap moves the item the wrong way — with no undo
-              beyond noticing and pressing the other arrow. */}
-          <div className="row" style={{ flexDirection: 'column', gap: 10, flexShrink: 0 }}>
-            <button disabled={pending || index === 0} onClick={() => run(() => moveItem(item.id, 'up'))} aria-label="Mover para cima">▲</button>
-            <button disabled={pending || index === items.length - 1} onClick={() => run(() => moveItem(item.id, 'down'))} aria-label="Mover para baixo">▼</button>
+      {items.map((item, index) => {
+        /* A behaviour item's line says what a tap DOES. It replaces "· oração" /
+           "· atendente", which named an internal category and told her nothing
+           about where the church sees the result. */
+        const meta = isBehaviourKind(item.kind)
+          ? BEHAVIOUR_ITEM[item.kind].listNote
+          : item.hasImage
+            ? '📎 com imagem'
+            : '';
+
+        return (
+          <div key={item.id} className="card item-card">
+            {/* Name first and full-width: it is the only way to know which row you
+                are about to take out of the menu, reorder or edit. */}
+            <div className="item-head">
+              <span className="item-label">
+                {item.label}
+                {meta && <span className="hint item-meta">{meta}</span>}
+              </span>
+              {/* The chip states WHERE the option is; the button below states what
+                  pressing it does. "Oculto" next to "Ativar" was a state and a
+                  verb from the same vocabulary sitting adjacent. */}
+              <span className={`chip ${item.isActive ? 'on' : 'off'}`}>
+                {item.isActive ? 'No menu' : 'Fora do menu'}
+              </span>
+            </div>
+            {/* Every aria-label names the item: these controls sit on their own
+                line, away from the label a screen reader would otherwise
+                associate with them. */}
+            <div className="item-actions">
+              <button
+                className="iconbtn"
+                disabled={pending || index === 0}
+                onClick={() => run(() => moveItem(item.id, 'up'))}
+                aria-label={`Subir “${item.label}” no menu`}
+              >
+                ▲
+              </button>
+              <button
+                className="iconbtn"
+                disabled={pending || index === items.length - 1}
+                onClick={() => run(() => moveItem(item.id, 'down'))}
+                aria-label={`Descer “${item.label}” no menu`}
+              >
+                ▼
+              </button>
+              <span className="grow" />
+              <button
+                disabled={pending}
+                onClick={() => run(() => setItemActive(item.id, !item.isActive))}
+                aria-label={
+                  item.isActive ? `Tirar “${item.label}” do menu` : `Colocar “${item.label}” no menu`
+                }
+              >
+                {item.isActive ? 'Tirar do menu' : 'Colocar no menu'}
+              </button>
+              <Link
+                className="btnlink"
+                href={`/admin/conteudo/${item.id}`}
+                aria-label={`Editar “${item.label}”`}
+              >
+                Editar
+              </Link>
+            </div>
           </div>
-          <span className="grow">
-            {item.label}
-            {item.hasImage && <span className="hint"> 📎 imagem</span>}
-            {item.kind !== 'content' && <span className="hint"> · {item.kind === 'prayer' ? 'oração' : 'atendente'}</span>}
-          </span>
-          <span className={`chip ${item.isActive ? 'on' : 'off'}`}>{item.isActive ? 'Ativo' : 'Oculto'}</span>
-          <button disabled={pending} onClick={() => run(() => setItemActive(item.id, !item.isActive))}>
-            {item.isActive ? 'Ocultar' : 'Ativar'}
-          </button>
-          <Link className="btnlink" href={`/admin/conteudo/${item.id}`}>Editar</Link>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
