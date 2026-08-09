@@ -3,6 +3,7 @@ import { getSession, isAuthenticated } from '@/lib/auth/session';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { countHandoffContacts } from '@/lib/repo/inbox';
 import { effectiveStatus } from '@/lib/church-status';
+import { ConnectionBanner } from './ConnectionBanner';
 import { KeyboardInset } from './KeyboardInset';
 import { LogoutButton } from './LogoutButton';
 import { TabBar } from './TabBar';
@@ -48,6 +49,9 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       <TabBar waiting={waiting} />
 
       <div className="container">
+        {/* First child on purpose: "sem conexão" explains the suspension and
+            payment banners below it as well as it explains a failed reply. */}
+        <ConnectionBanner />
         {status === 'suspended' && (
           <p className="error">
             Assinatura suspensa — o painel está somente leitura e o bot não está respondendo.

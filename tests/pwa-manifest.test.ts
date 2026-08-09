@@ -85,6 +85,93 @@ describe('viewport', () => {
   });
 });
 
+/** Block comments removed, so these assertions read CODE and not prose.
+ *
+ *  Same reason tests/mobile-css.test.ts strips comments before matching: the
+ *  offline page's own header comment explains WHY it does not call
+ *  requireReadableSession, and naming the thing it avoids must not be what fails
+ *  the check that it avoids it. */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+describe('offline behaviour', () => {
+  const SW = code(readFileSync(join(ROOT, 'public/sw.js'), 'utf8'));
+  const OFFLINE_RAW = readFileSync(join(ROOT, 'src/app/offline/page.tsx'), 'utf8');
+  const OFFLINE = code(OFFLINE_RAW);
+
+  it('the service worker only intercepts whole-page navigations', () => {
+    expect(SW).toContain("request.mode !== 'navigate'");
+  });
+
+  it('caches exactly one entry, and it is not an admin route', () => {
+    // Caching any admin response would leave member phone numbers, message
+    // bodies and prayer requests readable on a shared parish phone after logout.
+    expect(SW).not.toContain('/admin');
+    expect([...SW.matchAll(/cache\.(add|put)\(/g)]).toHaveLength(1);
+  });
+
+  it('the offline page renders without the database or a session', () => {
+    // It must render with no network at all, so it can import neither.
+    expect(OFFLINE).not.toContain('@/db');
+    expect(OFFLINE).not.toContain('@/lib/repo');
+    expect(OFFLINE).not.toContain('requireReadableSession');
+  });
+
+  it('the offline page carries its own styles', () => {
+    // The worker caches this document but never the hashed CSS bundle, so an
+    // external stylesheet would not load at the moment it is needed.
+    expect(OFFLINE).not.toContain("import './globals.css'");
+    expect(OFFLINE).toContain('fontFamily');
+  });
+
+  it('lives outside src/app/admin on purpose', () => {
+    expect(existsSync(join(ROOT, 'src/app/offline/page.tsx'))).toBe(true);
+    expect(existsSync(join(ROOT, 'src/app/admin/offline'))).toBe(false);
+  });
+
+  it('never tells her an unsent draft is safe', () => {
+    // This is the honesty rule, asserted rather than trusted to review. Nothing
+    // in this product queues an unsent reply: there is no outbox and no
+    // background sync, and the sessionStorage mirror does not survive a
+    // relaunched standalone app. Copy that implies otherwise is a promise the
+    // panel cannot keep, on the one screen she reads when something has already
+    // gone wrong.
+    // Stripped, like everything else here: the offline page's comment QUOTES the
+    // over-promising sentence it rejects, and a rejected example must not fail
+    // the rule it exists to document.
+    const REPLY = code(readFileSync(
+      join(ROOT, 'src/app/admin/(protected)/caixa/[contactId]/ReplyForm.tsx'),
+      'utf8',
+    ));
+    const BANNER = code(readFileSync(
+      join(ROOT, 'src/app/admin/(protected)/ConnectionBanner.tsx'),
+      'utf8',
+    ));
+    for (const [name, source] of [['offline page', OFFLINE], ['reply form', REPLY], ['banner', BANNER]] as const) {
+      // "will be sent on its own", "saved automatically", "nothing was lost".
+      expect(source, `${name} implies a queue`).not.toMatch(/ser[áa] enviad[ao] (?:automaticamente|sozinh)/i);
+      expect(source, `${name} claims an autosave`).not.toMatch(/salv[ao] automaticamente|fica salvo|est[áa] salvo/i);
+      // Wide gap and several verb endings on purpose: the exact sentence this
+      // plan warns about — "Nada do que você já enviou foi perdido" — puts 26
+      // characters between the two words, so a tight window would have let the
+      // one named failure through.
+      expect(source, `${name} claims nothing was lost`).not.toMatch(/n[ãa]da\b[\s\S]{0,60}perd(?:id|eu|er)/i);
+    }
+  });
+
+  it('the send button and the Enter path both refuse while offline', () => {
+    const REPLY = readFileSync(
+      join(ROOT, 'src/app/admin/(protected)/caixa/[contactId]/ReplyForm.tsx'),
+      'utf8',
+    );
+    expect(REPLY).toContain('disabled={pending || !online}');
+    // Enter is the fast path; without this guard it fires a doomed submit and
+    // react-dom's form reset empties the textarea for nothing.
+    expect(REPLY).toMatch(/if \(!online\) return;/);
+  });
+});
+
 describe('iOS home screen', () => {
   it('declares appleWebApp, because iOS ignores the manifest', () => {
     expect(LAYOUT).toMatch(/appleWebApp:\s*\{[^}]*capable:\s*true/);

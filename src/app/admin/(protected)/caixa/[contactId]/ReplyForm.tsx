@@ -10,6 +10,7 @@ import {
   writeDraft,
   type ReplyPhase,
 } from '@/lib/draft';
+import { useOnline } from '@/lib/hooks/use-online';
 import { sendReplyToContact, type ReplyState } from '../actions';
 
 const initial: ReplyState = {};
@@ -28,6 +29,9 @@ export function ReplyForm({ contactId, hoursRemaining }: { contactId: string; ho
    *  sessionStorage throws in Safari private mode — and telling her the text was
    *  kept when it was not is worse than saying nothing. */
   const [textKept, setTextKept] = useState(false);
+  /** With no network the send cannot succeed, so the button refuses instead of
+   *  failing — a refusal she can act on beats an error she has to interpret. */
+  const online = useOnline();
 
   /** The thread polls while it is open, so a refresh WILL land while she is typing.
    *
@@ -119,18 +123,35 @@ export function ReplyForm({ contactId, hoursRemaining }: { contactId: string; ho
             // off a half-written pastoral reply.
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
+              // Guarded as well as the button: Enter is the fast path she will
+              // actually use, and firing a doomed send would clear the textarea
+              // through react-dom's form reset for nothing.
+              if (!online) return;
               // requestSubmit, not submit(): submit() bypasses both the `required`
               // check and the React action, so it would send an empty body.
               form.current?.requestSubmit();
             }
           }}
         />
-        <button className="primary composer-send" type="submit" disabled={pending} aria-label="Enviar resposta">
+        <button
+          className="primary composer-send"
+          type="submit"
+          disabled={pending || !online}
+          aria-label={online ? 'Enviar resposta' : 'Enviar resposta — sem conexão no momento'}
+        >
           {pending ? '…' : '➤'}
         </button>
       </div>
+      {/* The offline line promises no outbox, because there is none. It says what
+          is visibly true — the words are still on screen — and gives the one
+          instruction that actually protects them: leave the panel open. The draft
+          is mirrored to sessionStorage, which survives a reload but not a
+          relaunched standalone app, and is unavailable outright in Safari private
+          mode, so "keep it open" is the only advice that is true everywhere. */}
       <p className="hint composer-hint">
-        ⏱️ Janela de resposta: ~{hoursRemaining}h restantes · Enter envia, Shift+Enter quebra a linha
+        {online
+          ? `⏱️ Janela de resposta: ~${hoursRemaining}h restantes · Enter envia, Shift+Enter quebra a linha`
+          : '📵 Sem conexão — o texto continua aqui na tela. Deixe o painel aberto e toque em ➤ quando a internet voltar.'}
       </p>
     </form>
   );
