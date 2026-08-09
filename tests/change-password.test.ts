@@ -47,7 +47,7 @@ const { changePassword } = await import('@/app/admin/(protected)/configuracoes/a
 const { hashPassword, verifyPassword } = await import('@/lib/auth/password');
 const { findAdminById } = await import('@/lib/repo/admin');
 const {
-  createResetToken,
+  issueResetToken,
   listResetTokensFor,
 } = await import('@/lib/repo/password-reset');
 const { generateResetToken, hashResetToken, resetTokenExpiresAt } = await import('@/lib/auth/reset-token');
@@ -82,6 +82,15 @@ async function makeAdminAndSignIn(): Promise<{ churchId: string; adminId: string
   h.cookie.save.mockClear();
 
   return { churchId, adminId };
+}
+
+/** issueResetToken is keyed by address, not by id: its lookup lives inside the one
+ *  statement that mints a token, which is what keeps the public request form to a
+ *  single round trip either way. These fixtures hold an id, so they resolve the
+ *  address here. */
+async function emailOf(adminId: string): Promise<string> {
+  const r = await client.query<{ email: string }>('select email from admin_user where id = $1', [adminId]);
+  return r.rows[0].email;
 }
 
 function form(fields: Record<string, string>): FormData {
@@ -239,8 +248,8 @@ describe('a password change kills outstanding reset links', () => {
     const { adminId } = await makeAdminAndSignIn();
     const now = new Date();
     const token = generateResetToken();
-    await createResetToken({
-      adminUserId: adminId,
+    await issueResetToken({
+      email: await emailOf(adminId),
       tokenHash: hashResetToken(token),
       expiresAt: resetTokenExpiresAt(now),
       now,
@@ -255,8 +264,8 @@ describe('a password change kills outstanding reset links', () => {
   it('leaves them alone when the change is refused', async () => {
     const { adminId } = await makeAdminAndSignIn();
     const now = new Date();
-    await createResetToken({
-      adminUserId: adminId,
+    await issueResetToken({
+      email: await emailOf(adminId),
       tokenHash: hashResetToken(generateResetToken()),
       expiresAt: resetTokenExpiresAt(now),
       now,

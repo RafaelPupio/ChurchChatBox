@@ -1,7 +1,7 @@
-import { and, desc, eq, gt, isNotNull, isNull, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { passwordResetToken } from '@/db/schema';
-import { mayRequestNewToken } from '@/lib/auth/reset-token';
+import { resetRequestCutoff } from '@/lib/auth/reset-token';
 
 /** Reset tokens are keyed by admin identity, not by church — see the schema
  *  comment on password_reset_token. Nothing in this file takes a churchId,
@@ -12,72 +12,97 @@ import { mayRequestNewToken } from '@/lib/auth/reset-token';
  *  neon-http has no transactions, so every function here is explicit about which
  *  of its statements carries a correctness guarantee and which does not. */
 
-/** Deletes the tokens for this admin that can no longer do anything: already
- *  consumed, or past their expiry. Housekeeping only — nothing depends on it
- *  having run, because both consumption and the throttle re-check used_at and
- *  expires_at themselves. Without it the table grows without bound. */
-async function purgeDeadTokens(adminUserId: string, now: Date): Promise<void> {
-  await db
-    .delete(passwordResetToken)
-    .where(
-      and(
-        eq(passwordResetToken.adminUserId, adminUserId),
-        or(isNotNull(passwordResetToken.usedAt), lt(passwordResetToken.expiresAt, now)),
-      ),
-    );
+export interface IssuedResetToken {
+  /** The address as it is stored on the admin row, or null when no admin has this
+   *  address. The caller sends mail to THIS value rather than to what was typed,
+   *  so a future change to how addresses are matched cannot turn into mail
+   *  addressed somewhere other than the account it belongs to. */
+  email: string | null;
+  /** Whether a token row was actually written. False when the address belongs to
+   *  nobody, and false when the per-account throttle refused. */
+  created: boolean;
 }
 
-/** Mints one reset token for an admin, unless that admin asked too recently.
+/** Finds the admin with this address, clears their dead tokens, applies the
+ *  per-account throttle, and mints a token — IN ONE STATEMENT, which is the whole
+ *  point of the function.
  *
- *  Returns whether a token was actually stored, so the caller knows whether to
- *  send mail. The caller must NOT vary its response on this value: a throttled
- *  request has to look exactly like a delivered one, or the throttle becomes the
- *  account-existence oracle the whole flow is built to avoid.
+ *  WHY ONE STATEMENT. neon-http sends every statement as its own HTTPS request,
+ *  measured at a 177ms median against this project's database (the full table is
+ *  in reset-token.ts). As four statements this cost 713.2ms at the median, while
+ *  an address belonging to nobody cost 177.6ms because nothing at all ran for it.
+ *  That difference is not a performance note: the caller is a PUBLIC form, and the
+ *  gap was wider than the response floor meant to hide it, so the form answered
+ *  "this address administers a church" to anyone with a stopwatch. Round trips are
+ *  the unit of cost, so the fix is to make both branches cost exactly one — for a
+ *  known address and an unknown one alike, since the lookup is now inside the
+ *  statement rather than in front of it. Measured after: p50 178.4ms known against
+ *  178.3ms unknown, p99 269.6ms against 265.2ms.
  *
- *  THE THROTTLE IS BEST-EFFORT AND THIS IS DELIBERATE. It is three statements and
- *  they are not atomic together, so two requests racing for the same address can
- *  both see "nothing recent" and both insert. Making it a single
- *  `INSERT ... SELECT ... WHERE NOT EXISTS` would not fix that either: under READ
- *  COMMITTED each statement's subquery reads a snapshot taken before the other's
- *  insert, so a concurrent burst defeats that form too. Only a real rate limiter
- *  in front of the endpoint stops a burst, and this repo has none (see the
- *  report). What this does stop is the sequential case — a script looping on one
- *  address — which is the difference between "one message a minute" and "as many
- *  as the attacker can issue".
+ *  WHY RAW SQL. Drizzle's builder has no way to express a data-modifying CTE, and
+ *  this needs three of them. The identifiers are written out; the values are all
+ *  bound parameters. Everything this statement does is exercised against real
+ *  Postgres in tests/password-reset.test.ts running the real migrations, which is
+ *  what would catch a column renamed out from under this text.
  *
- *  Losing that race costs one extra email. That is why best-effort is acceptable
- *  HERE and is not acceptable in consumeResetToken below, where losing the race
- *  would mean one token spending twice. */
-export async function createResetToken(input: {
-  adminUserId: string;
+ *  WHY THE PURGE AND THE THROTTLE DO NOT COLLIDE, now that they share a snapshot
+ *  rather than running one after the other: `purged` takes rows where
+ *  `used_at IS NOT NULL OR expires_at < now` and `live` counts rows where
+ *  `used_at IS NULL AND expires_at > now`. No row satisfies both, so `live` sees
+ *  the same set whether or not it can see the delete. (The boundary row, unused
+ *  and expiring at exactly `now`, belongs to neither — as it did before.)
+ *
+ *  THE THROTTLE IS STILL BEST-EFFORT, and being one statement does not change
+ *  that. Under READ COMMITTED, two concurrent requests for the same address each
+ *  read a snapshot taken before the other's insert, so both can find "nothing
+ *  live" and both can insert. Only a limiter in front of the endpoint stops a
+ *  burst. What this does stop is the sequential case — a script looping on one
+ *  address — which is the difference between one message a minute and as many as
+ *  the attacker can issue. Losing that race costs one extra email, which is why
+ *  best-effort is acceptable HERE and is not acceptable in consumeResetToken
+ *  below, where losing the race would mean one token spending twice. */
+export async function issueResetToken(input: {
+  email: string;
   tokenHash: string;
   expiresAt: Date;
   now: Date;
-}): Promise<boolean> {
-  await purgeDeadTokens(input.adminUserId, input.now);
+}): Promise<IssuedResetToken> {
+  // Timestamps go as ISO text with an explicit cast rather than as Date objects,
+  // so the statement means the same thing on neon-http and on the PGlite the tests
+  // run against instead of depending on how each driver encodes a Date.
+  const now = input.now.toISOString();
+  const cutoff = resetRequestCutoff(input.now).toISOString();
+  const expiresAt = input.expiresAt.toISOString();
 
-  const recent = await db
-    .select({ createdAt: passwordResetToken.createdAt })
-    .from(passwordResetToken)
-    .where(
-      and(
-        eq(passwordResetToken.adminUserId, input.adminUserId),
-        isNull(passwordResetToken.usedAt),
-        gt(passwordResetToken.expiresAt, input.now),
-      ),
+  const result = await db.execute(sql`
+    with target as (
+      select id, email from admin_user where email = ${input.email} limit 1
+    ), purged as (
+      delete from password_reset_token t using target
+       where t.admin_user_id = target.id
+         and (t.used_at is not null or t.expires_at < ${now}::timestamptz)
+      returning 1
+    ), live as (
+      select max(t.created_at) as last_created
+        from password_reset_token t
+        join target on t.admin_user_id = target.id
+       where t.used_at is null and t.expires_at > ${now}::timestamptz
+    ), inserted as (
+      insert into password_reset_token (admin_user_id, token_hash, expires_at, created_at)
+      select target.id, ${input.tokenHash}, ${expiresAt}::timestamptz, ${now}::timestamptz
+        from target, live
+       where live.last_created is null or live.last_created <= ${cutoff}::timestamptz
+      returning admin_user_id
     )
-    .orderBy(desc(passwordResetToken.createdAt))
-    .limit(1);
+    select (select email from target) as email,
+           (select count(*) from inserted)::int as created,
+           (select count(*) from purged)::int as purged
+  `);
 
-  if (!mayRequestNewToken(recent[0]?.createdAt ?? null, input.now)) return false;
-
-  await db.insert(passwordResetToken).values({
-    adminUserId: input.adminUserId,
-    tokenHash: input.tokenHash,
-    expiresAt: input.expiresAt,
-    createdAt: input.now,
-  });
-  return true;
+  // Both drivers return { rows: [...] }; the shapes differ in everything else.
+  const rows = (result as unknown as { rows: Array<{ email: string | null; created: number }> }).rows;
+  const row = rows[0];
+  return { email: row?.email ?? null, created: Number(row?.created ?? 0) > 0 };
 }
 
 /** Claims a token, atomically, and returns the admin it belongs to — or null if

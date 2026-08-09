@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
+  MEASURED_ROUND_TRIP_P99_MS,
   RESET_REQUEST_MIN_INTERVAL_MS,
   RESET_RESPONSE_FLOOR_MS,
   RESET_TOKEN_TTL_MS,
+  floorOverrunMs,
   generateResetToken,
   hashResetToken,
   isResetTokenUsable,
   mayRequestNewToken,
   remainingFloorMs,
   resetLinkFor,
+  resetRequestCutoff,
   resetTokenExpiresAt,
   resetTokenHashEquals,
 } from '@/lib/auth/reset-token';
@@ -139,6 +142,38 @@ describe('per-account request throttle', () => {
   });
 });
 
+describe('the throttle cutoff the SQL compares against', () => {
+  // The throttle moved into the database when the request flow collapsed to one
+  // statement. These assertions are what stop that from becoming a second,
+  // drifting copy of the rule: the timestamp handed to the SQL has to decide every
+  // case exactly as the pure predicate does.
+  const now = new Date('2026-08-08T12:00:00.000Z');
+
+  it('is one interval before now', () => {
+    expect(resetRequestCutoff(now).getTime()).toBe(now.getTime() - RESET_REQUEST_MIN_INTERVAL_MS);
+  });
+
+  it('agrees with mayRequestNewToken on every case, boundaries included', () => {
+    const cutoff = resetRequestCutoff(now);
+    const cases = [
+      null,
+      new Date(now.getTime()),
+      new Date(now.getTime() - 1),
+      new Date(now.getTime() - 999),
+      new Date(cutoff.getTime() + 1),
+      new Date(cutoff.getTime()),
+      new Date(cutoff.getTime() - 1),
+      new Date(now.getTime() - 60 * 60 * 1000),
+    ];
+    for (const lastRequestedAt of cases) {
+      // `last_created is null or last_created <= cutoff`, which is the WHERE clause
+      // in issueResetToken written in TypeScript.
+      const asSql = lastRequestedAt === null || lastRequestedAt.getTime() <= cutoff.getTime();
+      expect(asSql).toBe(mayRequestNewToken(lastRequestedAt, now));
+    }
+  });
+});
+
 describe('reset link', () => {
   it('points at the public reset page with the token as a query parameter', () => {
     expect(resetLinkFor('https://painel.exemplo.br', 'abc123')).toBe(
@@ -192,5 +227,72 @@ describe('response timing floor', () => {
     expect(unknownEmailElapsed + remainingFloorMs(unknownEmailElapsed)).toBe(
       knownEmailElapsed + remainingFloorMs(knownEmailElapsed),
     );
+  });
+
+  it('SEPARATES the branches once one runs past it — the bug this file missed', () => {
+    // Measured laptop-to-Neon against this project's database, 60 samples, before
+    // the request flow was collapsed to one statement. The "address exists" branch
+    // was four neon-http round trips; the "no such address" branch was one.
+    //
+    //     known    min 702.9  p50 713.2  p95 800.8  max 841.2
+    //     unknown  min 174.6  p50 177.6  p95 184.6  max 264.8
+    //
+    // The floor was 700ms, and what it did is worse than "padded nothing". It
+    // pinned the UNKNOWN branch to a flat 700ms, erasing the variance that would
+    // have made a stopwatch ambiguous, and left the KNOWN branch reporting its raw
+    // elapsed time — which never once, in 60 samples, landed inside the floor.
+    const OLD_FLOOR_MS = 700;
+    const respondsIn = (elapsed: number) => elapsed + remainingFloorMs(elapsed, OLD_FLOOR_MS);
+
+    // Every unknown-address sample, fastest to slowest, answers in exactly 700ms.
+    for (const elapsed of [174.6, 177.6, 184.6, 264.8]) {
+      expect(respondsIn(elapsed)).toBe(OLD_FLOOR_MS);
+    }
+    // Every known-address sample, INCLUDING THE FASTEST OF 60, answers slower.
+    for (const elapsed of [702.9, 713.2, 800.8, 841.2]) {
+      expect(respondsIn(elapsed)).toBeCloseTo(elapsed);
+      expect(respondsIn(elapsed)).toBeGreaterThan(respondsIn(264.8));
+    }
+
+    // remainingFloorMs reported all of that as a perfectly ordinary 0, which is the
+    // same 0 it returns for a branch that arrived exactly on time. floorOverrunMs
+    // is what distinguishes them, and what the action now logs on.
+    expect(remainingFloorMs(713.2, OLD_FLOOR_MS)).toBe(0);
+    expect(remainingFloorMs(700, OLD_FLOOR_MS)).toBe(0);
+    expect(floorOverrunMs(713.2, OLD_FLOOR_MS)).toBeCloseTo(13.2);
+    expect(floorOverrunMs(702.9, OLD_FLOOR_MS)).toBeCloseTo(2.9);
+    expect(floorOverrunMs(700, OLD_FLOOR_MS)).toBe(0);
+    expect(floorOverrunMs(177.6, OLD_FLOOR_MS)).toBe(0);
+  });
+
+  it('reports an overrun as a positive number and never a negative one', () => {
+    expect(floorOverrunMs(0, 700)).toBe(0);
+    expect(floorOverrunMs(699, 700)).toBe(0);
+    expect(floorOverrunMs(700, 700)).toBe(0);
+    expect(floorOverrunMs(701, 700)).toBe(1);
+    expect(floorOverrunMs(5000, 700)).toBe(4300);
+  });
+
+  it('is never owed and overrun at the same time', () => {
+    // The two functions partition every elapsed time between them, which is what
+    // makes "overran" a signal rather than an interpretation of a zero.
+    for (const elapsed of [0, 1, 399, 400, 401, 700, 726, 5000]) {
+      const owed = remainingFloorMs(elapsed);
+      const over = floorOverrunMs(elapsed);
+      expect(owed === 0 || over === 0).toBe(true);
+      expect(elapsed + owed - over).toBe(RESET_RESPONSE_FLOOR_MS);
+    }
+  });
+
+  it('sits above the measured p99 of the branch it has to cover', () => {
+    // The floor is only worth having while a real branch finishes inside it. Both
+    // branches are now one neon-http statement, measured at a 271.4ms p99, so this
+    // is the assertion that keeps the constant tied to a number somebody actually
+    // took rather than to a number somebody liked.
+    expect(RESET_RESPONSE_FLOOR_MS).toBeGreaterThan(MEASURED_ROUND_TRIP_P99_MS);
+    expect(remainingFloorMs(MEASURED_ROUND_TRIP_P99_MS)).toBeGreaterThan(0);
+    expect(floorOverrunMs(MEASURED_ROUND_TRIP_P99_MS)).toBe(0);
+    // With enough headroom to be worth calling a floor: at least 1.25x the p99.
+    expect(RESET_RESPONSE_FLOOR_MS).toBeGreaterThanOrEqual(MEASURED_ROUND_TRIP_P99_MS * 1.25);
   });
 });

@@ -27,7 +27,27 @@ vi.mock('@/db/client', async () => {
   const schema = await import('@/db/schema');
   const client = new PGlite();
   (globalThis as Record<string, unknown>).__resetActionsClient = client;
-  return { db: drizzle(client, { schema }) };
+
+  // Counts the statements the APPLICATION sends, so a test can assert how many
+  // round trips a branch costs. On neon-http every statement is its own HTTPS
+  // request, which is the unit this flow's timing is made of; PGlite is in-process
+  // and cannot show that in a stopwatch, but it can show it in a count. The
+  // fixtures below hold `client` itself and are deliberately not counted.
+  const statements = { count: 0 };
+  (globalThis as Record<string, unknown>).__resetActionsStatements = statements;
+  const counted = new Proxy(client, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function') return value;
+      const bound = (value as (...a: unknown[]) => unknown).bind(target);
+      if (prop !== 'query' && prop !== 'exec') return bound;
+      return (...args: unknown[]) => {
+        statements.count += 1;
+        return bound(...args);
+      };
+    },
+  });
+  return { db: drizzle(counted, { schema }) };
 });
 
 vi.mock('@/lib/email', () => ({ sendPasswordResetEmail: h.send }));
@@ -168,6 +188,63 @@ describe('requesting a link says the same thing either way', () => {
   });
 });
 
+describe('requesting a link costs the same ROUND TRIPS either way', () => {
+  /** Statements the application has sent so far. */
+  const sent = () =>
+    ((globalThis as Record<string, unknown>).__resetActionsStatements as { count: number }).count;
+
+  it('issues exactly ONE database statement, for a known address and an unknown one', async () => {
+    // THE ASSERTION THAT WOULD HAVE CAUGHT THE ORIGINAL BUG, and the one the
+    // timing test below cannot make. Timing is unavailable in a unit test — PGlite
+    // answers in microseconds and the floor swallows everything — but the cause is
+    // countable. Before this was fixed the numbers here were 4 and 1: a lookup, a
+    // purge, a throttle read and an insert against a single lookup, four separate
+    // HTTPS requests against one, ~725ms against ~180ms on the real database.
+    //
+    // Equal counts is the invariant. Anything added to the "address exists" branch
+    // that talks to the database — an audit row, a second lookup, a "have they
+    // logged in lately" check — breaks this test before it can reach production
+    // and reopen the oracle.
+    const { email } = await makeAdmin();
+
+    const beforeKnown = sent();
+    await requestPasswordReset({}, form({ email }));
+    const known = sent() - beforeKnown;
+
+    const beforeUnknown = sent();
+    await requestPasswordReset({}, form({ email: 'ninguem-contagem@exemplo.org' }));
+    const unknown = sent() - beforeUnknown;
+
+    expect(known).toBe(unknown);
+    expect(known).toBe(1);
+  });
+
+  it('still issues exactly one when the throttle refuses', async () => {
+    // The throttle lives inside that same statement now. A refusal must not become
+    // a branch with a different cost — "throttled" only ever happens to an address
+    // that exists, so a cheaper or costlier refusal is an oracle on its own.
+    const { email } = await makeAdmin();
+    await requestPasswordReset({}, form({ email }));
+
+    const before = sent();
+    await requestPasswordReset({}, form({ email }));
+
+    expect(sent() - before).toBe(1);
+  });
+
+  it('issues NONE for input too long to be an address, which the floor covers', async () => {
+    // RFC 5321 caps an address at 254 characters, so this cannot be one and never
+    // reaches the database. Zero statements against one is a real difference in
+    // work — it is the one difference the response floor is still there to hide,
+    // and it says nothing about any account because no account can have this
+    // address.
+    const before = sent();
+    await requestPasswordReset({}, form({ email: 'a'.repeat(5000) }));
+
+    expect(sent() - before).toBe(0);
+  });
+});
+
 describe('requesting a link takes the same TIME either way', () => {
   it('holds both branches to the response floor', async () => {
     // The login action equalises with a decoy bcrypt hash. This one cannot — its
@@ -193,6 +270,65 @@ describe('requesting a link takes the same TIME either way', () => {
     // stopwatch. Without the floor the unknown branch returns in single-digit ms
     // while the known branch pays for an insert.
     expect(Math.abs(knownElapsed - unknownElapsed)).toBeLessThan(150);
+  });
+});
+
+describe('a flood does not get to pin a paid function per request', () => {
+  /** Fires `size` requests that all reach the endpoint before any of them answers,
+   *  and reports for each whether it came back far too fast to have waited out the
+   *  response floor — i.e. whether it was shed. */
+  async function burst(address: string, size = 12) {
+    return Promise.all(
+      Array.from({ length: size }, async () => {
+        const startedAt = Date.now();
+        const result = await requestPasswordReset({}, form({ email: address }));
+        return { result, shed: Date.now() - startedAt < RESET_RESPONSE_FLOOR_MS / 2 };
+      }),
+    );
+  }
+
+  it('refuses the excess instantly instead of sleeping through it', async () => {
+    // The endpoint is unauthenticated, does a database round trip, and then sleeps
+    // on purpose. The per-account throttle caps EMAILS to a registered address and
+    // caps nothing at all for the invented addresses an attacker would actually
+    // send, so without a cap every junk request buys a paid function for the whole
+    // floor. Above the cap the answer is immediate, which is what makes the flood
+    // cheap to absorb rather than expensive to serve.
+    const { email } = await makeAdmin();
+
+    const responses = await burst(email);
+
+    expect(responses.every((r) => r.result.sent === true)).toBe(true);
+    expect(responses.filter((r) => r.shed).length).toBeGreaterThan(0);
+    expect(responses.filter((r) => !r.shed).length).toBeGreaterThan(0);
+  });
+
+  it('decides before it looks at the address, so the fast refusal leaks nothing', async () => {
+    // The property that keeps the shed from becoming the very oracle this flow
+    // exists to avoid: the same burst against a registered address and against a
+    // fictional one is refused the same number of times, and every answer is the
+    // one message this form ever gives.
+    const { email } = await makeAdmin();
+
+    const known = await burst(email);
+    const unknown = await burst('ninguem-rajada@exemplo.org');
+
+    expect(known.filter((r) => r.shed).length).toBe(unknown.filter((r) => r.shed).length);
+    expect(known.map((r) => r.result)).toEqual(unknown.map((r) => r.result));
+  });
+
+  it('hands every slot back, so the next visitor is not punished for the flood', async () => {
+    const { email } = await makeAdmin();
+    await burst(email);
+
+    // A single request after the burst behaves completely normally: it waits out
+    // the floor rather than being refused, which it could not do if the burst had
+    // leaked its slots.
+    const startedAt = Date.now();
+    const after = await requestPasswordReset({}, form({ email: 'depois-da-rajada@exemplo.org' }));
+
+    expect(after).toEqual({ sent: true });
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(RESET_RESPONSE_FLOOR_MS - 25);
   });
 });
 

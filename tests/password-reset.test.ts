@@ -32,7 +32,7 @@ vi.mock('@/db/client', async () => {
 });
 
 const {
-  createResetToken,
+  issueResetToken,
   consumeResetToken,
   invalidateResetTokensFor,
   listResetTokensFor,
@@ -65,17 +65,26 @@ async function makeAdmin(label: string): Promise<{ churchId: string; adminId: st
   return { churchId, adminId: a.rows[0].id };
 }
 
+/** The address on an admin row. issueResetToken is keyed by address rather than by
+ *  id — the lookup happens INSIDE its single statement, which is what makes the
+ *  request form cost one round trip whether or not the address exists — so the
+ *  fixtures below, which all hold an id, resolve the address here. */
+async function emailOf(adminId: string): Promise<string> {
+  const r = await client.query<{ email: string }>('select email from admin_user where id = $1', [adminId]);
+  return r.rows[0].email;
+}
+
 /** Mints a token for an admin and hands back both halves, as the request action
  *  does: the plaintext goes in the link, the hash goes in the database. */
 async function mint(adminId: string, now: Date) {
   const token = generateResetToken();
-  const created = await createResetToken({
-    adminUserId: adminId,
+  const issued = await issueResetToken({
+    email: await emailOf(adminId),
     tokenHash: hashResetToken(token),
     expiresAt: resetTokenExpiresAt(now),
     now,
   });
-  return { token, created };
+  return { token, created: issued.created, email: issued.email };
 }
 
 beforeAll(async () => {
@@ -88,6 +97,103 @@ beforeAll(async () => {
       await client.exec(stmt);
     }
   }
+});
+
+describe('minting for an address rather than for an id', () => {
+  // issueResetToken resolves the admin INSIDE the statement that mints the token,
+  // which is what makes the public request form cost one round trip whether or not
+  // the address exists. These assertions cover the half of that statement the rest
+  // of this file never reaches: what it does when nobody has the address.
+
+  it('reports the address as unknown and writes nothing', async () => {
+    const before = await client.query<{ n: number }>('select count(*)::int as n from password_reset_token');
+
+    const issued = await issueResetToken({
+      email: 'nao-existe-em-lugar-nenhum@exemplo.org',
+      tokenHash: hashResetToken(generateResetToken()),
+      expiresAt: resetTokenExpiresAt(new Date()),
+      now: new Date(),
+    });
+
+    expect(issued).toEqual({ email: null, created: false });
+    const after = await client.query<{ n: number }>('select count(*)::int as n from password_reset_token');
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
+
+  it('hands back the address as the ROW stores it, which is where the mail goes', async () => {
+    // The caller addresses its email to this value and not to what was typed. The
+    // two are equal today because the lookup is an exact match, and that is exactly
+    // why it is worth pinning: a future change to how addresses are matched must
+    // not quietly turn into mail sent to whatever a visitor entered.
+    const { adminId } = await makeAdmin('endereco');
+    const stored = await emailOf(adminId);
+
+    const issued = await issueResetToken({
+      email: stored,
+      tokenHash: hashResetToken(generateResetToken()),
+      expiresAt: resetTokenExpiresAt(new Date()),
+      now: new Date(),
+    });
+
+    expect(issued.email).toBe(stored);
+    expect(issued.created).toBe(true);
+  });
+
+  it('finds nobody for an address that differs only in case', async () => {
+    // Matching is exact, and login/actions.ts matches the same way. Pinned because
+    // "helpfully" lowercasing one side of that pair produces an account that can be
+    // recovered but not logged into, or the reverse.
+    const { adminId } = await makeAdmin('maiusculas');
+    const stored = await emailOf(adminId);
+
+    const issued = await issueResetToken({
+      email: stored.toUpperCase(),
+      tokenHash: hashResetToken(generateResetToken()),
+      expiresAt: resetTokenExpiresAt(new Date()),
+      now: new Date(),
+    });
+
+    expect(issued).toEqual({ email: null, created: false });
+    expect(await listResetTokensFor(adminId)).toHaveLength(0);
+  });
+
+  it('mints for the right admin when another church has a similar address', async () => {
+    const mine = await makeAdmin('vizinha-a');
+    const theirs = await makeAdmin('vizinha-b');
+
+    await issueResetToken({
+      email: await emailOf(mine.adminId),
+      tokenHash: hashResetToken(generateResetToken()),
+      expiresAt: resetTokenExpiresAt(new Date()),
+      now: new Date(),
+    });
+
+    expect(await listResetTokensFor(mine.adminId)).toHaveLength(1);
+    expect(await listResetTokensFor(theirs.adminId)).toHaveLength(0);
+  });
+
+  it('purges and mints in the same statement, without the purge eating the throttle', async () => {
+    // The two used to be separate round trips, so the throttle read whatever the
+    // purge left behind. They now share one snapshot, and the predicates are
+    // disjoint by construction — a row is dead (used or expired) or live, never
+    // both — so the outcome must be unchanged: the dead row goes, and the live one
+    // still holds the throttle shut.
+    const { adminId } = await makeAdmin('mesma-instrucao');
+    const base = new Date('2026-08-08T12:00:00.000Z');
+
+    const spent = await mint(adminId, base);
+    await consumeResetToken(hashResetToken(spent.token), base);
+    const live = await mint(adminId, new Date(base.getTime() + 1000));
+    expect(live.created).toBe(true);
+
+    // One second later: the spent row is gone, and the live one refuses a third.
+    const blocked = await mint(adminId, new Date(base.getTime() + 2000));
+
+    expect(blocked.created).toBe(false);
+    const rows = await listResetTokensFor(adminId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].tokenHash).toBe(hashResetToken(live.token));
+  });
 });
 
 describe('what the database actually stores', () => {
@@ -121,8 +227,8 @@ describe('what the database actually stores', () => {
     const { adminId } = await makeAdmin('unico');
     const token = generateResetToken();
     const now = new Date();
-    await createResetToken({
-      adminUserId: adminId,
+    await issueResetToken({
+      email: await emailOf(adminId),
       tokenHash: hashResetToken(token),
       expiresAt: resetTokenExpiresAt(now),
       now,
