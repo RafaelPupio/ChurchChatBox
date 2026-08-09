@@ -33,8 +33,11 @@ export const viewport: Viewport = {
   // fixed tab bar move up by ordinary layout and --kb correctly stays at 0px.
   // Safari ignores it, which is exactly why KeyboardInset.tsx exists for iOS.
   interactiveWidget: 'resizes-content',
-  // Deliberately NOT setting maximumScale or userScalable: pinch-zoom is how an
-  // older volunteer reads a small label, and taking it away is a real harm.
+  // No zoom-limiting keys here, deliberately: pinch-zoom is how an older
+  // volunteer reads a small label, and taking it away to make the panel feel
+  // more "app-like" is a real harm. tests/pwa-manifest.test.ts asserts that the
+  // scale-limiting property names never appear in this file at all — which is
+  // why they are not spelled out even in this comment.
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
