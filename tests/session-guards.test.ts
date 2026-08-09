@@ -329,8 +329,24 @@ describe('password change ends other sessions', () => {
     h.session = { ...h.session, pwdAt: undefined };
     h.cookieSession = { ...h.cookieSession, pwdAt: undefined };
 
+    // Still refused — that is the point of this test and it is unchanged. The
+    // REASON is now 'unauthenticated' rather than 'revoked', because
+    // isAuthenticated rejects a session with no epoch before the epoch is ever
+    // compared. That ordering exists to close a redirect loop: the login page
+    // called such a cookie authenticated and forwarded into the panel, whose
+    // guard refused and forwarded back. The new reason is also the honest one —
+    // REVOKED_MESSAGE says "sua conta não tem mais acesso", which is false for a
+    // cookie that merely predates the field. Her account is fine; the cookie is old.
+    // The two guards refuse for different stated reasons, and that asymmetry is
+    // recorded rather than hidden: requireWritableSession compares the epoch
+    // itself (writable.ts:53) and reports 'revoked'; checkWritableSession runs
+    // isAuthenticated first (writable.ts:83), which now rejects a session with no
+    // epoch at all, so it reports 'unauthenticated'. Both send her to the same
+    // login screen, so nothing is broken — but only one of the two messages is
+    // true of an old cookie, since REVOKED_MESSAGE claims her account lost access
+    // when in fact her account is fine. Worth unifying; not worth doing blind.
     expect(await requireWritableSession()).toEqual({ blocked: 'revoked' });
-    expect(await checkWritableSession()).toEqual({ blocked: 'revoked' });
+    expect(await checkWritableSession()).toEqual({ blocked: 'unauthenticated' });
     await expect(requireReadableSession()).rejects.toThrow(/NEXT_REDIRECT/);
   });
 

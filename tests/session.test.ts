@@ -3,7 +3,10 @@ import { isAuthenticated } from '@/lib/auth/session';
 
 describe('isAuthenticated', () => {
   it('is true when a session carries an admin id and kind', () => {
-    expect(isAuthenticated({ kind: 'admin', adminUserId: 'abc' })).toBe(true);
+    // pwdAt belongs to a well-formed session: every guard checks it, so a cookie
+    // without one is refused downstream and must be refused here too — see the
+    // redirect-loop note in isAuthenticated.
+    expect(isAuthenticated({ kind: 'admin', adminUserId: 'abc', pwdAt: 1_700_000_000_000 })).toBe(true);
   });
 
   it('is false for an empty session', () => {

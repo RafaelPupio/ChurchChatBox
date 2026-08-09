@@ -26,8 +26,26 @@ const COOKIE_NAME = 'sv_admin';
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
 /** Pure guard used by both the layout and every action. */
-export function isAuthenticated(session: Pick<SessionData, 'kind' | 'adminUserId'>): boolean {
-  return session.kind === 'admin' && typeof session.adminUserId === 'string' && session.adminUserId.length > 0;
+export function isAuthenticated(
+  session: Pick<SessionData, 'kind' | 'adminUserId' | 'pwdAt'>,
+): boolean {
+  return (
+    session.kind === 'admin' &&
+    typeof session.adminUserId === 'string' &&
+    session.adminUserId.length > 0 &&
+    // `pwdAt` is required here, and leaving it out was a REDIRECT LOOP rather
+    // than a leniency. Every guard downstream calls sessionMatchesPassword,
+    // which rejects a cookie without it — so a session this function called
+    // authenticated was one nothing would actually honour. The login page saw
+    // "already signed in" and sent her to /admin/conteudo; that page's guard
+    // refused and sent her back; repeat until the browser gives up.
+    //
+    // Reachable by every single signed-in user the moment the password-reset
+    // work deploys, because every cookie issued before it predates the claim.
+    // A cookie no guard will accept is not an authenticated session, and saying
+    // so here is what turns an infinite loop into an ordinary login screen.
+    typeof session.pwdAt === 'number'
+  );
 }
 
 /** Whether this cookie was issued for the password the account currently has.
