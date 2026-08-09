@@ -85,7 +85,10 @@ button.danger { color: var(--danger); border-color: var(--danger); background: #
 .nav a.active { background: #ecfdf5; color: var(--ok); font-weight: 600; }
 .error { color: var(--danger); font-size: 13px; margin: 8px 0; }
 .hint { color: var(--muted); font-size: 12px; }
-.chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+/* nowrap: the chip states WHERE the option is ("Fora do menu"), which is longer
+   than the old "Oculto" and would otherwise break across two lines beside the
+   item name at 320px. Same reason .pill has it. */
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .chip.on { background: #d1fae5; color: var(--ok); }
 .chip.off { background: #fee2e2; color: var(--danger); }
 .thread { display: flex; flex-direction: column; gap: 6px; background: #eef2f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; min-height: 180px; }
@@ -108,3 +111,30 @@ button.danger { color: var(--danger); border-color: var(--danger); background: #
 .pill-past_due { background: #fef3c7; color: #92400e; }
 .pill-suspended { background: #fee2e2; color: #991b1b; }
 .warn { color: #92400e; font-size: 12px; }
+
+/* --- Conteúdo: menu item cards ---
+   A menu row is a card of two lines: the item's name alone on the first, the
+   controls on the second. The name is the only way to know which row you are
+   about to take out of the menu, reorder or edit, and measured at a 375px
+   viewport it was sharing one line with five controls — 61.6px wide by 92px
+   tall, four lines in a narrow ribbon. These class names are mobile-plan Task 1's
+   contract; that task must MERGE with these, not skip them — see the Task 1 row
+   in the reconciliation table. The merge is already applied here: .item-label and
+   .iconbtn below carry mobile Task 1's own declarations (font-size, line-height,
+   and the --tap square) so that tests/mobile-css.test.ts passes against this
+   file, while keeping this plan's wider .item-actions gap. */
+.item-card { display: flex; flex-direction: column; gap: 10px; }
+.item-head { display: flex; align-items: flex-start; gap: 8px; }
+.item-label { flex: 1; min-width: 0; overflow-wrap: break-word; font-weight: 600; font-size: 16px; line-height: 1.3; }
+/* A full sentence, not a tag: on its own line under the name, at hint weight. */
+.item-meta { display: block; font-weight: 400; margin-top: 3px; }
+/* 10px, not 2px. Each arrow press is an immediate server write that reorders the
+   live WhatsApp menu, so a mis-tap between two 44px targets moves the item the
+   wrong way — with no undo beyond noticing and pressing the other arrow. Mobile
+   Task 1 writes 8px here; its own assertion is >= 8, so this stricter value
+   passes it. */
+.item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* Icon-only controls (the ▲▼ reorder pair). A full --tap square: the glyph alone
+   is far narrower, and `flex: 0 0 auto` keeps it from being squeezed when the
+   row wraps. */
+.iconbtn { flex: 0 0 auto; min-width: var(--tap); min-height: var(--tap); padding: 0; font-size: 16px; line-height: 1; }
