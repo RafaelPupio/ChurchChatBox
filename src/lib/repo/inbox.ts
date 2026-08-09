@@ -7,7 +7,14 @@ import type { ContactMode } from '@/lib/types';
 
 export type MessageRecord = typeof message.$inferSelect;
 
-/** All of the church's contacts, most-recently-active first.
+/** All of the church's contacts. Waiting-on-a-human first, then most-recently-
+ *  active.
+ *
+ *  The handoff key comes first because "someone asked for a person and nobody has
+ *  answered" outranks "someone messaged the bot recently". Nothing pushes that
+ *  fact into the panel, so the order of this list is most of how a secretary
+ *  learns it.
+ *
  *  NULLS LAST is required, not cosmetic: Postgres sorts NULLs FIRST in a DESC
  *  order, so a contact row created without a lastInboundAt would float above
  *  real, recent conversations at the top of the inbox. Verified against a real
@@ -17,7 +24,22 @@ export async function listConversations(churchId: string): Promise<ContactRecord
     .select()
     .from(contact)
     .where(eq(contact.churchId, churchId))
-    .orderBy(sql`${contact.lastInboundAt} desc nulls last`);
+    .orderBy(sql`(${contact.mode} = 'human') desc, ${contact.lastInboundAt} desc nulls last`);
+}
+
+/** How many of this church's conversations are waiting on a person.
+ *
+ *  Drives the Caixa tab badge. Push notifications are out of scope, so until they
+ *  exist the only way a secretary learns that someone asked for a human is by
+ *  opening Caixa de Entrada and looking. This badge is the substitute, which is
+ *  why it is read on every page load of every screen rather than only on the
+ *  inbox — deliberately, and it costs one indexed count. */
+export async function countHandoffContacts(churchId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(contact)
+    .where(and(eq(contact.churchId, churchId), eq(contact.mode, 'human')));
+  return row?.n ?? 0;
 }
 
 /** A contact and the most recent slice of its message history, church-scoped.

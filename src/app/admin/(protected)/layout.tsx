@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession, isAuthenticated } from '@/lib/auth/session';
 import { getChurchById } from '@/lib/repo/church-admin';
+import { countHandoffContacts } from '@/lib/repo/inbox';
 import { effectiveStatus } from '@/lib/church-status';
 import { KeyboardInset } from './KeyboardInset';
 import { LogoutButton } from './LogoutButton';
@@ -14,6 +15,18 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   const church = session.churchId ? await getChurchById(session.churchId) : undefined;
   const status = church ? effectiveStatus(church.status, church.graceUntil, new Date()) : 'active';
+  /** Acknowledged rather than hidden: this read sits behind a WEAKER guard than
+   *  every page does. The layout gates on getSession/isAuthenticated, not
+   *  requireReadableSession, so a staffer who has been removed but whose cookie is
+   *  still live sees a waiting COUNT on the tab until that cookie is rejected —
+   *  one integer, no name, no phone number, no message. It is the same exposure
+   *  the getChurchById call above already has, so this changes what rides on the
+   *  boundary, not its shape. Not moved to the pages: the badge belongs to the tab
+   *  bar and the tab bar belongs to the layout, so per-page counts would mean four
+   *  fetches, four prop drills and a badge that blinks to zero on any screen that
+   *  forgot one. If the trade stops being acceptable the fix is to raise THIS
+   *  layout's guard, which is one call site. */
+  const waiting = session.churchId ? await countHandoffContacts(session.churchId) : 0;
 
   return (
     <div>
@@ -32,7 +45,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <LogoutButton />
       </header>
 
-      <TabBar waiting={0} />
+      <TabBar waiting={waiting} />
 
       <div className="container">
         {status === 'suspended' && (
