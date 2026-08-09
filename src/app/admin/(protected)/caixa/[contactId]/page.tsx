@@ -58,8 +58,24 @@ export default async function ConversationPage({
 
   return (
     <div>
-      <div className="row">
-        <h1 className="grow">{convo.contact.name || convo.contact.phone}</h1>
+      {/* Deliberately compact, and deliberately not `.row`. The old header spent
+          ~180px of an 812px phone screen before a single message was visible: a
+          24px <h1> wrapping a three-line name beside a two-line button, and the
+          mobile `.row > .grow { flex-basis: 100% }` rule would have put the button
+          on a fourth line of its own. `.thread-head` keeps the name and the
+          control on one line at 18px.
+
+          Not sticky either: a second sticky element at top: 0 slides under the app
+          bar (z-index 20) and vanishes. It does not need to be — the thread scrolls
+          inside itself now, so the page barely moves. */}
+      <div className="thread-head">
+        {/* The tab bar reaches Caixa in one tap, but leaving a conversation is a
+            back motion and there was nothing on this screen that looked like one. */}
+        <Link className="back" href="/admin/caixa" aria-label="Voltar para a Caixa de Entrada">←</Link>
+        <div className="grow">
+          <h1 className="thread-title">{convo.contact.name || convo.contact.phone}</h1>
+          {convo.contact.name && <p className="hint thread-sub">{convo.contact.phone}</p>}
+        </div>
         {convo.contact.mode === 'human' && <EndHandoffButton contactId={contactId} />}
       </div>
 

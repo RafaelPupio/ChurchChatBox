@@ -18,6 +18,9 @@ export function ReplyForm({ contactId, hoursRemaining }: { contactId: string; ho
   const action = sendReplyToContact.bind(null, contactId);
   const [state, formAction, pending] = useActionState(action, initial);
   const box = useRef<HTMLTextAreaElement>(null);
+  /** Needed only by the Enter-to-send handler below: a keydown has no form to
+   *  submit until something hands it one. */
+  const form = useRef<HTMLFormElement>(null);
   const key = draftKey(contactId);
   /** Whether the box actually still holds her words after the last settled
    *  dispatch. The reassurance under an error is rendered from this and not from
@@ -77,21 +80,58 @@ export function ReplyForm({ contactId, hoursRemaining }: { contactId: string; ho
   }
 
   return (
-    <form action={formAction} className="card">
-      <label htmlFor="body">Responder</label>
-      <textarea id="body" name="body" ref={box} onChange={rememberDraft} required />
-      <div className="row" style={{ marginTop: 10 }}>
-        <span className="hint grow">⏱️ Janela de resposta: ~{hoursRemaining}h restantes</span>
-        <button className="primary" type="submit" disabled={pending}>
-          {pending ? 'Enviando…' : 'Enviar'}
-        </button>
-      </div>
+    /* A composer, not a form at the foot of the page. It sticks to the bottom of
+       the viewport — above the tab bar, and above the software keyboard via
+       --kb — because the reply box used to sit below the entire history, roughly
+       1800px down a 30-message thread. */
+    <form ref={form} action={formAction} className="card composer">
+      {/* Above the box, so an error is not hidden under the keyboard she is
+          typing on when it arrives. */}
       {state.error && (
         <p className="error">
           {state.error}
           {textKept && <span className="hint"> Sua mensagem continua no campo acima.</span>}
         </p>
       )}
+      {/* The visible "Responder" label cost a line of an already short screen and
+          said nothing the placeholder does not. Kept for screen readers, which
+          have no placeholder to fall back on. */}
+      <label htmlFor="body" className="sr-only">Responder</label>
+      <div className="composer-row">
+        <textarea
+          id="body"
+          name="body"
+          className="composer-input"
+          rows={2}
+          ref={box}
+          onChange={rememberDraft}
+          required
+          placeholder="Escreva sua resposta…"
+          /* enterKeyHint relabels the phone keyboard's return key as "enviar"; the
+             handler below is what makes it actually send, since a textarea would
+             otherwise just insert a newline. Same behaviour as WhatsApp Web, which
+             is the thing she already knows how to use. */
+          enterKeyHint="send"
+          autoComplete="off"
+          onKeyDown={(event) => {
+            // isComposing guards IME and predictive input: on an Android keyboard
+            // mid-suggestion, Enter commits the word being typed and must not fire
+            // off a half-written pastoral reply.
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              // requestSubmit, not submit(): submit() bypasses both the `required`
+              // check and the React action, so it would send an empty body.
+              form.current?.requestSubmit();
+            }
+          }}
+        />
+        <button className="primary composer-send" type="submit" disabled={pending} aria-label="Enviar resposta">
+          {pending ? '…' : '➤'}
+        </button>
+      </div>
+      <p className="hint composer-hint">
+        ⏱️ Janela de resposta: ~{hoursRemaining}h restantes · Enter envia, Shift+Enter quebra a linha
+      </p>
     </form>
   );
 }

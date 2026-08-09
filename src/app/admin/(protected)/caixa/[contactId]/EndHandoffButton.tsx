@@ -7,11 +7,14 @@ export function EndHandoffButton({ contactId }: { contactId: string }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState('');
   return (
-    <span className="row" style={{ gap: 8 }}>
+    /* flex: '0 0 auto' so this cannot be stretched or squeezed by the thread
+       header it now sits inside — the name beside it is the element that grows. */
+    <span className="row" style={{ gap: 8, flex: '0 0 auto' }}>
       {error && <span className="error">{error}</span>}
       <button
         type="button"
         disabled={pending}
+        aria-label="Encerrar o atendimento humano desta conversa"
         onClick={() => {
           if (!confirm('Encerrar o atendimento? O bot volta a responder esta pessoa.')) return;
           setError('');
@@ -29,7 +32,11 @@ export function EndHandoffButton({ contactId }: { contactId: string }) {
           });
         }}
       >
-        {pending ? 'Encerrando…' : '✅ Encerrar atendimento'}
+        {/* "✅ Encerrar atendimento" wrapped to two lines beside the member's name
+            and made the thread header 62px tall on a phone. The full sentence
+            lives on the aria-label above, so nothing is lost for a screen reader,
+            and the confirm() below still spells out what happens. */}
+        {pending ? 'Encerrando…' : 'Encerrar'}
       </button>
     </span>
   );
