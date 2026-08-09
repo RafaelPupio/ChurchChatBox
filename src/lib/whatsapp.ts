@@ -1,10 +1,15 @@
 import crypto from 'node:crypto';
 import { activeItemsSorted } from './menu';
+import { truncateRowTitle } from './list-row-title';
 import type { ChurchConfig, MenuItemView, Reply } from './types';
+
+/** Re-exported so `@/lib/whatsapp` stays the single import site for the sender
+ *  and for tests/whatsapp.test.ts. The definitions moved to a client-safe module
+ *  (see its header); this file's public API is unchanged. */
+export { LIST_ROW_TITLE_MAX, truncateRowTitle } from './list-row-title';
 
 export const GRAPH_API_VERSION = 'v21.0';
 export const WHATSAPP_LIST_MAX_ROWS = 10;
-export const LIST_ROW_TITLE_MAX = 24;
 
 /** Thrown by buildListPayload when more than WHATSAPP_LIST_MAX_ROWS items are active.
  *  This is a local, expected condition (distinct from a Graph API/network failure),
@@ -23,22 +28,6 @@ export function buildTextPayload(to: string, body: string) {
 
 export function buildImagePayload(to: string, body: string, imageUrl: string) {
   return { messaging_product: 'whatsapp', to, type: 'image', image: { link: imageUrl, caption: body } };
-}
-
-/** Truncates a row title to at most LIST_ROW_TITLE_MAX UTF-16 code units without
- *  splitting a grapheme cluster (e.g. a surrogate-pair emoji or an emoji + variation
- *  selector). Menu labels in this project routinely start with an emoji, so a naive
- *  `.slice()` can cut a glyph in half and render a broken character in the chat. */
-export function truncateRowTitle(label: string): string {
-  if (label.length <= LIST_ROW_TITLE_MAX) return label;
-
-  const segmenter = new Intl.Segmenter('pt-BR', { granularity: 'grapheme' });
-  let result = '';
-  for (const { segment } of segmenter.segment(label)) {
-    if (result.length + segment.length > LIST_ROW_TITLE_MAX) break;
-    result += segment;
-  }
-  return result;
 }
 
 export function buildListPayload(to: string, bodyText: string, buttonLabel: string, items: MenuItemView[]) {
