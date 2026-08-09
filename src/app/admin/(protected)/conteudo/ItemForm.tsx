@@ -3,12 +3,15 @@
 import { useActionState, useState } from 'react';
 import { upload } from '@vercel/blob/client';
 import { IMAGE_ACCEPT_ATTRIBUTE, validateImageFile } from '@/lib/image-upload';
+import { LIST_ROW_TITLE_MAX, truncateRowTitle } from '@/lib/list-row-title';
 import type { ItemFormState } from './item-actions';
 
+/** No `kind`. Every item this form creates is a content item, and an existing
+ *  item's kind comes from its row in editItem — it is not a form field and there
+ *  is no hidden input carrying it. */
 export interface ItemFormValues {
   label: string;
   bodyText: string;
-  kind: 'content' | 'prayer' | 'human';
   imageUrl: string | null;
 }
 
@@ -24,10 +27,20 @@ export function ItemForm({
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, initial);
+  const [label, setLabel] = useState<string>(values.label);
   const [imageUrl, setImageUrl] = useState<string>(values.imageUrl ?? '');
   const [removed, setRemoved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+
+  /* Computed with the SENDER's own function, not a character count. The cap is 24
+     UTF-16 code units — ⛪ costs 1, 🙏 costs 2 — so a counter saying "caracteres"
+     would be wrong for exactly the labels this product encourages. Showing the
+     real cut string needs no explanation and cannot drift from what members get.
+     validateLabel checks non-empty only, so until now "📍 Endereço e como chegar"
+     saved cleanly, showed in full here forever, and arrived on every member's
+     phone as "📍 Endereço e como chega" with nothing anywhere saying so. */
+  const cut = label.length > LIST_ROW_TITLE_MAX ? truncateRowTitle(label) : '';
 
   async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -63,19 +76,28 @@ export function ItemForm({
 
   return (
     <form action={formAction} className="card">
-      <label htmlFor="label">Rótulo (aparece no menu)</label>
-      <input id="label" name="label" type="text" defaultValue={values.label} required />
+      <label htmlFor="label">Nome que aparece no menu</label>
+      <input
+        id="label"
+        name="label"
+        type="text"
+        value={label}
+        onChange={(event) => setLabel(event.target.value)}
+        required
+      />
+      {cut ? (
+        <p className="warn">
+          No WhatsApp esse nome vai aparecer cortado: “{cut}”. Tire alguns caracteres para ele aparecer inteiro.
+        </p>
+      ) : (
+        <p className="hint">Ex.: Horários dos cultos</p>
+      )}
 
-      <label htmlFor="kind">Tipo</label>
-      <select id="kind" name="kind" defaultValue={values.kind}>
-        <option value="content">Conteúdo (responde com um texto/imagem)</option>
-        <option value="prayer">Pedido de oração</option>
-        <option value="human">Falar com atendente</option>
-      </select>
-
-      <label htmlFor="bodyText">Texto da resposta</label>
+      <label htmlFor="bodyText">Resposta que a pessoa recebe</label>
       <textarea id="bodyText" name="bodyText" defaultValue={values.bodyText} />
-      <p className="hint">Deixe em branco para itens de oração ou atendente.</p>
+      {/* Pre-empts the round-trip error "Um item de conteúdo precisa de um texto
+          ou de uma imagem", which she otherwise only meets after submitting. */}
+      <p className="hint">Pode ser só texto, só uma imagem, ou os dois.</p>
 
       <label htmlFor="image">Imagem (opcional — ex.: calendário do mês)</label>
       {/* Not `image/*`: that offer is what makes an iPhone hand over a HEIC the
