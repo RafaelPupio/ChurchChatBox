@@ -8,24 +8,44 @@ import {
   reorderMenuItems,
   updateMenuItem,
 } from '@/lib/repo/menu-admin';
-import { canActivateAnotherItem } from '@/lib/menu-admin-rules';
+import { canActivateAnotherItem, canHideItem } from '@/lib/menu-admin-rules';
 
 export interface ActionResult {
   error?: string;
 }
 
-/** Toggling to active is gated on the 10-row WhatsApp cap. updateMenuItem is
- *  church-scoped, so an id from another church is a silent no-op. */
+/** Both directions are gated now. Toggling to active is capped at the 10 rows a
+ *  WhatsApp interactive list allows; toggling to hidden is floored at 1, because
+ *  zero active rows makes buildListPayload throw MenuEmptyError and the bot then
+ *  answers every member with body text and nothing to tap.
+ *
+ *  The count is safe to compare against the target directly: the list only offers
+ *  "Tirar do menu" on rows that are currently active, so on the hide path the
+ *  target is always one of the `active` items being counted.
+ *
+ *  updateMenuItem is church-scoped, so an id from another church is a silent
+ *  no-op. */
 export async function setItemActive(id: string, isActive: boolean): Promise<ActionResult> {
   const session = await requireWritableSession();
   if ('blocked' in session) return { error: blockedMessage(session.blocked) };
   const { churchId } = session;
 
+  const active = await countActiveMenuItems(churchId);
+
   if (isActive) {
-    const active = await countActiveMenuItems(churchId);
     if (!canActivateAnotherItem(active)) {
-      return { error: 'O menu do WhatsApp permite no máximo 10 itens ativos. Oculte outro antes de ativar este.' };
+      return {
+        error:
+          'O menu do WhatsApp mostra no máximo 10 opções, e as 10 já estão ocupadas. ' +
+          'Tire outra opção do menu antes de colocar esta.',
+      };
     }
+  } else if (!canHideItem(active)) {
+    return {
+      error:
+        'Esta é a única opção que está no menu. Se você tirar, quem escrever para a igreja não recebe ' +
+        'nenhuma opção para tocar. Coloque outra opção no menu antes de tirar esta.',
+    };
   }
 
   await updateMenuItem(id, churchId, { isActive });
