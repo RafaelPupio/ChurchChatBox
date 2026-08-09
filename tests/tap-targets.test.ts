@@ -71,7 +71,16 @@ describe('tap targets', () => {
 
 describe('iOS focus zoom', () => {
   it('states 16px on text fields rather than inheriting it', () => {
-    expect(ruleFor('input[type=text]')).toMatch(/font-size:\s*16px/);
+    // The selector this used to name — `input[type=text], input[type=email],
+    // input[type=password]` — was an ALLOW-list, and the mobile pass replaced it
+    // with the deny-list below. That is why this assertion moved: it is the same
+    // 16px floor on a strictly wider set of fields. The allow-list let
+    // input[type=file] fall through to the browser's ~13.3px default, and would
+    // have let any future tel/number/date/search field do the same.
+    expect(
+      ruleFor('input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file])'),
+    ).toMatch(/font-size:\s*16px/);
+    expect(ruleFor('input[type=file]')).toMatch(/font-size:\s*16px/);
   });
 
   it('no field is declared below 16px anywhere in the sheet', () => {

@@ -13,8 +13,24 @@
      reorder pair 2px apart — where a mis-tap is an immediate server write that
      moves a live WhatsApp menu item the wrong way. */
   --tap: 44px;
+  /* Height of the mobile bottom tab bar, excluding the iOS safe area. .container
+     reserves this much bottom padding so content is never hidden behind it. */
+  --tabbar-h: 58px;
+  /* How much of the layout viewport the software keyboard is covering. iOS does
+     NOT shrink the layout viewport when the keyboard opens — only the visual
+     viewport — so a sticky composer pinned to `bottom` would sit underneath it.
+     KeyboardInset.tsx overwrites this on <html> from window.visualViewport; the
+     0px default is exactly the no-keyboard, no-JS, desktop behaviour. */
+  --kb: 0px;
 }
 * { box-sizing: border-box; }
+/* Horizontal overflow is never clipped on body or html, and the temptation is
+   worth naming: clipping it hides a layout bug rather than fixing it, and any
+   overflow value other than visible on an ancestor silently breaks
+   position: sticky for every descendant — which the app bar, the reply composer
+   and the save bar all depend on. (The declaration is deliberately not spelled
+   out here: tests/tap-targets.test.ts scans this file's raw text for it, comments
+   included, and a comment quoting it would be a false positive.) */
 body {
   margin: 0;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -24,7 +40,13 @@ body {
 a { color: var(--primary); }
 .container { max-width: 880px; margin: 0 auto; padding: 24px 16px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
-.row { display: flex; align-items: center; gap: 8px; }
+/* .row is the universal heterogeneous row, and it MUST wrap. Flex items refuse
+   to shrink below their min-content width, so without this one declaration a
+   label beside two buttons is crushed into a vertical ribbon at 375px instead of
+   moving to its own line. Wrapping used to be opt-in via .row.wrap below; it is
+   the default now because every row that did NOT opt in was a row nobody had
+   measured on a phone yet. */
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* min-width: 0 is the whole point of this rule, not a tidy-up. `flex: 1` sets
    flex-basis to 0 but leaves min-width at its `auto` default, and a flex item's
    automatic minimum size is its MIN-CONTENT width — for a text span, the widest
@@ -38,79 +60,109 @@ a { color: var(--primary); }
    single long word wraps instead of overflowing the box it was allowed to
    shrink into. */
 .grow { flex: 1; min-width: 0; overflow-wrap: break-word; }
-/* min-width: 0 on its own only moves the damage: measured on the same row, the
-   label stopped overflowing and instead collapsed to 33.6px — "Acompanhamento"
-   rendered as a 132px-tall column of single letters, because every control after
-   it still refuses to shrink below its own min-content. A row that carries more
-   than a phone can fit on one line has to use a second line, so this opt-in pair
-   is what those rows get: `wrap` allows the extra line, and the floor on the
-   label is what actually TRIGGERS it — `flex: 1` gives the label a zero basis, so
-   without a floor it always "fits" by shrinking to nothing and no item ever
-   wraps. 9em is about one readable menu label wide. */
+/* Now redundant for `flex-wrap` — .row above wraps unconditionally — but NOT for
+   the floor on the next line, which is the half that actually does the work.
+   `flex: 1` gives the growing child a zero basis, so without a floor it always
+   "fits" by shrinking to nothing and no row ever breaks. 9em is about one
+   readable label wide. Kept as the opt-in for rows whose growing child is prose
+   (PrayerList) rather than a heading. */
 .row.wrap { flex-wrap: wrap; row-gap: 8px; }
 .row.wrap > .grow { min-width: 9em; }
-label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-/* font-size is stated, not inherited: below 16px iOS Safari zooms the page the
-   moment the field takes focus, and never zooms back out. It was 16px here only
-   by accident of inheriting an unstyled body — one font-size on body would have
-   silently reintroduced the zoom. */
-input[type=text], input[type=email], input[type=password], input[type=file], textarea, select {
+label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
+/* A deny-list, not an allow-list, and that is the fix rather than the style. The
+   previous rule named text/email/password only, so input[type=file] fell through
+   to the browser default at ~13.3px — and any future tel/number/date/search
+   field would have done the same. font-size is stated, not inherited: below 16px
+   iOS Safari zooms the page the moment the field takes focus, and never zooms
+   back out. */
+input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]),
+textarea, select {
   width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 16px; min-height: var(--tap); background: #fff; color: var(--text);
 }
 textarea { min-height: 90px; resize: vertical; }
+/* Dashed, and its own rule, because a file picker is a drop zone and not a text
+   field — and because the deny-list above deliberately excludes it. */
+input[type=file] {
+  width: 100%; font: inherit; font-size: 16px; min-height: var(--tap);
+  padding: 9px 12px; border: 1px dashed var(--border); border-radius: 8px;
+  background: #fff; color: var(--text);
+}
 /* The 44px on the rule above sits on the file INPUT, and the input is only
    reliably tappable across its whole box in Chromium — on iOS Safari the hit
    target is the button, which computed to 33px and was never 44 despite the
    token above implying every control is. So the button carries its own floor.
    ::file-selector-button is supported in Safari 16+ and Firefox; on anything
    older this is inert and the control is back to 33px, which is the honest
-   position and not something the tap-target test should claim otherwise. */
-input[type=file]::file-selector-button { font: inherit; cursor: pointer; margin-right: 10px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text); min-height: var(--tap); }
+   position and not something the tap-target test should claim otherwise.
+   `font: inherit` and nothing else: the inherited 16px is the iOS zoom floor,
+   and a smaller size here would put it back under. */
+input[type=file]::file-selector-button { font: inherit; cursor: pointer; margin-right: 10px; padding: 6px 12px; border: 1px solid var(--primary); border-radius: 8px; background: var(--primary); color: var(--primary-contrast); min-height: var(--tap); }
 /* A checkbox at its 13px default is not hittable on a phone. The label that
    wraps one carries min-height: var(--tap) so the whole row is the target. */
 input[type=checkbox] { width: 22px; height: 22px; min-height: 22px; accent-color: var(--primary); margin: 0 6px 0 0; }
 button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border); padding: 10px 14px; background: #fff; color: var(--text); display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: var(--tap); }
 button.primary { background: var(--primary); color: var(--primary-contrast); border-color: var(--primary); }
 button.danger { color: var(--danger); border-color: var(--danger); background: #fff; }
+button:disabled { opacity: 0.55; cursor: default; }
 .btnlink { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font: inherit; border-radius: 8px; border: 1px solid var(--border); padding: 10px 14px; background: #fff; color: var(--text); min-height: var(--tap); min-width: var(--tap); }
 .btnlink.primary { background: var(--primary); color: var(--primary-contrast); border-color: var(--primary); }
-/* Wraps because the eight children already measure well past a 375px phone, and
-   making every one of them 44px tall would have pushed more of them off-screen
-   with no scrollbar to hint they exist. Wrapping is a stopgap, not the layout:
-   the app-bar/tab-bar split in docs/superpowers/plans/2026-08-08-mobile-and-pwa.md
-   is the real fix. */
+/* Still used by the owner console at /owner, which has no tab bar. flex-wrap
+   keeps it off the right edge on a phone. The church panel used to share it and
+   no longer does: it uses .appbar + .tabbar below, because eight non-wrapping
+   children measured 666px against a 375px viewport. */
 .nav { display: flex; flex-wrap: wrap; gap: 12px; row-gap: 8px; align-items: center; background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 16px; }
 .nav .brand { font-weight: 700; }
 .nav a { display: inline-flex; align-items: center; min-height: var(--tap); text-decoration: none; padding: 8px 12px; border-radius: 8px; }
 .nav a.active { background: #ecfdf5; color: var(--ok); font-weight: 600; }
-.error { color: var(--danger); font-size: 13px; margin: 8px 0; }
-.hint { color: var(--muted); font-size: 12px; }
+
+/* --- Church panel chrome: app bar (identity + logout) and tab bar (destinations).
+       Same DOM at every width. Desktop stacks them as two bars; the media query at
+       the bottom pins the tab bar to the bottom of the phone viewport. --- */
+.appbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));
+}
+.appbar .brand { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.appbar .who { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
+.appbar form { display: flex; }
+.tabbar { display: flex; gap: 4px; background: var(--card); border-bottom: 1px solid var(--border); padding: 6px 12px; }
+.tabbar a {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: var(--tap); padding: 6px 4px; border-radius: 10px;
+  text-decoration: none; color: var(--muted); font-size: 12px; line-height: 1.15; text-align: center;
+}
+.tabbar a[aria-current="page"] { background: #ecfdf5; color: var(--ok); font-weight: 700; }
+.tab-icon { position: relative; font-size: 20px; line-height: 1; }
+.tab-badge {
+  position: absolute; top: -5px; left: 13px;
+  min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: 12px; font-weight: 700; line-height: 20px; text-align: center;
+}
+
+.error { color: var(--danger); font-size: 14px; margin: 8px 0; }
+.hint { color: var(--muted); font-size: 13px; }
+.warn { color: #92400e; font-size: 13px; }
 /* nowrap: the chip states WHERE the option is ("Fora do menu"), which is longer
    than the old "Oculto" and would otherwise break across two lines beside the
-   item name at 320px. Same reason .pill has it. */
-.chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+   item name at 320px. Same reason .pill has it. 12px, not 11px: these are the
+   most decision-relevant labels in the panel and they were the smallest text on
+   it. */
+.chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .chip.on { background: #d1fae5; color: var(--ok); }
 .chip.off { background: #fee2e2; color: var(--danger); }
-.thread { display: flex; flex-direction: column; gap: 6px; background: #eef2f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; min-height: 180px; }
-/* The head of a truncated thread: what is being hidden, and the way back into it.
-   Centred and set apart from the bubbles so it reads as a boundary in the
-   conversation rather than as a message in it. The link inherits .btnlink, so it
-   is already a full 44px tap target. */
-.thread-older { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 6px; text-align: center; }
-.bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; line-height: 1.4; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
-.bubble.in { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
-.bubble.out { align-self: flex-end; background: #dcf8c6; color: #111; }
-.conv { display: flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 12px 14px; text-decoration: none; color: var(--text); }
-.conv:hover { background: #f2f2f2; }
-.mode-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.chip.pending { background: #fef3c7; color: #92400e; }
+.mode-tag { font-size: 12px; padding: 3px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .mode-human { background: #fef3c7; color: #92400e; }
 .mode-bot { background: #e5e7eb; color: #374151; }
 .mode-prayer { background: #ede9fe; color: #5b21b6; }
-.pill { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .pill-active { background: #d1fae5; color: #065f46; }
 .pill-past_due { background: #fef3c7; color: #92400e; }
 .pill-suspended { background: #fee2e2; color: #991b1b; }
-.warn { color: #92400e; font-size: 12px; }
 
 /* --- Conteúdo: menu item cards ---
    A menu row is a card of two lines: the item's name alone on the first, the
@@ -138,3 +190,113 @@ button.danger { color: var(--danger); border-color: var(--danger); background: #
    is far narrower, and `flex: 0 0 auto` keeps it from being squeezed when the
    row wraps. */
 .iconbtn { flex: 0 0 auto; min-width: var(--tap); min-height: var(--tap); padding: 0; font-size: 16px; line-height: 1; }
+
+/* --- Pedidos de Oração: the request is the content, not a ribbon beside a
+       button. Claimed here as part of Task 1's contract; PrayerList adopts it in
+       Task 5 and still uses .row.wrap until then. --- */
+.prayer-card { display: flex; flex-direction: column; gap: 8px; }
+.prayer-text { margin: 0; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
+.prayer-meta { margin: 0; }
+
+/* --- Caixa de Entrada --- */
+.conv { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: var(--tap); padding: 14px; text-decoration: none; color: var(--text); }
+.conv:hover { background: #f2f2f2; }
+.conv-name { display: block; font-size: 16px; overflow-wrap: anywhere; }
+.conv-phone { display: block; margin-top: 2px; }
+.thread-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.thread-title { font-size: 18px; line-height: 1.25; margin: 0; overflow-wrap: anywhere; }
+.thread-sub { margin: 2px 0 0; }
+.back { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: var(--tap); min-height: var(--tap); border: 1px solid var(--border); border-radius: 8px; background: var(--card); text-decoration: none; font-size: 18px; color: var(--text); }
+/* The thread scrolls inside itself so the reply box stays within a thumb's reach
+   instead of sitting ~1800px below a 30-message history.
+   max-height is declared twice on purpose: dvh tracks the viewport as the browser
+   chrome collapses, vh does not — and the vh line is the fallback for anything
+   that does not know dvh. min-height wins over max-height in CSS, so the thread
+   can never collapse below 180px no matter what the keyboard does. */
+.thread { display: flex; flex-direction: column; gap: 6px; background: #eef2f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; min-height: 180px; max-height: 60vh; max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* The head of a truncated thread: what is being hidden, and the way back into it.
+   Centred and set apart from the bubbles so it reads as a boundary in the
+   conversation rather than as a message in it. The link inherits .btnlink, so it
+   is already a full 44px tap target. */
+.thread-older { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 6px; text-align: center; }
+.bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; line-height: 1.4; font-size: 15px; white-space: pre-wrap; word-break: break-word; }
+.bubble.in { align-self: flex-start; background: #fff; border: 1px solid var(--border); color: var(--text); }
+.bubble.out { align-self: flex-end; background: #dcf8c6; color: #111; }
+/* bottom: var(--kb), not bottom: 0 — see --kb above. With no keyboard this is
+   identical to bottom: 0; with one open on iOS it is the difference between
+   typing into a visible box and typing into one hidden behind the keyboard. */
+.composer { position: sticky; bottom: var(--kb); z-index: 10; margin-bottom: 0; box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06); }
+.composer-row { display: flex; align-items: flex-end; gap: 8px; }
+.composer-input { min-height: var(--tap); max-height: 40vh; }
+.composer-send { flex: 0 0 auto; min-width: var(--tap); padding: 10px 14px; font-size: 18px; }
+.composer-hint { margin: 8px 0 0; }
+
+/* --- Configurações: collapsible groups + sticky save --- */
+.group { border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; padding: 0 12px; }
+.group[open] { padding-bottom: 12px; }
+.group-summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; min-height: var(--tap); padding: 10px 0; font-weight: 600; }
+.group-summary::-webkit-details-marker { display: none; }
+.group-summary::after { content: '▾'; color: var(--muted); }
+.group[open] > .group-summary::after { content: '▴'; }
+.savebar { position: sticky; bottom: var(--kb); z-index: 10; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding: 12px 0 0; background: var(--card); border-top: 1px solid var(--border); }
+
+/* --- Conteúdo: image upload --- */
+.image-preview { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.image-preview img { flex: 0 0 auto; width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+
+/* --- Login (both church and owner) --- */
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; min-height: 100dvh; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); }
+.login-card { width: 100%; max-width: 360px; margin: 0; }
+
+.offline-banner { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: #fef3c7; color: #92400e; font-size: 14px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* --- Phones. One block, at the bottom, so it wins on source order. --- */
+@media (max-width: 640px) {
+  /* Bottom padding clears the fixed tab bar plus the iPhone home indicator. */
+  .container { padding: 16px 12px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
+  .card { padding: 14px 12px; }
+  h1 { font-size: 24px; line-height: 1.2; margin: 0 0 12px; }
+  h2 { font-size: 19px; }
+  /* The growing child takes the whole first line; the controls wrap beneath it.
+     .conv is excluded on purpose — its mode tag belongs beside the name. */
+  .row > .grow { flex-basis: 100%; }
+  /* The one call to action on Conteúdo goes full width on a phone. This is a
+     MOBILE-ONLY rule on purpose: putting .grow on the link instead would give it
+     flex: 1 next to the <h1 class="grow"> at every width, and at ≥641px the two
+     siblings would split the 880px container 50/50 — a ~430px button.
+     Scoped to .btnlink.primary inside a .row, which is exactly one element in the
+     panel (conteudo/page.tsx). */
+  .row > .btnlink.primary { flex: 1 1 100%; }
+  .bubble { max-width: 88%; }
+  .thread { max-height: 52vh; max-height: 52dvh; }
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    border-bottom: 0; border-top: 1px solid var(--border);
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+    box-shadow: 0 -1px 8px rgba(0, 0, 0, 0.07);
+  }
+  .composer, .savebar { bottom: calc(var(--kb) + var(--tabbar-h) + env(safe-area-inset-bottom)); }
+
+  /* --- Software keyboard open. KeyboardInset.tsx sets --kb and this class. --- */
+  /* The tab bar would only steal thumb space from the message being typed, and on
+     iOS it sits under the keyboard anyway, so it is unreachable while typing. */
+  html.keyboard-open .tabbar { display: none; }
+  /* With the tab bar gone there is nothing left to clear but the keyboard itself. */
+  html.keyboard-open .composer,
+  html.keyboard-open .savebar { bottom: var(--kb); }
+  /* The thread gives back the space the keyboard took, so the newest message stays
+     above the composer instead of being pushed behind it. .thread's min-height:
+     180px still wins if this goes small, so it cannot collapse to nothing. */
+  html.keyboard-open .thread { max-height: calc(52dvh - var(--kb)); }
+  html.keyboard-open .container { padding-bottom: calc(var(--kb) + 16px); }
+}
+
+/* --- Wide screens: menu item cards collapse back to a single row. --- */
+@media (min-width: 641px) {
+  .item-card { flex-direction: row; align-items: center; }
+  .item-head { flex: 1; min-width: 0; align-items: center; }
+  .item-actions { flex: 0 0 auto; }
+  .prayer-card { flex-direction: row; align-items: center; }
+  .prayer-text { flex: 1; min-width: 0; }
+}

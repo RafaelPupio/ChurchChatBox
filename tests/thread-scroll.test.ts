@@ -36,7 +36,15 @@ import { THREAD_WINDOW, windowThread } from '@/lib/thread-window';
  *
  *  The outbound figures are used here, so these are the SMALLEST realistic
  *  bursts. A real inbound burst clears the old 120px budget by more: three short
- *  inbound messages grew the document by exactly 131.0px in the browser. */
+ *  inbound messages grew the document by exactly 131.0px in the browser.
+ *
+ *  These were measured when .bubble was 14px; the mobile pass raised it to 15px
+ *  for readability. That only makes a real bubble TALLER than the numbers below,
+ *  so they remain valid as lower bounds and the bursts they build remain the
+ *  smallest realistic ones — which is the only property these tests rest on. They
+ *  are deliberately NOT re-measured upward: a burst that is too small to trip the
+ *  old decision would weaken the very tests that pin why measuring after the
+ *  messages arrive is wrong. */
 const ONE_LINE_BUBBLE_PX = 42;
 const TWO_LINE_BUBBLE_PX = 62;
 
