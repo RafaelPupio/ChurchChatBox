@@ -12,7 +12,12 @@
  * document with no church data, served when a whole-page navigation fails for
  * lack of network.
  */
-const CACHE = 'sv-offline-v1';
+/* BUMP THIS whenever /offline changes. `install` only re-runs when these bytes
+ * change, and it only re-fetches the page when the cache name is one it has not
+ * seen — so an edit to the offline page reaches nobody who already installed the
+ * worker, and the fix sits in the repo looking done while every real phone shows
+ * the old text. Changing the name is what makes `activate` sweep the old entry. */
+const CACHE = 'sv-offline-v2';
 const OFFLINE_URL = '/offline';
 
 self.addEventListener('install', (event) => {

@@ -181,3 +181,34 @@ describe('iOS home screen', () => {
     expect(existsSync(join(ROOT, 'src/app/apple-icon.tsx'))).toBe(true);
   });
 });
+
+/** A source contract, not a measurement — this repo has no DOM to render a hook
+ *  in, and saying so is better than a test that asserts nothing.
+ *
+ *  useOnline once listened only for 'online'/'offline'. An `offline` can fire
+ *  without its matching `online` — an Android Wi-Fi-to-LTE handover, a VPN
+ *  reconnect — and nothing else re-read the value, because router.refresh()
+ *  patches the component in place and never remounts it. The send button stayed
+ *  disabled indefinitely while the poll kept succeeding, so a member's replies
+ *  arrived on a screen the secretary believed had no signal, under a hint telling
+ *  her to tap a button that would never re-enable. */
+describe('useOnline re-reads the real value, not only events', () => {
+  const src = readFileSync(join(process.cwd(), 'src/lib/hooks/use-online.ts'), 'utf8');
+
+  it('listens for visibilitychange and focus as well as online/offline', () => {
+    expect(src).toMatch(/addEventListener\('online'/);
+    expect(src).toMatch(/addEventListener\('offline'/);
+    expect(src).toMatch(/addEventListener\('visibilitychange'/);
+    expect(src).toMatch(/addEventListener\('focus'/);
+  });
+
+  it('removes every listener it adds', () => {
+    const added = [...src.matchAll(/addEventListener\('([a-z]+)'/g)].map((m) => m[1]).sort();
+    const removed = [...src.matchAll(/removeEventListener\('([a-z]+)'/g)].map((m) => m[1]).sort();
+    expect(removed).toEqual(added);
+  });
+
+  it('reads navigator.onLine directly, so a missed event self-corrects', () => {
+    expect(src).toMatch(/navigator\.onLine/);
+  });
+});

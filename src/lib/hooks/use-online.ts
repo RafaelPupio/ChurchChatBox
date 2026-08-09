@@ -16,9 +16,22 @@ export function useOnline(): boolean {
     update();
     window.addEventListener('online', update);
     window.addEventListener('offline', update);
+    // `visibilitychange` and `focus` re-read the real value instead of waiting
+    // for an event that may never come. An `offline` can fire without its
+    // matching `online` — an Android Wi-Fi-to-LTE handover, a VPN reconnect —
+    // and nothing else re-reads it, because router.refresh() patches this
+    // component in place and never remounts it. The screen would then sit
+    // "offline" indefinitely while the poll kept fetching new messages
+    // successfully: a member's replies arriving on a page she believes has no
+    // signal. AutoRefresh already refuses to trust these events for the same
+    // reason. Cheap, and it makes the stuck state self-correct on the next tap.
+    document.addEventListener('visibilitychange', update);
+    window.addEventListener('focus', update);
     return () => {
       window.removeEventListener('online', update);
       window.removeEventListener('offline', update);
+      document.removeEventListener('visibilitychange', update);
+      window.removeEventListener('focus', update);
     };
   }, []);
 
