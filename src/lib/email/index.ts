@@ -19,6 +19,20 @@ export type { EmailSender, OutboundEmail } from './types';
  *  than reaching for a transport that is not there and throwing. */
 const sender: EmailSender = consoleEmailSender;
 
+/** Whether a message sent from here actually reaches a person.
+ *
+ *  The login page uses this to decide whether to offer "Esqueci minha senha" at
+ *  all. Without it the panel advertises a flow that answers "se o endereço
+ *  estiver cadastrado, enviamos um link" while delivering nothing — a false
+ *  statement to a locked-out secretary, who then waits for a message that is
+ *  never coming instead of asking for help.
+ *
+ *  Update this alongside the transport on the line above; they are the same
+ *  decision written twice, and a future reader should see them together. */
+export function isEmailDeliveryConfigured(): boolean {
+  return sender !== consoleEmailSender;
+}
+
 /** Sends the password-reset link. NEVER THROWS, and that is a security property
  *  rather than laziness.
  *

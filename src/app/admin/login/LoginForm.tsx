@@ -6,7 +6,7 @@ import { login, type LoginState } from './actions';
 
 const initial: LoginState = {};
 
-export function LoginForm() {
+export function LoginForm({ canResetByEmail }: { canResetByEmail: boolean }) {
   const [state, formAction, pending] = useActionState(login, initial);
 
   return (
@@ -20,8 +20,18 @@ export function LoginForm() {
       <button className="primary" type="submit" disabled={pending} style={{ marginTop: 12, width: '100%' }}>
         {pending ? 'Entrando…' : 'Entrar'}
       </button>
+      {/* Offered only when a message would actually arrive. Advertising it with no
+          transport tells a locked-out secretary a link is on its way and leaves her
+          waiting for one that will never come — worse than no link at all, because
+          she stops looking for help. */}
       <p style={{ marginBottom: 0, marginTop: 12, textAlign: 'center' }}>
-        <Link href="/admin/esqueci-senha">Esqueci minha senha</Link>
+        {canResetByEmail ? (
+          <Link href="/admin/esqueci-senha">Esqueci minha senha</Link>
+        ) : (
+          <span className="hint">
+            Esqueceu a senha? Fale com quem cuida do sistema da sua igreja.
+          </span>
+        )}
       </p>
     </form>
   );

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PGlite } from '@electric-sql/pglite';
@@ -376,5 +376,50 @@ describe('cross-tenant', () => {
     expect(await consumeResetToken(hashResetToken(tokenB.token), now)).toBe(b.adminId);
     expect(a.adminId).not.toBe(b.adminId);
     expect(a.churchId).not.toBe(b.churchId);
+  });
+});
+
+/** The console transport prints a LIVE CREDENTIAL. In production it must print the
+ *  refusal and stop — the earlier version logged the warning and then the link
+ *  anyway, which put a working account-takeover link into Vercel's runtime logs,
+ *  readable by anyone with log access or a drain into a third-party aggregator.
+ *  The victim would never know: nothing is delivered, so no "was this you?" mail
+ *  ever arrives. Asserted here because the leak is invisible in review — the file
+ *  reads as though the warning guards the block below it. */
+describe('the console transport never prints a live link in production', () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  async function capture(nodeEnv: string): Promise<{ logged: string; errored: string }> {
+    vi.stubEnv('NODE_ENV', nodeEnv);
+    const { consoleEmailSender } = await import('@/lib/email/console-sender');
+    const log: string[] = [];
+    const err: string[] = [];
+    const realLog = console.log;
+    const realErr = console.error;
+    console.log = (...a: unknown[]) => { log.push(a.join(' ')); };
+    console.error = (...a: unknown[]) => { err.push(a.join(' ')); };
+    try {
+      await consoleEmailSender.send({
+        to: 'secretaria@igreja.com',
+        subject: 'Redefinir senha',
+        text: 'Link: https://exemplo.com/admin/redefinir-senha?t=TOKEN-SECRETO-AQUI',
+      });
+    } finally {
+      console.log = realLog;
+      console.error = realErr;
+    }
+    return { logged: log.join('\n'), errored: err.join('\n') };
+  }
+
+  it('prints the link in development, because reading it from the terminal is the workflow', async () => {
+    const { logged } = await capture('development');
+    expect(logged).toContain('TOKEN-SECRETO-AQUI');
+  });
+
+  it('prints NO link in production, only the refusal', async () => {
+    const { logged, errored } = await capture('production');
+    expect(logged).not.toContain('TOKEN-SECRETO-AQUI');
+    expect(logged).not.toContain('redefinir-senha');
+    expect(errored).toContain('NO EMAIL PROVIDER CONFIGURED');
   });
 });

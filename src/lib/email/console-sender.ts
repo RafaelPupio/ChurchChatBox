@@ -22,6 +22,14 @@ export const consoleEmailSender: EmailSender = {
           'Self-service password reset cannot work in production until a real transport is ' +
           'wired into src/lib/email/index.ts.',
       );
+      // RETURNS, and that return is the whole point. The block below prints a live
+      // credential. Without this the warning above merely narrated the leak while
+      // the link went into the same log — readable by anyone with Vercel runtime
+      // logs or a drain into Datadog/Axiom, i.e. a contractor or a teammate. They
+      // could request a reset for a known admin address, lift the link within the
+      // hour, and take the account, while the victim got no "was this you?" mail
+      // because nothing is delivered. Print the refusal; never print the link.
+      return;
     }
 
     // One block, so a copy-paste out of the terminal gets the whole thing. The

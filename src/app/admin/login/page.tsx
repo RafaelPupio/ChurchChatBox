@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession, isAuthenticated } from '@/lib/auth/session';
+import { isEmailDeliveryConfigured } from '@/lib/email';
 import { LoginForm } from './LoginForm';
 
 export default async function LoginPage() {
@@ -7,5 +8,6 @@ export default async function LoginPage() {
   if (isAuthenticated(session)) {
     redirect('/admin/conteudo');
   }
-  return <LoginForm />;
+  // Server-side: the transport choice must never reach the browser as an env var.
+  return <LoginForm canResetByEmail={isEmailDeliveryConfigured()} />;
 }
