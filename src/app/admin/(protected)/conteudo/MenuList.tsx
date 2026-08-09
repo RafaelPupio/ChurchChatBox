@@ -14,20 +14,25 @@ export interface MenuListItem {
 }
 
 export function MenuList({ items }: { items: MenuListItem[] }) {
-  const [error, setError] = useState<string>('');
+  // Keyed by the row that produced it, not one message for the whole list. A
+  // single error above row 1 was survivable while the only refusal was the
+  // 10-item cap, which almost nobody reached. Task 4's hide-floor is reachable:
+  // a church with one active item at row 7 taps "Tirar do menu", the explanation
+  // paints above the fold, and on a phone nothing visibly happens at all. The
+  // plan's own rule is that a message appears where the rule bites.
+  const [error, setError] = useState<{ id: string; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function run(fn: () => Promise<{ error?: string }>) {
-    setError('');
+  function run(itemId: string, fn: () => Promise<{ error?: string }>) {
+    setError(null);
     startTransition(async () => {
       const result = await fn();
-      if (result?.error) setError(result.error);
+      if (result?.error) setError({ id: itemId, message: result.error });
     });
   }
 
   return (
     <div>
-      {error && <p className="error">{error}</p>}
       {items.map((item, index) => {
         /* A behaviour item's line says what a tap DOES. It replaces "· oração" /
            "· atendente", which named an internal category and told her nothing
@@ -61,7 +66,7 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
               <button
                 className="iconbtn"
                 disabled={pending || index === 0}
-                onClick={() => run(() => moveItem(item.id, 'up'))}
+                onClick={() => run(item.id, () => moveItem(item.id, 'up'))}
                 aria-label={`Subir “${item.label}” no menu`}
               >
                 ▲
@@ -69,7 +74,7 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
               <button
                 className="iconbtn"
                 disabled={pending || index === items.length - 1}
-                onClick={() => run(() => moveItem(item.id, 'down'))}
+                onClick={() => run(item.id, () => moveItem(item.id, 'down'))}
                 aria-label={`Descer “${item.label}” no menu`}
               >
                 ▼
@@ -77,7 +82,7 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
               <span className="grow" />
               <button
                 disabled={pending}
-                onClick={() => run(() => setItemActive(item.id, !item.isActive))}
+                onClick={() => run(item.id, () => setItemActive(item.id, !item.isActive))}
                 aria-label={
                   item.isActive ? `Tirar “${item.label}” do menu` : `Colocar “${item.label}” no menu`
                 }
@@ -92,6 +97,7 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
                 Editar
               </Link>
             </div>
+            {error?.id === item.id && <p className="error" style={{ marginBottom: 0 }}>{error.message}</p>}
           </div>
         );
       })}

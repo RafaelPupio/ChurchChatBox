@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireReadableSession } from '@/lib/auth/writable';
-import { countActiveMenuItems, listMenuItemsForAdmin } from '@/lib/repo/menu-admin';
+import { listMenuItemsForAdmin } from '@/lib/repo/menu-admin';
 import { WHATSAPP_LIST_MAX_ROWS } from '@/lib/whatsapp';
 import { missingBehaviourKinds } from '@/lib/behaviour-items';
 import { MenuList, type MenuListItem } from './MenuList';
@@ -14,7 +14,9 @@ export default async function ConteudoPage({
   const { criado } = await searchParams;
   const { churchId } = await requireReadableSession();
   const rows = await listMenuItemsForAdmin(churchId);
-  const active = await countActiveMenuItems(churchId);
+  // Counted from the rows already in hand rather than a second neon-http round
+  // trip — every statement on this driver is its own HTTPS request.
+  const active = rows.filter((r) => r.isActive).length;
 
   const items: MenuListItem[] = rows.map((r) => ({
     id: r.id,

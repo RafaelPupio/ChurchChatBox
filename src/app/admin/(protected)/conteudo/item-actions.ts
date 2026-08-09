@@ -12,7 +12,7 @@ import {
   updateMenuItem,
 } from '@/lib/repo/menu-admin';
 import { canActivateAnotherItem } from '@/lib/menu-admin-rules';
-import { BEHAVIOUR_ITEM, type BehaviourKind } from '@/lib/behaviour-items';
+import { BEHAVIOUR_ITEM, isBehaviourKind, type BehaviourKind } from '@/lib/behaviour-items';
 import { validateLabel, validateMenuItemContent } from '@/lib/validation';
 
 /** Unchanged from main. There is deliberately NO `notice` field: a message about
@@ -129,6 +129,14 @@ export async function addBehaviourItem(kind: BehaviourKind): Promise<ItemFormSta
   const session = await requireWritableSession();
   if ('blocked' in session) return { error: blockedMessage(session.blocked) };
   const { churchId } = session;
+
+  // A Server Action is an HTTP endpoint, and TypeScript does not guard the wire:
+  // the BehaviourKind annotation above is erased at runtime, so anything at all
+  // can arrive here. Without this, an unknown value indexes BEHAVIOUR_ITEM to
+  // undefined and throws on .defaultLabel — a 500 rather than a refusal. Nothing
+  // is corrupted (the write is church-scoped and comes after), but an endpoint
+  // that crashes on input it was handed is one an attacker can use to fill logs.
+  if (!isBehaviourKind(kind)) return { error: 'Não foi possível adicionar essa opção.' };
 
   const items = await listMenuItemsForAdmin(churchId);
   // Double tap, or a second tab. Nothing was created, so there is nothing to

@@ -31,7 +31,7 @@ a { color: var(--primary); }
    single word. So the item refuses to shrink past that word no matter how narrow
    the phone is, and the row pushes the controls after it off the side of the
    page. Measured at a real 375px viewport against this stylesheet, with the full
-   MenuList row (▲▼ + label + .chip + Ocultar + Editar): the label
+   MenuList row (the old single-line menu row, since replaced by .item-card): the label
    "Acompanhamento" left only 2.1px of slack, and "Acompanhamentos" — one letter
    more — put document.scrollWidth at 381. min-width: 0 releases that floor;
    overflow-wrap then breaks a word that still cannot fit on its own line, so a
