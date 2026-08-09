@@ -52,7 +52,27 @@ export function AutoRefresh({ intervalMs = 15_000 }: { intervalMs?: number }) {
     };
     setVisible(document.visibilityState === 'visible');
     document.addEventListener('visibilitychange', sync);
-    return () => document.removeEventListener('visibilitychange', sync);
+
+    /** The network coming back is the same event as the tab coming back: the
+     *  screen has been stale for however long the connection was down, and any
+     *  tick that fired meanwhile failed. Catch up at once instead of waiting out
+     *  a full interval on top of the outage. `sync` is reused rather than a bare
+     *  refresh so that coming back online in a BACKGROUND tab still does nothing.
+     *
+     *  Deliberately NOT paired with an `offline` listener that stops the poll.
+     *  navigator.onLine goes false only when the machine loses a network
+     *  interface — a captive hotel portal or a dead uplink still reads as online
+     *  — so `offline` firing is not reliable, and `online` firing afterwards is
+     *  not guaranteed. A poll switched off by an event that may never be answered
+     *  is a screen that has silently stopped updating, which is the one failure
+     *  this component's whole design refuses. A tick during an outage costs a
+     *  single failed fetch and leaves the rendered tree exactly as it was. */
+    window.addEventListener('online', sync);
+
+    return () => {
+      document.removeEventListener('visibilitychange', sync);
+      window.removeEventListener('online', sync);
+    };
   }, [router]);
 
   /** A self-scheduling timeout, NOT setInterval.
