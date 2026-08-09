@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canActivateAnotherItem, positionsFromOrder } from '@/lib/menu-admin-rules';
+import { canActivateAnotherItem, canHideItem, positionsFromOrder } from '@/lib/menu-admin-rules';
 
 describe('canActivateAnotherItem', () => {
   it('allows activation below the 10-row cap', () => {
@@ -20,5 +20,19 @@ describe('positionsFromOrder', () => {
   });
   it('handles an empty list', () => {
     expect(positionsFromOrder([])).toEqual([]);
+  });
+});
+
+describe('canHideItem', () => {
+  it('allows hiding while another item is still visible', () => {
+    expect(canHideItem(2)).toBe(true);
+  });
+  it('refuses to hide the last visible item', () => {
+    // Zero active rows makes buildListPayload throw MenuEmptyError and the bot
+    // answers members with body text and nothing to tap.
+    expect(canHideItem(1)).toBe(false);
+  });
+  it('refuses on an already-empty menu', () => {
+    expect(canHideItem(0)).toBe(false);
   });
 });
