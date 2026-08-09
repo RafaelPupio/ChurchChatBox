@@ -139,3 +139,32 @@ describe('the image accept attribute survived', () => {
     expect(ITEM_FORM).not.toMatch(/accept="image\/\*"/);
   });
 });
+
+describe('the image is converted before it is judged', () => {
+  it('prepareImage runs ahead of validateImageFile', () => {
+    // THE trap in this flow, and it is silent when you get it wrong: the pre-upload
+    // check rejects HEIC by design, correctly, because for a long time nothing
+    // could convert one. Run it first and it goes on rejecting exactly the photos
+    // the converter was added to rescue, the feature is dead code, and every test
+    // still passes. The order of these two calls is the feature.
+    const convert = ITEM_FORM.indexOf('prepareImage(');
+    const check = ITEM_FORM.indexOf('validateImageFile(');
+    expect(convert, 'ItemForm no longer converts the picked photo').toBeGreaterThan(-1);
+    expect(check, 'ItemForm no longer checks the file it is about to upload').toBeGreaterThan(-1);
+    expect(convert).toBeLessThan(check);
+  });
+
+  it('uploads the prepared file, not the one the picker handed over', () => {
+    // Uploading `file` after converting into `prepared.file` would send the 8 MB
+    // HEIC anyway — a conversion that runs, succeeds, and is thrown away.
+    expect(ITEM_FORM).toMatch(/upload\(\s*prepared\.file\.name,\s*prepared\.file/);
+  });
+
+  it('the route is still narrow, so no HEIC can reach the blob store', () => {
+    // The fix this task exists to argue against is widening allowedContentTypes:
+    // it makes the upload succeed and the DELIVERY fail, so the church posts its
+    // calendar, sees a success message, and no member ever receives it.
+    const route = readFileSync(join(process.cwd(), 'src/app/api/blob/upload/route.ts'), 'utf8');
+    expect(route.toLowerCase()).not.toContain('heic');
+  });
+});

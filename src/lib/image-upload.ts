@@ -35,10 +35,22 @@ export interface ChosenImage {
   size: number;
 }
 
-const HEIC_MESSAGE =
-  'Esta foto está no formato HEIC, o padrão da câmera do iPhone, e o WhatsApp não exibe esse formato. ' +
+/** The way out of HEIC, in her own words and with an escape hatch for the photo
+ *  already in her hand.
+ *
+ *  Exported because TWO places have to say it: this pre-upload format check, and
+ *  the browser-side converter's decode-failure path in
+ *  src/app/admin/(protected)/conteudo/prepare-image.ts. They open with different
+ *  sentences — one is "WhatsApp will not show this", the other is "this browser
+ *  could not convert it" — but the instructions have to be the same instructions,
+ *  and two hand-written copies of a four-step iPhone settings path drift. */
+export const HEIC_WAY_OUT =
   'Para resolver de vez: no iPhone, abra Ajustes › Câmera › Formatos e escolha "Mais Compatível" — ' +
   'as próximas fotos já saem em JPG. Para enviar esta foto agora, faça uma captura de tela dela e envie a captura.';
+
+const HEIC_MESSAGE =
+  'Esta foto está no formato HEIC, o padrão da câmera do iPhone, e o WhatsApp não exibe esse formato. ' +
+  HEIC_WAY_OUT;
 
 function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.');

@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { upload } from '@vercel/blob/client';
 import { IMAGE_ACCEPT_ATTRIBUTE, validateImageFile } from '@/lib/image-upload';
 import { LIST_ROW_TITLE_MAX, truncateRowTitle } from '@/lib/list-row-title';
+import { prepareImage } from './prepare-image';
 import type { ItemFormState } from './item-actions';
 
 /** No `kind`. Every item this form creates is a content item, and an existing
@@ -29,6 +30,11 @@ export function ItemForm({
   const [state, formAction, pending] = useActionState(action, initial);
   const [label, setLabel] = useState<string>(values.label);
   const [imageUrl, setImageUrl] = useState<string>(values.imageUrl ?? '');
+  /** What the thumbnail shows. Separate from `imageUrl` because it holds a local
+   *  object URL while the upload is still running — on a camera roll of thousands,
+   *  confirming she picked the right photo is most of the point of a preview, and
+   *  waiting for the round-trip to show it defeats that on church wifi. */
+  const [preview, setPreview] = useState<string>(values.imageUrl ?? '');
   const [removed, setRemoved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -43,34 +49,61 @@ export function ItemForm({
   const cut = label.length > LIST_ROW_TITLE_MAX ? truncateRowTitle(label) : '';
 
   async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    // Captured synchronously: `currentTarget` is null by the time the awaits below
+    // resolve, and the element is needed again at the end to clear its value.
+    const input = event.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
-
-    // Checked before the upload starts, so the reason is specific ("this is a
-    // HEIC, here is the iPhone setting that fixes it") instead of the generic
-    // failure the server's rejection produced. The server allow-list is still the
-    // gate — this check is UX and can be bypassed by anyone who cares to.
-    const problem = validateImageFile(file);
-    if (problem) {
-      setUploadError(problem);
-      // Cleared so picking the SAME file again still fires onChange — otherwise
-      // she re-picks the photo, nothing happens, and the panel looks broken.
-      event.target.value = '';
-      return;
-    }
 
     setUploadError('');
     setUploading(true);
+    let localPreview = '';
     try {
+      /* CONVERSION RUNS FIRST, AND THE ORDER IS THE WHOLE POINT. validateImageFile
+         rejects a HEIC by design — correctly, while nothing could convert one.
+         Run before prepareImage it would go on rejecting the photos this converter
+         exists to rescue, and the feature would be dead code. So the file is
+         converted, and the allow-list then checks WHAT WILL ACTUALLY BE UPLOADED:
+         a JPEG, a PNG, or a GIF that passed through untouched. */
+      const prepared = await prepareImage(file);
+      if ('error' in prepared) {
+        setUploadError(prepared.error);
+        return;
+      }
+
+      // Still checked before the upload starts, so a refusal is specific instead
+      // of the server's generic 400. It now guards the converter's OUTPUT, which
+      // is what the route's allowedContentTypes will see. The server allow-list
+      // remains the real gate; this is UX and anyone who cares to can bypass it.
+      const problem = validateImageFile(prepared.file);
+      if (problem) {
+        setUploadError(problem);
+        return;
+      }
+
+      localPreview = URL.createObjectURL(prepared.file);
+      setPreview(localPreview);
+
       // Straight to Vercel Blob via the session-gated token route — the file never
       // passes through a Server Action, so there is no 1 MB body cap.
-      const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob/upload' });
+      const blob = await upload(prepared.file.name, prepared.file, {
+        access: 'public',
+        handleUploadUrl: '/api/blob/upload',
+      });
       setImageUrl(blob.url);
+      setPreview(blob.url);
       setRemoved(false);
     } catch {
-      setUploadError('Não foi possível enviar a imagem. Tente novamente.');
+      setUploadError('O envio não completou. Verifique a conexão e tente de novo — se continuar, fale com o suporte.');
+      // Back to whatever was already attached, rather than leaving a thumbnail of
+      // a photo that never arrived.
+      setPreview(imageUrl);
     } finally {
+      if (localPreview) URL.revokeObjectURL(localPreview);
       setUploading(false);
+      // Cleared so re-picking the SAME photo after an error still fires onChange —
+      // otherwise she picks it again, nothing happens, and the panel looks broken.
+      input.value = '';
     }
   }
 
@@ -100,25 +133,36 @@ export function ItemForm({
       <p className="hint">Pode ser só texto, só uma imagem, ou os dois.</p>
 
       <label htmlFor="image">Imagem (opcional — ex.: calendário do mês)</label>
-      {/* Not `image/*`: that offer is what makes an iPhone hand over a HEIC the
-          WhatsApp API cannot render. Naming the four formats makes iOS's own
-          picker convert the photo to JPG before it ever reaches this input. */}
+      {/* STILL NOT `image/*`, and prepare-image.ts does not make this redundant.
+          Naming the concrete formats is what makes iOS's own picker convert the
+          photo to JPG before it ever reaches this input — the fastest, most
+          reliable path, and the one most secretaries take without noticing. The
+          converter is the fallback for every picker that ignores `accept`. */}
       <input id="image" type="file" accept={IMAGE_ACCEPT_ATTRIBUTE} onChange={onFileChange} disabled={uploading} />
-      <p className="hint">Formatos aceitos: JPG, PNG, WEBP ou GIF, até 10 MB.</p>
-      {uploading && <p className="hint">Enviando imagem…</p>}
+      <p className="hint">
+        JPG, PNG, WEBP ou GIF, até 10 MB. Fotos de iPhone funcionam — a imagem é reduzida
+        automaticamente antes de subir.
+      </p>
+      {uploading && <p className="hint">⏳ Enviando imagem… não feche esta tela.</p>}
       {uploadError && <p className="error">{uploadError}</p>}
-      {imageUrl && (
-        <p className="hint">
-          Imagem anexada ✓{' '}
-          {/* The label is the tap target, not the 22px box inside it. */}
-          <label style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44 }}>
-            <input
-              type="checkbox"
-              checked={removed}
-              onChange={(e) => { setRemoved(e.target.checked); if (e.target.checked) setImageUrl(''); }}
-            /> remover
-          </label>
-        </p>
+      {preview && (
+        <div className="image-preview">
+          {/* eslint-disable-next-line @next/next/no-img-element -- next/image cannot
+              take a blob: object URL, and this is a 72px thumbnail of a file the
+              browser already holds. */}
+          <img src={preview} alt="Prévia da imagem deste item" />
+          <span className="grow hint">{uploading ? 'Enviando…' : 'Imagem anexada ✓'}</span>
+          {/* A 44px button, replacing a 13×13px "remover" checkbox that was only
+              hittable because a label had been wrapped around it. */}
+          <button
+            type="button"
+            className="danger"
+            disabled={uploading}
+            onClick={() => { setRemoved(true); setImageUrl(''); setPreview(''); }}
+          >
+            Remover
+          </button>
+        </div>
       )}
       {/* The Server Action reads only this URL string, not the file itself. */}
       <input type="hidden" name="imageUrl" value={imageUrl} />
