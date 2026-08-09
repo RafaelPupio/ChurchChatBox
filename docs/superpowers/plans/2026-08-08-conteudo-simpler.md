@@ -34,12 +34,13 @@ That plan redesigns these exact screens and **has not been executed**. Both plan
 
 | Mobile-plan task | Verdict | What the executor does |
 |---|---|---|
-| **Task 1** (responsive CSS foundation) | **Partially pre-empted.** | This plan's **Task 5** adds exactly six rules — `.item-card`, `.item-head`, `.item-label`, `.item-meta`, `.item-actions`, `.iconbtn` — using the *exact names from mobile Task 1's CSS contract*, plus `white-space: nowrap` on the existing `.chip`. When mobile Task 1 runs, it must **skip those six rules** and add everything else in its list unchanged. Mobile Task 1 already carries the constraint "never apply the same CSS twice"; this is that case. Nothing else in mobile Task 1 is touched. |
+| **Task 1** (responsive CSS foundation) | **Partially pre-empted — RECONCILE, DO NOT SKIP.** | This plan's **Task 5** adds six rules under the exact names from mobile Task 1's CSS contract — `.item-card`, `.item-head`, `.item-label`, `.item-meta`, `.item-actions`, `.iconbtn` — plus `white-space: nowrap` on `.chip`. An earlier revision of this row said mobile Task 1 should **skip** them. That was wrong, and it would have broken mobile Task 1 on arrival: its own `tests/mobile-css.test.ts` asserts `.iconbtn is a full square` (`min-width`/`min-height: var(--tap)`) and `.item-actions keeps 8px`, and Task 5's bodies carry neither declaration. Skipping would have shipped a task whose new tests fail against the CSS it was told not to write. **Merge, per rule:** into `.iconbtn` add mobile's `min-width: var(--tap); min-height: var(--tap); padding: 0; font-size: 16px; line-height: 1` and keep Task 5's `flex: 0 0 auto`; into `.item-label` add mobile's `font-size: 16px; line-height: 1.3` and keep Task 5's `overflow-wrap: break-word` (mobile writes `anywhere`; either satisfies the intent, keep one); keep Task 5's `.item-actions { gap: 10px }` over mobile's `8px` — 10px is the measured spacing for two adjacent 44px targets whose mis-tap is an immediate server write — and **relax mobile's assertion to `gap` ≥ 8px** so the stricter value passes. `.item-card`, `.item-head` and `.item-meta` are equivalent in both; take either. Mobile Task 1's desktop `@media` overrides are NOT among these six and still apply unchanged. |
 | **Task 4 Step 1** (MenuList rewrite) | **SUPERSEDED.** | This plan's **Task 6** produces a strict superset: same class names, same 44×44 arrows, same ≥8px separation, same `▲` disabled-first / `▼` disabled-last, same item-naming `aria-label`s. It differs in two places — the `.item-meta` content becomes a full sentence about what a tap does, and the chip/toggle vocabulary changes. **Do not run mobile Task 4 Step 1 after this.** |
 | **Task 4 Step 2** (page.tsx header, "needs no edit at all") | **Still true as written, and honoured.** | That statement is about the *header flex layout*. This plan edits `conteudo/page.tsx` for content but adds **no `grow` class to the `.btnlink.primary`**, so mobile Task 1's phone-only `.row > .btnlink.primary` rule and `tests/mobile-css.test.ts`'s "`page.tsx` never contains `btnlink primary grow`" assertion both still hold. Not a contradiction — recorded so the next reader does not think it is one. |
 | **Task 4 Step 3** (verify) | **Defect, fixed here.** | Mobile Task 4 was written before `tests/tap-targets.test.ts` landed (commit `52987b2`). Its rewrite breaks two assertions in that file — line 61's `/flexDirection:\s*'column',\s*gap:\s*(\d+)/` regex and line 119's `expect(MENU_LIST).toMatch(/className="card row wrap"/)` — while its Step 3 claims "all pass". They do not. This plan's **Task 6** rewrites both assertions in the same commit as the markup. |
 | **Task 8** (Configurações `<details>` groups) | **Untouched, with one request.** | This plan links a behaviour item's edit screen to `/admin/configuracoes` with no fragment, and shows the church's *current* reply text inline so she does not have to hunt. `TextsForm.tsx` is rewritten wholesale by mobile Task 8, so editing it here would guarantee a conflict for zero benefit today (the page has no anchors at all right now). **Request for whoever runs mobile Task 8:** add `id={group.id}` to each `<details className="group">`. Once that lands, the two links in `src/lib/behaviour-items.ts` can become `/admin/configuracoes#oracao` and `/admin/configuracoes#atendimento` in a one-line follow-up. |
-| **Task 9** (image upload) | **Kept, with a target correction and a copy correction.** | Its Step 2 targets `ItemForm.tsx`. **This plan deliberately keeps the image block in `ItemForm.tsx`** — `ItemForm` becomes the *content-item* form and nothing else moves — so mobile Task 9 Step 2 still applies verbatim after this plan lands. **One correction:** its snippet writes `accept="image/*"`, which would revert shipped commit `d7fd532`'s `IMAGE_ACCEPT_ATTRIBUTE` (`src/lib/image-upload.ts:27`) — the exact thing that makes iOS convert HEIC at pick time. Mobile Task 9's own reconcile block, case (c), says keep the shipped improvement. **Keep `IMAGE_ACCEPT_ATTRIBUTE`.** |
+| **Task 9 Step 1** (`prepare-image.ts`) | **Unaffected — apply as written.** | It creates a new non-`page.tsx` file under `conteudo/` and instructs narrowing `src/app/api/blob/upload/route.ts` back to `png/jpeg/webp/gif`. This plan touches neither file. The new file carries no `'use client'` directive, so `tests/conteudo-form.test.ts`'s client-bundle scan does not read it, and it imports nothing from `@/lib/whatsapp` in any case. Recorded here because an executor reading only this table would otherwise not know Step 1 exists. |
+| **Task 9 Step 2** (image block in `ItemForm.tsx`) | **Kept — apply with these TWO DELTAS, not verbatim.** | Its target survives: **this plan deliberately keeps the image block in `ItemForm.tsx`**, which becomes the *content-item* form and nothing else moves. But Step 2 also **replaces the whole state block**, and its replacement has no `label` / `setLabel` — which this plan's Task 7 makes load-bearing for the truncation preview (`const cut = label.length > … ? truncateRowTitle(label) : ''`, and the controlled `<input value={label}>`). Applied literally it does not compile. **Delta 1: keep `const [label, setLabel] = useState<string>(values.label);` and add mobile Task 9's `preview` state beside it.** **Delta 2:** its file-input snippet writes `accept="image/*"`, which would revert shipped commit `d7fd532`'s `IMAGE_ACCEPT_ATTRIBUTE` (`src/lib/image-upload.ts:27`) — the exact thing that makes iOS convert HEIC at pick time — and would fail two assertions this plan adds in `tests/conteudo-form.test.ts` plus `tests/image-upload.test.ts:128`. Mobile Task 9's own reconcile block, case (c), says keep the shipped improvement. **Keep `accept={IMAGE_ACCEPT_ATTRIBUTE}`.** Everything else in Step 2 applies unchanged. |
 | Tasks 0, 2, 3, 5, 6, 7, 10–15 | **Unaffected.** | This plan touches none of their files. |
 
 **Sequencing:** this plan and the mobile plan can run in either order. Task 5 makes this one self-contained rather than dependent on mobile Task 1 landing first — the alternative was shipping a `MenuList` whose reorder arrows sit 0px apart until an unrelated plan runs, which is worse than a small, named CSS overlap.
@@ -54,7 +55,7 @@ That plan redesigns these exact screens and **has not been executed**. Both plan
 |---|---|
 | **The seeded 🔒 Privacidade item** (`kind: 'content'`, `PRIVACY_ITEM` in `src/lib/church-defaults.ts`) | **Nothing changes.** It is not special-cased anywhere in this plan. It keeps its full text, its image field, and its editability. One consequence worth naming: on a day-one church it is the only active item, so Task 4's new rule makes it un-hideable — which is correct, because hiding it makes `buildListPayload` throw `MenuEmptyError` and the bot answers members with body text and nothing to tap. |
 | **Any `kind: 'content'` item** | Unchanged in the database. On screen it loses the `Tipo` dropdown and gains a truncation warning if its label is over 24 UTF-16 units. |
-| **Any `kind: 'prayer'` / `kind: 'human'` item** | The row is **not modified**. Its `bodyText` and `imageUrl` stay exactly as they are — `editItem` builds a `{ label }`-only payload for these kinds, so nothing is blanked. They become **unreachable from the panel**: the edit screen no longer renders those two fields. Members never received them (`menu-router.ts:97-100` reads neither), so nothing changes for a single member. **Before shipping, run the read-only query in Task 9 Step 3 against the live church** and copy anything found into the Configurações field that actually owns it. |
+| **Any `kind: 'prayer'` / `kind: 'human'` item** | The row is **not modified**. Its `bodyText` and `imageUrl` stay exactly as they are — `editItem` builds a `{ label }`-only payload for these kinds, so nothing is blanked. Members never received them (`menu-router.ts:97-100` reads neither), so nothing changes for a single member. **And they do not become unreachable:** when either column is non-empty, Task 7's edit screen renders the text back to her, read-only, and says what it is — *"Você escreveu isto aqui antes… nunca foi enviado para ninguém"* — with the Configurações field named. Removing the fields is what stops new losses; **this handback is what deals with the losses that already happened**, and it is code in a task, not a SQL query somebody has to remember. Task 9 Step 3's query survives only as a count for the owner. |
 | **A church with two or more items of the same behaviour kind** | They all keep working — `menu-router.ts` routes on `selected.kind` and does not care how many there are. The add-button for that kind simply stops being offered. Nothing auto-merges, auto-hides or auto-deletes them, and **nothing detects the condition or tells her**. That is a chosen gap, not an oversight: `neon-http` has no transactions and silently hiding rows a church created on purpose is worse than a list that looks slightly odd. |
 | **A church with no prayer and no handoff item** (every freshly provisioned church, which starts with exactly one item) | Two named buttons appear below the list. One tap each. They disappear once the church has one of each. |
 | **`kind` after this plan** | **Immutable.** It is set at creation and no code path changes it. Combined with the fact that **the product has no delete for menu items anywhere** — there is no `deleteMenuItem` in `src/lib/repo/menu-admin.ts` and no `db.delete(menuItem)` in the tree, and commit `4bc83aa` exists precisely to stop the UI promising one — a mis-tapped behaviour button is permanent-but-hideable. See "What gets worse". |
@@ -74,10 +75,10 @@ That plan redesigns these exact screens and **has not been executed**. Both plan
 | `src/app/globals.css` | **modify** — six menu-row rules (mobile Task 1's names) + `.chip { white-space: nowrap }` |
 | `src/app/admin/(protected)/conteudo/MenuList.tsx` | **modify** — two-line row, behaviour sentence, location/action vocabulary |
 | `src/app/admin/(protected)/conteudo/ItemForm.tsx` | **modify** — becomes the *content-item* form: no `Tipo`, truncation preview |
-| `src/app/admin/(protected)/conteudo/BehaviourItemForm.tsx` | **new** — name field + what the item does + the church's current reply text |
+| `src/app/admin/(protected)/conteudo/BehaviourItemForm.tsx` | **new** — name field + what the item does + the church's current reply text + any writing this row already held, handed back |
 | `src/app/admin/(protected)/conteudo/AddBehaviourItems.tsx` | **new** — the two one-tap buttons |
 | `src/app/admin/(protected)/conteudo/novo/page.tsx` | **modify** — title, at-10 warning |
-| `src/app/admin/(protected)/conteudo/[id]/page.tsx` | **modify** — branches on `item.kind` |
+| `src/app/admin/(protected)/conteudo/[id]/page.tsx` | **modify** — branches on `item.kind`, and passes the row's orphaned `bodyText`/`imageUrl` down to be shown |
 | `src/app/admin/(protected)/conteudo/page.tsx` | **modify** — the wall of text goes; banners appear when true |
 | `tests/menu-admin-rules.test.ts` | **modify** — `canHideItem` |
 | `tests/behaviour-items.test.ts` | **new** — copy fits the WhatsApp cap; `missingBehaviourKinds` |
@@ -108,10 +109,11 @@ export function missingBehaviourKinds(kinds: MenuItemKind[]): BehaviourKind[];
 export function canHideItem(activeCount: number): boolean;
 
 // src/app/admin/(protected)/conteudo/item-actions.ts
-export interface ItemFormState { error?: string; notice?: string }
+export interface ItemFormState { error?: string }        // unchanged from main — no `notice`, see Task 8
 export function createItem(prev: ItemFormState, formData: FormData): Promise<ItemFormState>;
 export function editItem(id: string, prev: ItemFormState, formData: FormData): Promise<ItemFormState>;
 export function addBehaviourItem(kind: BehaviourKind): Promise<ItemFormState>;
+//   ^ returns only on refusal; the success paths redirect to /admin/conteudo?criado=<id>.
 // parseKind is DELETED.
 
 // src/app/admin/(protected)/conteudo/ItemForm.tsx
@@ -125,6 +127,9 @@ export function ItemForm(props: {
 export function BehaviourItemForm(props: {
   action: (prev: ItemFormState, formData: FormData) => Promise<ItemFormState>;
   kind: BehaviourKind; label: string; currentText: string;
+  /** What an older version of this form stored on this row and never sent to
+   *  anyone. Rendered back to her, read-only, when non-empty. Not form fields. */
+  orphanBodyText: string; orphanImageUrl: string | null;
 }): JSX.Element;
 
 // src/app/admin/(protected)/conteudo/AddBehaviourItems.tsx           (new)
@@ -271,7 +276,7 @@ git commit -m "refactor: move row-title truncation to a client-safe module"
 
 **The design call this task encodes, and the two alternatives rejected.** A church needs exactly one prayer item and exactly one handoff item; their words come from `church.prayerPromptText` / `church.handoffText`, not from the item. So the answer to "what type is this?" is known in advance for both, and the question does not belong on a form a secretary opens fifty times. Three ways to get them into a church's menu were considered:
 
-- **Seed them at provisioning and backfill live churches.** Rejected. It reaches `provisioning.ts`, `church-defaults.ts` and a new script that must be run by hand against the live church, for a screen-level UI fix — and it gives *every* church two rows it can never delete, including the churches that will never use handoff. Real cost, permanent, on a menu capped at ten.
+- **Seed them at provisioning and backfill live churches.** Rejected. It reaches `provisioning.ts`, `church-defaults.ts` and a new script that must be run by hand against the live church, for a screen-level UI fix — and it gives *every* church two rows it can never delete, including the churches that will never use handoff. Real cost, permanent, on a menu capped at ten. **In fairness, the chosen path is not free of that class of cost either** — Task 7's handback puts a permanent, undismissable block on the edit screen of every behaviour row that already carries text. Fewer churches, a screen instead of a menu row, but the same kind of bill; it is charged honestly in "What gets worse" item 3.
 - **A chooser page at `/novo` that disappears once the church has both.** Rejected. The destination of a familiar button silently changes as the church matures, and nobody is told. It also re-asks the type question, just drawn as cards.
 - **Named one-tap buttons on the list page, offered only while the church lacks that kind.** **Chosen.** Zero database migration, zero provisioning change, zero rows forced on anyone. The decision is made by pressing a button whose label names the thing, in the same screen she is already reading, once per church.
 
@@ -466,7 +471,7 @@ git commit -m "feat: name what the prayer and handoff items do, and refuse to em
 
 **Interfaces:**
 - Consumes: `BEHAVIOUR_ITEM`, `BehaviourKind` (Task 2)
-- Produces: `createItem`, `editItem` (same signatures), `addBehaviourItem`; `ItemFormState` gains `notice`. `parseKind` is deleted.
+- Produces: `createItem`, `editItem` (same signatures), `addBehaviourItem`. `ItemFormState` keeps its shape from main — no `notice` field; a message about a write that succeeded is rendered by the list page after a redirect, never returned into the component that triggered it. `parseKind` is deleted.
 
 **This is the landmine task.** `parseKind` (`item-actions.ts:20`) returns `'content'` for a missing field, and `editItem` passes its result straight into `updateMenuItem`. Delete the `Tipo` dropdown without doing something about that, and the first time anyone opens a prayer item and presses Salvar it becomes a content item with an empty body: the bot stops asking for prayer requests and starts sending nothing. The fix is not a hidden input — it is to stop reading kind from the request at all. Kind is a property of the row.
 
@@ -476,7 +481,8 @@ git commit -m "feat: name what the prayer and handoff items do, and refuse to em
 ```ts
 'use server';
 
-import { revalidatePath } from 'next/cache';
+// No `revalidatePath` import: every write in this file ends in a redirect, which
+// re-renders the destination on the server on its own.
 import { redirect } from 'next/navigation';
 import { requireWritableSession, blockedMessage } from '@/lib/auth/writable';
 import {
@@ -490,10 +496,11 @@ import { canActivateAnotherItem } from '@/lib/menu-admin-rules';
 import { BEHAVIOUR_ITEM, type BehaviourKind } from '@/lib/behaviour-items';
 import { validateLabel, validateMenuItemContent } from '@/lib/validation';
 
+/** Unchanged from main. There is deliberately NO `notice` field: a message about
+ *  a write that succeeded must be rendered by the LIST PAGE after the redirect,
+ *  never returned into the component that triggered the write. See addBehaviourItem. */
 export interface ItemFormState {
   error?: string;
-  /** Not an error: something WAS saved, and something about it needs saying. */
-  notice?: string;
 }
 
 /** The browser uploads the image straight to Vercel Blob and submits only the
@@ -589,23 +596,31 @@ export async function editItem(id: string, _prev: ItemFormState, formData: FormD
  *
  *  Idempotent by kind. The button that calls this stops rendering once the church
  *  has an item of that kind, but a button is not a lock — this re-check is what
- *  closes the double-tap and the two-open-tabs races. */
+ *  closes the double-tap and the two-open-tabs races.
+ *
+ *  It REDIRECTS on success, through the same `?criado=` the create form uses,
+ *  instead of returning a message. That is not a style choice. The block holding
+ *  these buttons renders only while `missingBehaviourKinds` is non-empty, so
+ *  adding the LAST missing kind unmounts the very component a returned message
+ *  would have to be displayed in: the church at ten active items would tap
+ *  "+ Adicionar 💬 Falar com atendente", get an item that is not in the menu, and
+ *  be told nothing — the exact silent demotion the message exists to prevent. The
+ *  page survives the write; the component does not, so the page says it. */
 export async function addBehaviourItem(kind: BehaviourKind): Promise<ItemFormState> {
   const session = await requireWritableSession();
   if ('blocked' in session) return { error: blockedMessage(session.blocked) };
   const { churchId } = session;
 
   const items = await listMenuItemsForAdmin(churchId);
-  if (items.some((i) => i.kind === kind)) {
-    revalidatePath('/admin/conteudo');
-    return {};
-  }
+  // Double tap, or a second tab. Nothing was created, so there is nothing to
+  // announce — show her the list with the item already in it.
+  if (items.some((i) => i.kind === kind)) redirect('/admin/conteudo');
 
   const active = await countActiveMenuItems(churchId);
   const isActive = canActivateAnotherItem(active);
   const position = await getNextPosition(churchId);
 
-  await createMenuItem({
+  const created = await createMenuItem({
     churchId,
     position,
     label: BEHAVIOUR_ITEM[kind].defaultLabel,
@@ -615,16 +630,13 @@ export async function addBehaviourItem(kind: BehaviourKind): Promise<ItemFormSta
     kind,
   });
 
-  revalidatePath('/admin/conteudo');
-  return isActive
-    ? {}
-    : {
-        notice:
-          'A opção foi criada, mas ficou fora do menu: o WhatsApp mostra no máximo 10 opções e as 10 já ' +
-          'estão ocupadas. Tire uma do menu e depois toque em “Colocar no menu” nesta opção.',
-      };
+  // The list page names what was created and, when the 10-row cap left it out of
+  // the menu, says so — one banner, one code path, shared with createItem.
+  redirect(`/admin/conteudo?criado=${created.id}`);
 }
 ```
+
+`redirect` throws `NEXT_REDIRECT`, so it must not sit inside a `try`. It also makes `revalidatePath` unnecessary here — the redirect re-renders `/admin/conteudo` on the server, which is exactly how `createItem` has always worked. Drop `revalidatePath` and its `next/cache` import from this file if nothing else in it uses them.
 
 **Do not add a `kind` hidden input anywhere as a belt-and-braces measure.** A hidden input is still a request field, and a request field is still something a bad submission can carry.
 
@@ -722,7 +734,7 @@ git commit -m "fix(conteudo): refuse to hide the last option, which leaves membe
 - Modify: `src/app/globals.css`
 
 > **Reconcile with the mobile plan — read this before writing.**
-> These six rules use the **exact names from mobile Task 1's CSS contract** (`.item-card`, `.item-head`, `.item-label`, `.item-meta`, `.item-actions`, `.iconbtn`). Task 6 needs them and mobile Task 1 has not run. **If mobile Task 1 has already landed** (grep `globals.css` for `--tabbar-h`), these rules already exist — verify they satisfy the intent below and **write nothing**. **If it has not**, add them here, and whoever runs mobile Task 1 later must skip these six and add the rest of its list unchanged. Mobile Task 1 already carries "never apply the same CSS twice"; this is that case.
+> These six rules use the **exact names from mobile Task 1's CSS contract** (`.item-card`, `.item-head`, `.item-label`, `.item-meta`, `.item-actions`, `.iconbtn`). Task 6 needs them and mobile Task 1 has not run. **If mobile Task 1 has already landed** (grep `globals.css` for `--tabbar-h`), these rules already exist — verify they satisfy the intent below and **write nothing**. **If it has not**, add them here — and whoever runs mobile Task 1 later must **reconcile these six, not skip them**. Mobile's versions of `.iconbtn` and `.item-label` carry declarations these do not (`min-width`/`min-height: var(--tap)`, `font-size`, `line-height`), and mobile's own tests assert them; skipping would fail those tests against CSS it was told not to write. See the Task 1 row in the reconciliation table for the per-rule merge.
 
 - [ ] **Step 1: Append the rules**
 
@@ -733,7 +745,8 @@ At the end of `src/app/globals.css`:
    about to take out of the menu, reorder or edit, and measured at a 375px
    viewport it was sharing one line with five controls — 61.6px wide by 92px
    tall, four lines in a narrow ribbon. These class names are mobile-plan Task 1's
-   contract; that task must not re-add them. */
+   contract; that task must MERGE with these, not skip them — see the Task 1 row
+   in the reconciliation table. */
 .item-card { display: flex; flex-direction: column; gap: 10px; }
 .item-head { display: flex; align-items: flex-start; gap: 8px; }
 .item-label { flex: 1; min-width: 0; overflow-wrap: break-word; font-weight: 600; }
@@ -962,7 +975,7 @@ git commit -m "feat(conteudo): rows name the item first and say what a tap does"
 
 **These four files must land in one commit.** Removing `kind` from `ItemFormValues` breaks both pages' `values={{…}}` props; adding the behaviour branch needs the new form to exist. Split them and the tree does not typecheck in between.
 
-> **Mobile Task 9 stays valid.** `ItemForm.tsx` keeps its identity and keeps the entire image block — including the `IMAGE_ACCEPT_ATTRIBUTE` from shipped commit `d7fd532`, which mobile Task 9's snippet would otherwise revert to `image/*`. Mobile Task 9 Step 2 applies to this file verbatim afterwards.
+> **Mobile Task 9 stays valid, but its Step 2 is NOT verbatim after this task.** `ItemForm.tsx` keeps its identity and its entire image block, so mobile Task 9 Step 1 (`prepare-image.ts`, and narrowing `api/blob/upload/route.ts`) applies untouched and Step 2 still targets the right file. Step 2 needs **two deltas**, both caused by this task: (1) its replacement state block drops `label` / `setLabel`, which the truncation preview below and the controlled `<input value={label}>` both depend on — keep that line and add its `preview` state beside it, or the file does not compile; (2) its file input writes `accept="image/*"`, which reverts `IMAGE_ACCEPT_ATTRIBUTE` (shipped `d7fd532`) and fails `tests/conteudo-form.test.ts` and `tests/image-upload.test.ts:128` — keep `accept={IMAGE_ACCEPT_ATTRIBUTE}`. Full row in the reconciliation table.
 
 **The dead fields were not merely irrelevant — they accepted her writing and discarded it.** `validateMenuItemContent` returns `null` immediately for a non-content kind, and `menu-router.ts` `case 'prayer'` / `case 'human'` never read `bodyText` or `imageUrl`. So today a secretary picks "Pedido de oração", writes a warm invitation into the field labelled "Texto da resposta", attaches the church logo, sees the save succeed — and every member receives `prayerPromptText` from Configurações instead. The hint "Deixe em branco para itens de oração ou atendente" is a request, not a guard. The test for a field label is whether you can write it honestly; *"Texto da resposta — este campo não faz nada neste tipo de item"* is not shippable, so the field must not render.
 
@@ -1130,17 +1143,28 @@ const initial: ItemFormState = {};
  *  writing, and menu-router.ts read neither.
  *
  *  In their place: what the item does, the church's own current reply quoted back
- *  so she can see her words did land somewhere, and the way to that field. */
+ *  so she can see her words did land somewhere, and the way to that field.
+ *
+ *  And, when this row already carries text or an image from the old form, that
+ *  writing handed back to her. Removing the fields stops NEW losses; it does not
+ *  by itself address rows that already hold something, which would simply become
+ *  unreachable. The row is in hand on the page that renders this, so showing it
+ *  costs a prop and a paragraph — and it is the difference between "her words
+ *  are safe in a column nobody looks at" and "her words are on her screen". */
 export function BehaviourItemForm({
   action,
   kind,
   label: initialLabel,
   currentText,
+  orphanBodyText,
+  orphanImageUrl,
 }: {
   action: (prev: ItemFormState, formData: FormData) => Promise<ItemFormState>;
   kind: BehaviourKind;
   label: string;
   currentText: string;
+  orphanBodyText: string;
+  orphanImageUrl: string | null;
 }) {
   const [state, formAction, pending] = useActionState(action, initial);
   const [label, setLabel] = useState<string>(initialLabel);
@@ -1186,6 +1210,41 @@ export function BehaviourItemForm({
         Esse texto fica em Configurações, no campo “{copy.settingsField}”.{' '}
         <Link href="/admin/configuracoes">Editar esse texto</Link>
       </p>
+
+      {/* The handback. Renders only for rows that already carry something, so a
+          church that never used the old fields never sees it. Read-only on
+          purpose: no name="bodyText", no file input, nothing this form submits —
+          editItem's behaviour branch writes { label } and nothing else, so these
+          columns keep their values whatever she does here. */}
+      {(orphanBodyText.trim() || orphanImageUrl) && (
+        <div style={{ marginTop: 18 }}>
+          <p className="warn" style={{ marginBottom: 4 }}>
+            Você escreveu isto aqui antes, quando esta tela ainda tinha um campo de resposta. Este texto nunca
+            foi enviado para ninguém, porque esta opção usa o texto de Configurações. Ele está guardado —
+            se quiser usá-lo, copie para o campo “{copy.settingsField}” em Configurações.
+          </p>
+          {orphanBodyText.trim() && (
+            <p
+              style={{
+                margin: '0 0 12px',
+                padding: 12,
+                background: 'var(--bg)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {orphanBodyText}
+            </p>
+          )}
+          {orphanImageUrl && (
+            <p className="hint" style={{ margin: '0 0 12px' }}>
+              Também há uma imagem guardada nesta opção, que nunca foi enviada:{' '}
+              <a href={orphanImageUrl} target="_blank" rel="noreferrer">ver a imagem</a>
+            </p>
+          )}
+        </div>
+      )}
 
       {state.error && <p className="error">{state.error}</p>}
       <button className="primary" type="submit" disabled={pending} style={{ marginTop: 12 }}>
@@ -1269,11 +1328,18 @@ export default async function EditItemPage({ params }: { params: Promise<{ id: s
         {/* The name is in the heading: on a phone, ten rows in, it is the only way
             to know which item you opened. */}
         <h1>Editar “{item.label}”</h1>
+        {/* orphan*: whatever the OLD form stored on this row. `item` is already in
+            hand, so handing her own writing back costs two props. Without them,
+            deleting the fields would stop new losses and quietly strand every
+            existing one — recoverable only by a human remembering to run a SELECT,
+            which is not a fix, it is a hope. */}
         <BehaviourItemForm
           action={editThisItem}
           kind={item.kind}
           label={item.label}
           currentText={currentText}
+          orphanBodyText={item.bodyText}
+          orphanImageUrl={item.imageUrl}
         />
       </div>
     );
@@ -1305,6 +1371,7 @@ Expected: Task 6's numbers, unchanged. `grep -rn 'name="kind"' src` must return 
 - Open a content item: same form, heading names the item, button reads `Salvar`.
 - Open the prayer item: one field, the explanation, the church's real `prayerPromptText` quoted, a link to Configurações. **No textarea, no file input.**
 - Save the prayer item with a new name, then check the row in the database: `kind` is still `prayer` and `body_text` is byte-for-byte what it was.
+- **The handback, tested against a real row.** On the test church, `UPDATE menu_item SET body_text = 'texto de teste do handback' WHERE kind = 'prayer' AND church_id = <test church>` — reopen the item and confirm the warning and the quoted text appear, that saving a new name leaves `body_text` untouched, and then **set it back to `''`**. Nothing this plan writes may survive the run. On a row with an empty `body_text` and no image, the block must not render at all.
 
 - [ ] **Step 6: Commit**
 
@@ -1349,15 +1416,23 @@ import { addBehaviourItem } from './item-actions';
  *  the church's life. A question answered once is not a form field.
  *
  *  This block renders only while the church lacks a kind, and disappears for good
- *  once it has both. */
+ *  once it has both.
+ *
+ *  Which is exactly why it announces NOTHING about a write that worked. Adding the
+ *  last missing kind empties `missingBehaviourKinds`, the page stops rendering this
+ *  block, and any success message held in this state unmounts before it can be
+ *  read. `addBehaviourItem` redirects to ?criado=<id> and the page says it there.
+ *  The only thing kept here is the refusal — a blocked session returns instead of
+ *  redirecting, the block is still on screen, and nothing was created. */
 export function AddBehaviourItems({ kinds }: { kinds: BehaviourKind[] }) {
-  const [result, setResult] = useState<{ error?: string; notice?: string }>({});
+  const [error, setError] = useState<string>('');
   const [pending, startTransition] = useTransition();
 
   function add(kind: BehaviourKind) {
-    setResult({});
+    setError('');
     startTransition(async () => {
-      setResult(await addBehaviourItem(kind));
+      const result = await addBehaviourItem(kind);
+      if (result?.error) setError(result.error);
     });
   }
 
@@ -1372,8 +1447,7 @@ export function AddBehaviourItems({ kinds }: { kinds: BehaviourKind[] }) {
         ))}
       </div>
       <p className="hint">A resposta dessas opções você escreve em Configurações, não aqui.</p>
-      {result.error && <p className="error">{result.error}</p>}
-      {result.notice && <p className="warn">{result.notice}</p>}
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }
@@ -1411,6 +1485,11 @@ export default async function ConteudoPage({
 
   // Looked up in the church's own rows, so an id from anywhere else simply finds
   // nothing and renders no banner. Nothing here trusts the query string.
+  //
+  // BOTH creators land here: the create form and the one-tap behaviour buttons.
+  // That is deliberate — the buttons unmount the moment the church has both kinds,
+  // so the message about what was just created cannot live in them. It lives on
+  // the page, which survives the write.
   const created = criado ? rows.find((r) => r.id === criado) : undefined;
   const missing = missingBehaviourKinds(rows.map((r) => r.kind));
 
@@ -1464,7 +1543,8 @@ Expected: Task 7's numbers, unchanged.
 
 **Manual check:**
 - A church with only 🔒 Privacidade: no paragraph about reordering, no counter, no ceiling text. Both add-buttons below the list.
-- Tap `+ Adicionar “🙏 Pedido de oração”`: the row appears at the bottom with its sentence, and only the handoff button remains.
+- Tap `+ Adicionar “🙏 Pedido de oração”`: the row appears at the bottom with its sentence, and only the handoff button remains, and the page names what was added.
+- **The case that used to swallow its own message:** take the church to 10 active items with only ONE behaviour kind missing, then tap that last add-button. The block disappears (correctly — the church now has both) **and the banner above the list still says the option was created out of the menu, and names it.** If nothing is said, the redirect is not reaching `?criado=`.
 - Add items to 10 active, then create an eleventh: the list says it was saved but is out of the menu, and names it.
 - On the 10-active list, the full-menu line appears; at 9 it does not.
 - Try to take the only visible option out of the menu: the refusal from Task 4 appears above the list.
@@ -1506,6 +1586,8 @@ const read = (name: string) => readFileSync(join(CONTEUDO, name), 'utf8');
 const ITEM_FORM = read('ItemForm.tsx');
 const BEHAVIOUR_FORM = read('BehaviourItemForm.tsx');
 const ITEM_ACTIONS = read('item-actions.ts');
+const ADD_BEHAVIOUR = read('AddBehaviourItems.tsx');
+const EDIT_PAGE = read('[id]/page.tsx');
 
 describe('the type question is gone', () => {
   it('no form renders a kind control', () => {
@@ -1544,8 +1626,42 @@ describe('the behaviour form shows nothing that does nothing', () => {
     expect(BEHAVIOUR_FORM).toMatch(/settingsField/);
   });
 
+  it('hands back writing an older version of this form stored on the row', () => {
+    // Removing the fields stops NEW losses. Rows that already carry text or an
+    // image would otherwise become unreachable from the panel, recoverable only
+    // by a human remembering to run a SELECT — which is not a fix. The edit page
+    // has the row in hand, so it passes it down and the form shows it.
+    expect(BEHAVIOUR_FORM).toMatch(/orphanBodyText/);
+    expect(BEHAVIOUR_FORM).toMatch(/orphanImageUrl/);
+    expect(EDIT_PAGE).toMatch(/orphanBodyText=\{item\.bodyText\}/);
+    expect(EDIT_PAGE).toMatch(/orphanImageUrl=\{item\.imageUrl\}/);
+    // Shown, never resubmitted: editItem's behaviour branch writes { label } only.
+    expect(BEHAVIOUR_FORM).not.toMatch(/name="orphan/);
+  });
+
   it('the old "leave it blank" hint is gone from the content form', () => {
     expect(ITEM_FORM).not.toMatch(/Deixe em branco/);
+  });
+});
+
+describe('a message about a write outlives the thing that triggered it', () => {
+  it('addBehaviourItem redirects instead of returning a success message', () => {
+    // AddBehaviourItems renders only while a kind is missing. Adding the LAST
+    // missing kind unmounts it, so a notice returned into its state disappears
+    // before it can be read — and the church at 10 active items gets a hidden
+    // item and silence, which is the failure the notice existed to prevent.
+    expect(ITEM_ACTIONS).toMatch(/redirect\(`\/admin\/conteudo\?criado=\$\{created\.id\}`\)/);
+    // Matches a field or a property access, not the word in a comment explaining
+    // why there is none — both files say "notice" in prose on purpose.
+    expect(ITEM_ACTIONS).not.toMatch(/notice\??:/);
+    expect(ADD_BEHAVIOUR).not.toMatch(/notice\??:/);
+    expect(ADD_BEHAVIOUR).not.toMatch(/\.notice/);
+  });
+
+  it('the list page is what renders it', () => {
+    const page = read('page.tsx');
+    expect(page).toMatch(/criado/);
+    expect(page).toMatch(/created\.isActive/);
   });
 });
 
@@ -1585,14 +1701,14 @@ describe('the image accept attribute survived', () => {
 - [ ] **Step 2: Verify the whole plan**
 
 Run: `npm test && npm run typecheck && npm run build`
-Expected: Task 8's numbers **+ ~10**. Nothing that passed at Task 0 may fail.
+Expected: Task 8's numbers **+ ~13** — count what you actually get. Nothing that passed at Task 0 may fail.
 
 Run: `grep -rin "dízimo\|dizimo" src/` — must return nothing.
 Run: `grep -rn "parseKind\|name=\"kind\"" src/` — must return nothing.
 
-- [ ] **Step 3: The live-data check — read-only, run before deploying**
+- [ ] **Step 3: The live-data check — read-only, and no longer the recovery path**
 
-Behaviour items' `bodyText` and `imageUrl` are preserved in the database but no longer surfaced anywhere in the panel. Before this ships to the one live church, run this **SELECT** against production and copy anything it returns into the Configurações field that actually owns it:
+**Task 7 is what recovers this data**: the edit screen shows a behaviour item's stored `bodyText` and `imageUrl` back to the secretary, in her own screen, with an explanation. This query no longer decides whether anything is lost — it exists so the owner knows *how many* churches will meet that block on day one, and can say something before they ask. Nothing blocks on it and nothing is lost if it is skipped.
 
 ```sql
 SELECT id, church_id, kind, label, image_url, body_text
@@ -1601,7 +1717,7 @@ WHERE kind IN ('prayer', 'human')
   AND (COALESCE(body_text, '') <> '' OR image_url IS NOT NULL);
 ```
 
-Every row this returns is text or an image a secretary wrote or attached that **no member has ever received** — `menu-router.ts` has never read either column for these kinds. Nothing is being destroyed here; it is being made invisible, and she deserves to be handed her own words back rather than have them quietly stop existing on screen. Also run:
+Every row this returns is text or an image a secretary wrote or attached that **no member has ever received** — `menu-router.ts` has never read either column for these kinds. Nothing is destroyed and, after Task 7, nothing is hidden either. Also run:
 
 ```sql
 SELECT church_id, kind, count(*) FROM menu_item
@@ -1637,7 +1753,7 @@ Every simplification is paid for by someone. These are the bills.
 
 **2. `kind` becomes immutable, and the product still cannot delete anything.** There is no `deleteMenuItem` in `src/lib/repo/menu-admin.ts` and no `db.delete(menuItem)` in the tree; commit `4bc83aa` exists specifically to stop the UI promising a deletion the product cannot perform. So a mis-tapped `+ Adicionar “💬 Falar com atendente”` is permanent. She can rename it and take it out of the menu; she cannot remove it or convert it into something useful. On a menu capped at ten rows, a permanently hidden mistake is a small ongoing tax. The old dropdown let her promote a content row called "Oração" into a real prayer item; that path is gone, and the replacement — activate the provisioned one, hide her own — is two steps and a moment of "where did my option go".
 
-**3. Text and images stored on prayer/handoff rows become invisible rather than merely useless.** They were never sent to a member. But a church that pasted its prayer invitation into "Texto da resposta" can no longer see its own words anywhere in the panel. Task 9 Step 3's query is the mitigation and it is a manual one — if nobody runs it, the words are still in the database and nobody knows.
+**3. A church that used the old "Texto da resposta" on a behaviour item is told, on day one, that what she wrote was never sent.** Task 7 hands the text back rather than hiding it, so nothing becomes invisible — but the honest version of that message is an admission, in her own words, quoted back to her, that the product accepted her writing and did nothing with it. It also cannot move the text for her: she reads it here and retypes or copies it into Configurações. And the block is permanent for that row — nothing in this plan clears `bodyText`, so it keeps appearing on every visit, for every church that ever touched that field, whether or not she wants the reminder. **This is the same class of cost this plan charged against seeding** ("gives every church two rows they did not ask for"): a UI element a church did not ask for and cannot dismiss. It is charged against fewer churches — only those with a non-empty column — and it is the price of not making her writing vanish, but it is the same kind of bill and it belongs on this list, not only on the alternative's.
 
 **4. The 10-item ceiling is no longer announced on arrival.** A secretary sketching a fourteen-option menu now meets the wall at item eleven instead of reading about it at item zero. I judge the trade worth making — the paragraph taxed every church, most of which sit at four to six items, to inform the few — but the person it hurts is exactly the ambitious secretary you most want to keep. The create form warns at 10, before she types, which softens it and does not remove it.
 
@@ -1660,6 +1776,20 @@ Every simplification is paid for by someone. These are the bills.
 - **No deep links into Configurações.** The link goes to the page, not to the field, until mobile Task 8 gives its `<details>` elements ids. Requested in the reconciliation table above.
 - **No character counter, no label length validation.** The truncation warning shows the consequence and never blocks: truncation is not a failure, a long name with a clear first 24 units is a legitimate choice, and rejecting long labels would lock every already-over-length item out of being saved at all.
 - **No duplicate-behaviour-item cleanup.** Detected by Task 9 Step 3's query, reported to a human, never fixed automatically.
+
+## Revisions
+
+**Revision 1 (2026-08-08), after review.** Four findings. Each is an instance of a class this plan should be read for again before it ships, because in every case the plan's own prose already contained the argument that would have caught it.
+
+**Class A — treating "no new instances" as "fixed", and delegating the existing instances to a human.** The plan stopped the form from accepting writing it discards, then described rows that already hold such writing as merely "unreachable from the panel", with recovery resting on somebody remembering a SELECT before deploy. No task blocked on it and no test enforced it, so the realistic outcome was that the query never ran and a secretary's words silently stopped existing on screen. *Fix:* `[id]/page.tsx` already has the row; it passes `bodyText`/`imageUrl` into `BehaviourItemForm`, which renders them back with an explanation when non-empty. Enforced by a new assertion in `tests/conteudo-form.test.ts`; the SQL survives only as a count for the owner. **Read for:** any "before shipping, run…" step that is the sole remedy for a user-visible loss. If the data is in hand at render time, show it.
+
+**Class B — a message whose delivery depends on the write that makes it necessary.** `addBehaviourItem` returned its "created, but out of the menu" notice into `AddBehaviourItems`, a component that renders only while a behaviour kind is missing — so adding the last missing kind unmounted the notice before it could be read, in exactly the 10-active case the notice was written for. *Fix:* the action redirects through the existing `?criado=` and the page renders it, the same path `createItem` uses. **Read for:** any success message returned into a component whose render condition the same write can falsify. The page survives the write; the trigger often does not.
+
+**Class C — reconciling by verdict word instead of by diff.** The mobile plan's Task 9 Step 2 was recorded as "still applies verbatim" on the strength of its *target file* being unchanged, without reading what else the step replaces — it also swaps the state block, and its replacement drops the `label`/`setLabel` this plan makes load-bearing, so verbatim application does not compile. The same table omitted mobile Task 9 Step 1 entirely, leaving an executor who reads only the table unaware it exists. *Fix:* the row is split per step, states two named deltas, and lists Step 1. **Read for:** any reconciliation verdict stronger than "check this" that was reached without opening the referenced step in full, and any table that summarises a multi-step task as one row.
+
+**Class D — asymmetric cost accounting.** A cost was charged against a rejected alternative ("two rows they did not ask for") and not against the chosen design, which carries the same kind of bill in a different place. *Fix:* named in "What gets worse" item 3 and cross-referenced from the rejection in Task 2. **Read for:** every reason given for rejecting an alternative — ask whether the chosen path pays a version of it.
+
+**No new machinery in this revision.** No new file, no new module, no new state container, no new route: the handback is two props on a component this plan was already creating, and the notice fix reuses the `?criado=` path this plan was already building. Test count moves from ~+10 to ~+13; measure it rather than trusting either number.
 
 ## Verification reality
 

@@ -588,8 +588,14 @@ describe('tap targets', () => {
     expect(body).toMatch(/min-height:\s*var\(--tap\)/);
   });
 
-  it('.item-actions keeps 8px between the reorder buttons', () => {
-    expect(block('.item-actions')).toMatch(/gap:\s*8px/);
+  it('.item-actions keeps at least 8px between the reorder buttons', () => {
+    // >= 8px, not == 8px. The Conteúdo plan (2026-08-08-conteudo-simpler.md,
+    // Task 5) ships this rule first at 10px, measured for two adjacent 44px
+    // targets whose mis-tap is an immediate server write reordering the live
+    // menu. Pinning the exact value would fail against the stricter spacing.
+    const gap = /gap:\s*(\d+)px/.exec(block('.item-actions'));
+    expect(gap).not.toBeNull();
+    expect(Number(gap![1])).toBeGreaterThanOrEqual(8);
   });
 });
 
