@@ -2,6 +2,7 @@ import { and, count, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { church, contact, menuItem } from '@/db/schema';
 import { GRACE_PERIOD_MS, type ChurchStatus } from '@/lib/church-status';
+import type { AppliedMigration } from '@/lib/migration-drift';
 
 /** OWNER-ONLY. Every query here spans churches by design — that is the whole
  *  point of the owner console. Church-facing code must never import this file;
@@ -101,4 +102,67 @@ export async function setChurchStatus(
 export async function getOnlyChurch() {
   const rows = await db.select().from(church).limit(2);
   return rows.length === 1 ? rows[0] : undefined;
+}
+
+/** Postgres: undefined_table, and invalid_schema_name for drivers that report the
+ *  missing `drizzle` schema as the schema rather than the relation. */
+const NO_MIGRATIONS_TABLE = new Set(['42P01', '3F000']);
+
+/** THE SQLSTATE IS NOT ON THE ERROR YOU CATCH. drizzle rethrows every driver
+ *  failure as its own `Failed query: …` Error and hangs the original — the one
+ *  carrying `code: '42P01'` — off `.cause`. Reading `error.code` alone finds
+ *  undefined, decides this is not a missing table, and rethrows, which turns a
+ *  never-migrated database into a 500 on the owner console instead of the alarm
+ *  that says so. So the whole chain is walked, bounded in case a driver ever
+ *  hands back a cycle.
+ *
+ *  Both conditions of the text fallback are checked on the SAME layer on
+ *  purpose. The wrapper's message quotes the SQL, so it always contains
+ *  `__drizzle_migrations`; the cause's message always contains "does not exist"
+ *  for a missing COLUMN too. Testing them across layers would swallow
+ *  `column "created_at" does not exist` — a real, different breakage — and
+ *  report all clear for a database this code cannot actually read. */
+function isMissingMigrationsTable(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current !== null && current !== undefined && depth < 5; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string' && NO_MIGRATIONS_TABLE.has(code)) return true;
+    const message = current instanceof Error ? current.message : '';
+    if (/__drizzle_migrations/.test(message) && /does not exist/i.test(message)) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/** OWNER-ONLY, and this one is not owner-only by convention — it is cross-church
+ *  infrastructure state. drizzle.__drizzle_migrations describes the whole
+ *  deployment, not a tenant: no church_id exists to scope it by, and no church
+ *  has any business learning what the vendor's schema is doing. It sits in this
+ *  file so tests/privilege-boundary.test.ts keeps it out of every church-facing
+ *  path, the same way it does for the queries that span churches.
+ *
+ *  Returns [] when the migrations table does not exist. A missing table and an
+ *  empty table say the same operational thing — `drizzle-kit migrate` has never
+ *  completed against this database — and the caller reports that as total drift
+ *  (MigrationDrift.neverMigrated), which is exactly right. Every other failure
+ *  throws: a detector that cannot tell "no drift" from "could not look" is worse
+ *  than none, because it is trusted. */
+export async function readAppliedMigrations(): Promise<AppliedMigration[]> {
+  try {
+    const result = await db.execute(
+      sql`select created_at from drizzle.__drizzle_migrations order by created_at`,
+    );
+    // Both drivers return { rows: [...] }; the shapes differ in everything else.
+    const rows = (result as unknown as { rows: Array<{ created_at: string | number | null }> }).rows;
+    // created_at is a bigint, which every driver here hands back as a STRING —
+    // '1786369208803', not 1786369208803. Left unconverted it would match no
+    // journal entry at all and report a healthy database as fully drifted.
+    // Number(null) is 0 and Number('garbage') is NaN; both fail to match any
+    // journal entry and surface as `extra`, which is the honest reading of a row
+    // this code cannot account for.
+    return rows.map((row) => ({ createdAt: Number(row.created_at) }));
+  } catch (error) {
+    if (isMissingMigrationsTable(error)) return [];
+    throw error;
+  }
 }

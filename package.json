@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:check": "tsx scripts/db-check.ts",
     "db:seed": "tsx src/db/seed.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "create-owner": "tsx scripts/create-owner.ts",

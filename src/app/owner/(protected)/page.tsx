@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireOwnerSession } from '@/lib/auth/owner-session';
 import { listChurches } from '@/lib/repo/platform';
 import { effectiveStatus } from '@/lib/church-status';
+import { MigrationDriftAlert } from './MigrationDriftAlert';
 import { NewChurchForm } from './NewChurchForm';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -17,6 +18,9 @@ export default async function OwnerChurchesPage() {
 
   return (
     <div>
+      {/* First child, above the heading: if the database is behind the code,
+          nothing else on this screen matters until that is fixed. */}
+      <MigrationDriftAlert />
       <h1>Igrejas</h1>
       <p className="hint">{churches.length} igreja(s) cadastrada(s).</p>
 
