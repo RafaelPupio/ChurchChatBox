@@ -26,6 +26,7 @@ export interface ChurchConfig {
   prayerThanksText: string;
   handoffText: string;
   handoffClosedText: string;
+  courtesyText: string;
 }
 
 export type InboundMessage =

@@ -1,6 +1,9 @@
 import {
   boolean, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
+// Relative, not the '@/…' alias: drizzle-kit bundles this file outside Next's
+// tsconfig path resolution. The module it reaches is data only, no imports.
+import { CHURCH_DEFAULTS } from '../lib/church-defaults';
 
 export const menuItemKindEnum = pgEnum('menu_item_kind', ['content', 'prayer', 'human']);
 export const contactModeEnum = pgEnum('contact_mode', ['bot', 'awaiting_prayer', 'human']);
@@ -33,6 +36,15 @@ export const church = pgTable('church', {
   prayerThanksText: text('prayer_thanks_text').notNull(),
   handoffText: text('handoff_text').notNull(),
   handoffClosedText: text('handoff_closed_text').notNull(),
+  /** The reply to "obrigada" / "amém" / "Deus abençoe".
+   *
+   *  The ONLY bot text carrying a database-level default, and only because it was
+   *  added to a table that already had rows: `ADD COLUMN … NOT NULL` without one
+   *  fails against every church already in production. The value is imported from
+   *  CHURCH_DEFAULTS rather than retyped, so the seed a new church gets and the
+   *  backfill an existing church got cannot drift into two different sentences.
+   *  It stays editable data either way — Configurações writes this column. */
+  courtesyText: text('courtesy_text').notNull().default(CHURCH_DEFAULTS.courtesyText),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   // Both nullable, both unique. Postgres allows many NULLs under a unique index,

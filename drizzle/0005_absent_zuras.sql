@@ -1,0 +1,1 @@
+ALTER TABLE "church" ADD COLUMN "courtesy_text" text DEFAULT 'Que Deus abençoe você e sua família! 🙏' NOT NULL;

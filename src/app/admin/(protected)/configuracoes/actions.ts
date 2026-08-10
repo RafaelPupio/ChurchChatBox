@@ -25,7 +25,7 @@ export interface ConfigResult {
 const TEXT_FIELDS = [
   'greetingText', 'menuHeaderText', 'fallbackText',
   'unsupportedMediaText', 'errorText', 'prayerPromptText', 'prayerThanksText',
-  'handoffText', 'handoffClosedText',
+  'handoffText', 'handoffClosedText', 'courtesyText',
 ] as const;
 
 export async function saveTexts(_prev: ConfigResult, formData: FormData): Promise<ConfigResult> {

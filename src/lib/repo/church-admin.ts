@@ -42,6 +42,7 @@ const CHURCH_EDITABLE_FIELDS = [
   'prayerThanksText',
   'handoffText',
   'handoffClosedText',
+  'courtesyText',
 ] as const;
 
 type ChurchEditableField = (typeof CHURCH_EDITABLE_FIELDS)[number];

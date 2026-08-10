@@ -15,6 +15,7 @@ export const config: ChurchConfig = {
   prayerThanksText: 'RECEBEMOS',
   handoffText: 'UM_MOMENTO',
   handoffClosedText: 'ENCERRADO',
+  courtesyText: 'DEUS_ABENCOE',
 };
 
 export const items: MenuItemView[] = [
@@ -148,6 +149,107 @@ describe('route — prayer flow', () => {
     expect(result.prayerRequestText).toBe('Orem pela cura');
     expect(result.replies).toEqual([{ type: 'text', body: 'RECEBEMOS' }]);
     expect(result.nextMode).toBe('bot');
+  });
+});
+
+/** The conversation that produced this branch: a member asked for prayer for her
+ *  hospitalised mother, the bot confirmed, she wrote "obrigada!" — and was told
+ *  "Desculpe, não entendi." Correct, and cold at the tenderest moment the product
+ *  has. These tests pin BOTH halves: that gratitude is answered warmly once, and
+ *  that nothing else is swallowed by the attempt. */
+describe('route — courtesy reply', () => {
+  it('answers "obrigada!" once, warmly, and does not re-push the menu', () => {
+    const result = route({ ...base, message: { kind: 'text', text: 'obrigada!' } });
+    expect(result.replies).toEqual([{ type: 'text', body: 'DEUS_ABENCOE' }]);
+    expect(result.nextMode).toBe('bot');
+    expect(result.prayerRequestText).toBeUndefined();
+  });
+
+  it.each([
+    'obrigado', 'Obrigada', 'OBRIGADA!!!', 'obrigada 🙏', '  obrigada  ',
+    'obrigadão', 'obrigadao', 'obrigadinha', 'obrigadinho',
+    'brigado', 'brigada', 'obg', 'obg!', 'obgd',
+    'muito obrigada', 'Muito obrigado!', 'valeu', 'vlw', 'gratidão', 'gratidao',
+    'amém', 'amem', 'Amém 🙏🙏', 'amém!',
+    'Deus abençoe', 'deus abencoe', 'Deus te abençoe!', 'que Deus abençoe você',
+    'Que Deus abençoe vocês', 'Deus abençoe a todos',
+    // Two courtesy words together is still just courtesy.
+    'amém, obrigada!', 'obrigada, amém', 'valeu, obrigado',
+  ])('recognises %j as gratitude or blessing', (text) => {
+    const result = route({ ...base, message: { kind: 'text', text } });
+    expect(result.replies).toEqual([{ type: 'text', body: 'DEUS_ABENCOE' }]);
+    expect(result.nextMode).toBe('bot');
+  });
+
+  it.each([
+    // Acknowledgements, not gratitude — a blessing in reply to "ok" is odd.
+    'ok', 'okay', 'blz', 'beleza', 'entendi', 'certo', 'sim', 'tá bom', 'legal', 'show',
+    // Greetings are not closings: "boa noite" opens most Brazilian messages.
+    'boa noite', 'bom dia', 'oi', 'tchau',
+    // Bare emoji and empty-ish input carry no words to recognise.
+    '🙏', '👍',
+    // Gratitude used inside a sentence that means something else.
+    'valeu a pena', 'obrigada a todos que vieram ontem, foi lindo',
+    // A digit is a menu choice in this bot, so it must survive the fold and
+    // keep the message out of the courtesy branch.
+    'obrigada 1', '2 obrigada',
+  ])('does not treat %j as courtesy', (text) => {
+    const result = route({ ...base, message: { kind: 'text', text } });
+    expect(result.replies).toEqual([{ type: 'menu', bodyText: 'NAO_ENTENDI' }]);
+    expect(result.nextMode).toBe('bot');
+  });
+
+  it('does not swallow a real question that happens to start with "obrigada"', () => {
+    // THE case that decides exact-match over contains-match. She still needs an
+    // answer, so she must still get the menu.
+    const result = route({
+      ...base,
+      message: { kind: 'text', text: 'obrigada, mas qual o horário do culto?' },
+    });
+    expect(result.replies).toEqual([{ type: 'menu', bodyText: 'NAO_ENTENDI' }]);
+  });
+
+  it.each(['obrigada', 'amém', 'Deus abençoe'])(
+    'stays silent in human mode for %j — she is talking to a person',
+    (text) => {
+      const result = route({ ...base, mode: 'human', message: { kind: 'text', text } });
+      expect(result.replies).toEqual([]);
+      expect(result.nextMode).toBe('human');
+    },
+  );
+
+  it('captures a bare "obrigada" as the prayer request while awaiting one', () => {
+    // She was asked to write. Whatever she writes is the request — capturing it
+    // is the whole point of the state.
+    const result = route({ ...base, mode: 'awaiting_prayer', message: { kind: 'text', text: 'obrigada' } });
+    expect(result.prayerRequestText).toBe('obrigada');
+    expect(result.replies).toEqual([{ type: 'text', body: 'RECEBEMOS' }]);
+    expect(result.nextMode).toBe('bot');
+  });
+
+  it('captures a prayer that merely contains "obrigada"', () => {
+    const text = 'Obrigada por orarem pela minha mãe, ela está internada';
+    const result = route({ ...base, mode: 'awaiting_prayer', message: { kind: 'text', text } });
+    expect(result.prayerRequestText).toBe(text);
+    expect(result.replies).toEqual([{ type: 'text', body: 'RECEBEMOS' }]);
+  });
+
+  it.each(['menu', 'voltar', '0'])('never pre-empts the escape word %j', (text) => {
+    const result = route({ ...base, message: { kind: 'text', text } });
+    expect(result.replies).toEqual([{ type: 'menu', bodyText: 'CABECALHO' }]);
+  });
+
+  it('greets a first contact rather than blessing them into a dead end', () => {
+    // Someone whose first ever message is "amém" has never seen the menu. A
+    // blessing with no menu would leave them with nowhere to go.
+    const result = route({ ...base, isFirstContact: true, message: { kind: 'text', text: 'amém' } });
+    expect(result.replies).toEqual([{ type: 'menu', bodyText: 'SAUDACAO' }]);
+    expect(result.greeted).toBe(true);
+  });
+
+  it('does not change what a menu number does', () => {
+    const result = route({ ...base, message: { kind: 'text', text: '1' } });
+    expect(result.replies[0]).toEqual({ type: 'text', body: 'CULTOS' });
   });
 });
 

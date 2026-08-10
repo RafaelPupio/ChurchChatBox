@@ -8,7 +8,7 @@ const initial: ConfigResult = {};
 interface Field { name: string; label: string; }
 interface Group { id: string; title: string; fields: Field[]; }
 
-/** Same ten fields, same names, same action — grouped by when the member sees
+/** The same fields, same names, same action — grouped by when the member sees
  *  them, so a correction to the saudação does not mean scrolling past seven
  *  unrelated boxes. The flat list rendered 1458px tall, about 1.8 phone screens
  *  of visually identical boxes, with the save button 1405px in. */
@@ -29,6 +29,17 @@ const GROUPS: Group[] = [
       { name: 'fallbackText', label: 'Mensagem quando não entende' },
       { name: 'unsupportedMediaText', label: 'Mensagem para áudio/figurinha/foto' },
       { name: 'errorText', label: 'Mensagem de instabilidade' },
+    ],
+  },
+  // Sits directly under "Quando o bot não entende" on purpose: this is the text
+  // that took those words' place. A church that saw the cold "Desculpe, não
+  // entendi" answer a member's "obrigada" comes here looking for it, and finds
+  // its warm counterpart in the next section rather than four screens away.
+  {
+    id: 'cortesia',
+    title: 'Quando a pessoa agradece',
+    fields: [
+      { name: 'courtesyText', label: 'Resposta a “obrigada”, “amém” ou “Deus abençoe”' },
     ],
   },
   {

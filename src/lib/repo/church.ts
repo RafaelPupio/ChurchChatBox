@@ -24,5 +24,6 @@ export function toChurchConfig(record: ChurchRecord): ChurchConfig {
     prayerThanksText: record.prayerThanksText,
     handoffText: record.handoffText,
     handoffClosedText: record.handoffClosedText,
+    courtesyText: record.courtesyText,
   };
 }

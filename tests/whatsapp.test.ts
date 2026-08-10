@@ -119,6 +119,7 @@ describe('sendReply — menu send fallback', () => {
     prayerThanksText: 'RECEBEMOS',
     handoffText: 'UM_MOMENTO',
     handoffClosedText: 'ENCERRADO',
+    courtesyText: 'DEUS_ABENCOE',
   };
   const creds = { phoneNumberId: '123', accessToken: 'token' };
   const menuReply: Reply = { type: 'menu', bodyText: 'CABECALHO' };

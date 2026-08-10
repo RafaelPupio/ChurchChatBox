@@ -28,6 +28,7 @@ export default async function ConfiguracoesPage() {
     prayerThanksText: church.prayerThanksText,
     handoffText: church.handoffText,
     handoffClosedText: church.handoffClosedText,
+    courtesyText: church.courtesyText,
   };
 
   return (
