@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { route } from '@/lib/menu-router';
-import type { ChurchConfig, MenuItemView } from '@/lib/types';
+import type { ChurchConfig, ContactMode, MenuItemView } from '@/lib/types';
 
 export const config: ChurchConfig = {
   id: 'church-1',
@@ -287,5 +287,48 @@ describe('route — unsupported media', () => {
     const result = route({ ...base, mode: 'awaiting_prayer', message: { kind: 'unsupported' } });
     expect(result.prayerRequestText).toBeUndefined();
     expect(result.nextMode).toBe('awaiting_prayer');
+  });
+});
+
+/** She was prayed for and is thanking the church FOR that — the single most
+ *  likely message in the conversation this whole branch exists to fix, and the
+ *  first version missed it, because an every-word-must-be-courtesy rule cannot
+ *  see past "pela" and "oração". */
+describe('thanking for something specific', () => {
+  const say = (text: string, mode: ContactMode = 'bot') =>
+    route({ config, items, mode, message: { kind: 'text', text }, isFirstContact: false });
+  const isBlessing = (r: ReturnType<typeof route>) =>
+    r.replies.length === 1 && r.replies[0].type === 'text' && r.replies[0].body === config.courtesyText;
+  const isMenu = (r: ReturnType<typeof route>) => r.replies.some((x) => x.type === 'menu');
+
+  it.each([
+    'obrigada pela oração',
+    'obrigada pelas orações',
+    'obrigado pela atenção',
+    'obrigada por tudo',
+    'muito obrigada pela oração',
+    'valeu pela ajuda',
+  ])('answers %j with the blessing', (text) => {
+    expect(isBlessing(say(text))).toBe(true);
+  });
+
+  it.each([
+    // Politeness in front of a real question must never swallow the question.
+    'obrigada, mas qual o horário do culto?',
+    'obrigada pela atenção, qual o endereço?',
+    'obrigado, pode me dizer quando é o culto',
+    // Enough content that she is telling the church something, not closing.
+    'obrigada a todos que vieram ontem, foi lindo demais',
+  ])('still shows the menu for %j', (text) => {
+    expect(isMenu(say(text))).toBe(true);
+  });
+
+  it('stays silent in human mode even when thanking for something', () => {
+    expect(say('obrigada pela oração', 'human').replies).toEqual([]);
+  });
+
+  it('captures it as the prayer when she was asked to write one', () => {
+    const r = say('obrigada pela oração de ontem, orem de novo por favor', 'awaiting_prayer');
+    expect(r.prayerRequestText).toBe('obrigada pela oração de ontem, orem de novo por favor');
   });
 });

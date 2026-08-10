@@ -62,10 +62,28 @@ function courtesyKey(text: string): string {
  *
  *  Multiple courtesy words together ("amém, obrigada!") still count: every word
  *  must be one, so no room is left for a question to hide in. */
+/** Words that mean she is ASKING, not closing. Their presence disqualifies a
+ *  message however politely it opens. */
+const ASKING = /\b(qual|quais|quando|onde|como|quanto|quantos|quantas|porque|por que|pode|poderia|tem|teria|sera|preciso|queria|gostaria|horario|horarios|endereco)\b/;
+
+/** What she is thanking FOR. "obrigada pela oração" is the single most likely
+ *  message in the conversation that prompted this whole branch — she was prayed
+ *  for and is thanking the church for it — and an every-word-must-be-courtesy
+ *  rule misses it, because "pela" and "oracao" are not courtesy words.
+ *
+ *  So: a courtesy opener, then "por/pela/pelo…", then a SHORT remainder with
+ *  nothing interrogative in it. The length cap and the ASKING guard are what keep
+ *  this from becoming a contains-match — "obrigada a todos que vieram ontem, foi
+ *  lindo" has content and still earns the menu. */
+const THANKS_FOR = /^(muito )?(obrigad\w+|brigad\w+|valeu|vlw|gratidao) (por|pela|pelo|pelas|pelos) /;
+const THANKS_FOR_MAX_WORDS = 6;
+
 function isCourtesy(text: string): boolean {
   const key = courtesyKey(text);
   if (!key) return false; // a bare 🙏 has no words to recognise
+  if (ASKING.test(key)) return false;
   if (COURTESY_PHRASES.has(key) || BLESSING.test(key)) return true;
+  if (THANKS_FOR.test(key) && key.split(' ').length <= THANKS_FOR_MAX_WORDS) return true;
   return key.split(' ').every((word) => COURTESY_WORDS.has(word));
 }
 

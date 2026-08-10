@@ -15,10 +15,14 @@ export const CHURCH_DEFAULTS = {
   /** The answer to "obrigada", "amém", "Deus abençoe" — the words a member uses
    *  to CLOSE a conversation, not to ask something. Written to fit both a thank
    *  you and an amém, because it answers both, and written as a blessing rather
-   *  than an acknowledgement ("De nada!") because a church closing a conversation
-   *  with a member blesses her. One sentence: she said thank you, and the reply
-   *  should end there rather than start something. */
-  courtesyText: 'Que Deus abençoe você e sua família! 🙏',
+   *  than a bare acknowledgement ("De nada!") because a church closing a
+   *  conversation with a member blesses her. It opens on "Amém!" because the
+   *  natural Brazilian beat answers the thanks before blessing, and it names
+   *  nobody but her — an earlier draft said "e sua família", which presumes one
+   *  and lands wrong on a widow or someone estranged from theirs. One sentence:
+   *  she said thank you, and the reply should end there rather than start
+   *  something. Editable in Configurações like every other thing the bot says. */
+  courtesyText: 'Amém! 🙏 Que Deus abençoe você.',
 };
 
 /** The one menu item every church starts with. LGPD Art. 9 gives members the
