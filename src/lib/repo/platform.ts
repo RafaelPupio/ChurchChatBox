@@ -1,12 +1,28 @@
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gt, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { church, contact, menuItem } from '@/db/schema';
+import { church, contact, menuItem, webhookFailure } from '@/db/schema';
 import { GRACE_PERIOD_MS, type ChurchStatus } from '@/lib/church-status';
 import type { AppliedMigration } from '@/lib/migration-drift';
 
 /** OWNER-ONLY. Every query here spans churches by design — that is the whole
  *  point of the owner console. Church-facing code must never import this file;
  *  it uses the church-scoped repos instead. */
+
+/** What a raw `sql` aggregate actually gives back, made into what the interface
+ *  promises. PGlite returns a Date here and neon-http returns a string, so a repo
+ *  that just forwarded the value would work in every test and break in
+ *  production — which is the precise shape of the bug this file's callers keep
+ *  being bitten by.
+ *
+ *  An unparseable value becomes null rather than an Invalid Date: null renders as
+ *  "nenhuma mensagem recebida ainda", while an Invalid Date reaches
+ *  Intl.RelativeTimeFormat and throws, taking down the console that exists to
+ *  report things being broken. */
+function toDate(value: string | Date | null): Date | null {
+  if (value === null) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 export interface ChurchSummary {
   id: string;
@@ -30,7 +46,15 @@ export async function listChurches(): Promise<ChurchSummary[]> {
       .where(and(eq(menuItem.churchId, row.id), eq(menuItem.isActive, true)));
 
     const last = await db
-      .select({ at: sql<Date | null>`max(${contact.lastInboundAt})` })
+      // `sql<T>` is an ASSERTION, not a conversion, and this one was false. A raw
+      // fragment carries no column, so drizzle has no timestamp mapper to apply
+      // and neon-http hands back the STRING '2026-08-10 13:40:08.803+00' while
+      // TypeScript swears it is a Date. It typechecked and it built for months,
+      // harmlessly, because the console fetched this field and then threw it
+      // away — the first render of it crashed the whole page with
+      // "when.getTime is not a function". Same family as the two incidents this
+      // week: the code and the live database disagreed, and nothing said so.
+      .select({ at: sql<string | Date | null>`max(${contact.lastInboundAt})` })
       .from(contact)
       .where(eq(contact.churchId, row.id));
 
@@ -45,7 +69,7 @@ export async function listChurches(): Promise<ChurchSummary[]> {
       // every member message is silently dropped and no reply is ever sent.
       whatsappConnected: !!row.phoneNumberId && !!row.accessToken && !!row.appSecret,
       activeMenuItems: items[0]?.n ?? 0,
-      lastInboundAt: last[0]?.at ?? null,
+      lastInboundAt: toDate(last[0]?.at ?? null),
       createdAt: row.createdAt,
     });
   }
@@ -165,4 +189,46 @@ export async function readAppliedMigrations(): Promise<AppliedMigration[]> {
     if (isMissingMigrationsTable(error)) return [];
     throw error;
   }
+}
+
+export interface WebhookFailureSummary {
+  churchId: string | null;
+  /** null for a failure that happened before the church was identified, which is
+   *  what a broken church lookup — the 2026-08-10 outage — produces. */
+  churchName: string | null;
+  reason: string;
+  failureCount: number;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+}
+
+/** OWNER-ONLY, and the reason is the point rather than the convention: this table
+ *  is cross-church by construction (one row may belong to any tenant, or to
+ *  none), so one church reading it would be reading about the others. The WRITE
+ *  is not owner-only and lives in src/lib/repo/webhook-failure.ts, which the
+ *  webhook imports — recording a failure about yourself is not a privilege, and
+ *  tests/privilege-boundary.test.ts keeps this half out of the webhook.
+ *
+ *  Ordered by recency and limited: the console asks "what is broken NOW", and an
+ *  alarm that renders a hundred rows is one nobody reads. */
+export async function listRecentWebhookFailures(
+  since: Date,
+  limit = 20,
+): Promise<WebhookFailureSummary[]> {
+  return db
+    .select({
+      churchId: webhookFailure.churchId,
+      churchName: church.name,
+      reason: webhookFailure.reason,
+      failureCount: webhookFailure.failureCount,
+      firstSeenAt: webhookFailure.firstSeenAt,
+      lastSeenAt: webhookFailure.lastSeenAt,
+    })
+    .from(webhookFailure)
+    // LEFT join: an inner one would hide exactly the rows that matter most, the
+    // ones with no church attached.
+    .leftJoin(church, eq(church.id, webhookFailure.churchId))
+    .where(gt(webhookFailure.lastSeenAt, since))
+    .orderBy(desc(webhookFailure.lastSeenAt))
+    .limit(limit);
 }

@@ -43,6 +43,13 @@
       "when": 1786369208803,
       "tag": "0005_absent_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786395249701,
+      "tag": "0006_woozy_phalanx",
+      "breakpoints": true
     }
   ]
 }

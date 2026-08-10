@@ -7,6 +7,7 @@ import { findChurchByPhoneNumberId, toChurchConfig, type ChurchRecord } from '@/
 import { loadMenuItems } from '@/lib/repo/menu';
 import { findOrCreateContact, markGreeted, touchLastInbound, updateContactMode } from '@/lib/repo/contact';
 import { recordInboundMessage, recordOutboundMessage } from '@/lib/repo/message';
+import { recordWebhookFailure } from '@/lib/repo/webhook-failure';
 import { savePrayerRequest } from '@/lib/repo/prayer';
 import { effectiveStatus } from '@/lib/church-status';
 
@@ -178,6 +179,29 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // Fail toward the human, never toward silence.
     console.error('Webhook processing failed', error);
+
+    // console.error goes to a log nobody is watching at 09:00 on a Sunday. THIS
+    // is what makes the failure visible: one row, aggregated by (church, reason),
+    // shown at the top of /owner. It cannot throw (see recordWebhookFailure) —
+    // this handler's one rule is ALWAYS RETURN 200, and an alarm that broke that
+    // would turn a silent bot into a bot that answers everyone twice.
+    //
+    // Recorded FIRST, before the apology below: the apology is a best-effort
+    // message to one member over a network we already know is misbehaving, while
+    // this row is the only thing that will still exist tomorrow.
+    //
+    // Recorded even while suspended. Suspension silences OUTBOUND WHATSAPP, which
+    // is a promise to the church's members; it was never a promise to stop
+    // knowing things about our own product.
+    //
+    // `verified?.church.id` and not the church looked up above: this file's rule
+    // is that nothing derived from an UNVERIFIED body is acted on, and an id
+    // attributed to a church is acting. Unattributed (null) is the honest answer
+    // for a failure that happened before the signature was checked — and it is
+    // what the 2026-08-10 outage would have written, since the failure was inside
+    // the church lookup itself.
+    await recordWebhookFailure(verified?.church.id ?? null, error);
+
     // verified is only set after the signature check passed for this exact
     // request. If the failure happened before that (e.g. a transient DB error
     // during the church lookup), there is no trustworthy recipient to apologize

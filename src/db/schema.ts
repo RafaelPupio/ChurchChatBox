@@ -1,5 +1,5 @@
 import {
-  boolean, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, index, integer, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 // Relative, not the '@/…' alias: drizzle-kit bundles this file outside Next's
 // tsconfig path resolution. The module it reaches is data only, no imports.
@@ -189,4 +189,49 @@ export const ownerUser = pgTable('owner_user', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailUq: uniqueIndex('owner_user_email_uq').on(t.email),
+}));
+
+/** The webhook's catch block, made visible.
+ *
+ *  The webhook ALWAYS returns 200 — a non-200 makes Meta retry and a retry means
+ *  a member is answered twice — so a hard failure becomes an invisible one: Meta
+ *  is satisfied, the member gets silence, and nobody is told. On 2026-08-10
+ *  migration 0005 was generated and never applied, findChurchByPhoneNumberId
+ *  selected a column that did not exist, and every member of every church got
+ *  nothing for hours. This table is the row that would have said so.
+ *
+ *  ONE ROW PER (church, reason), NOT one per failure. A broken church produces a
+ *  failure per inbound message; on a Sunday morning that is thousands of
+ *  identical rows saying one thing. The upsert in src/lib/repo/webhook-failure.ts
+ *  counts instead, so the table's size is bounded by how many DISTINCT ways the
+ *  product is broken, which is a small number even during a total outage.
+ *
+ *  church_id is NULLABLE and that is the common case, not the edge case: today's
+ *  failure was IN the church lookup, so there was no church to attribute it to.
+ *  A schema that demanded one would have had nothing to record on the very day it
+ *  was needed. */
+export const webhookFailure = pgTable('webhook_failure', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  churchId: uuid('church_id').references(() => church.id, { onDelete: 'cascade' }),
+  /** The error's message, whitespace-collapsed, digit-redacted and truncated by
+   *  toFailureReason(). Stored raw and uninterpreted — the reading side may guess
+   *  what it means, the recording side may not. */
+  reason: text('reason').notNull(),
+  /** Failures in the CURRENT incident, not since the beginning of time. The
+   *  upsert restarts the count (and first_seen_at) when the previous failure is
+   *  older than FAILURE_WINDOW_MS, so "412 falhas" always means "412 since this
+   *  started" rather than a number accumulated across months of unrelated blips. */
+  failureCount: integer('failure_count').notNull().default(1),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // NULLS NOT DISTINCT is the whole reason this is a constraint and not a plain
+  // unique index (drizzle 0.45 only exposes the modifier here). Under Postgres's
+  // default, every NULL church_id is distinct from every other, so the
+  // before-we-know-the-church failures — today's incident exactly — would insert
+  // a fresh row per inbound message and the aggregation would silently not
+  // aggregate for the one case it matters most for.
+  churchReasonUq: unique('webhook_failure_church_reason_uq').on(t.churchId, t.reason).nullsNotDistinct(),
+  // The owner console only ever asks "what failed recently", ordered by recency.
+  lastSeenIdx: index('webhook_failure_last_seen_idx').on(t.lastSeenAt),
 }));
