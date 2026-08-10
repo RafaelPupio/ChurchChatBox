@@ -15,7 +15,26 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function OwnerChurchesPage() {
   await requireOwnerSession();
-  const churches = await listChurches();
+
+  // The church list is fetched DEFENSIVELY, and this is the whole point of the
+  // page. `listChurches` selects every column of `church`, so the exact failure
+  // the two alarms below exist to report — a migration adding a column that the
+  // live database does not have — throws here. Before this guard that happened
+  // BEFORE any JSX existed, so the alarms never rendered and Rafael got Next's
+  // default 500 with no error.tsx to soften it: an alarm system switched off by
+  // the emergency it was built for. Each alarm carefully defended its own read;
+  // nothing defended the page hosting them.
+  //
+  // On failure the list is dropped and the alarms still render, because they are
+  // the only thing on this screen that matters while the database is behind.
+  let churches: Awaited<ReturnType<typeof listChurches>> = [];
+  let listFailed = false;
+  try {
+    churches = await listChurches();
+  } catch (error) {
+    console.error('[owner] church list failed — rendering the alarms alone:', error);
+    listFailed = true;
+  }
   const now = new Date();
 
   return (
@@ -28,11 +47,18 @@ export default async function OwnerChurchesPage() {
           their members get silence is the thing that failed us twice. */}
       <WebhookFailureAlert />
       <h1>Igrejas</h1>
-      <p className="hint">{churches.length} igreja(s) cadastrada(s).</p>
+      {listFailed ? (
+        <p className="error">
+          Não foi possível carregar a lista de igrejas. Isso quase sempre é a mesma
+          causa apontada acima — resolva aquilo primeiro e recarregue esta página.
+        </p>
+      ) : (
+        <p className="hint">{churches.length} igreja(s) cadastrada(s).</p>
+      )}
 
       <NewChurchForm />
 
-      {churches.length === 0 && <p className="hint">Nenhuma igreja ainda.</p>}
+      {!listFailed && churches.length === 0 && <p className="hint">Nenhuma igreja ainda.</p>}
 
       {churches.map((c) => {
         const status = effectiveStatus(c.status, c.graceUntil, now);

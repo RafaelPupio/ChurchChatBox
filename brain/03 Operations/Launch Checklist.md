@@ -65,3 +65,25 @@ Everything below has only ever run against PGlite. These are the three things mo
 3. **Force a provisioning failure.** Revoke insert on `menu_item` for one attempt and provision a church. It should survive with its admin, report `menuSeeded: false`, and be repairable from the owner console — not wedge the e-mail address.
 
 Also on day one: confirm the 8-hour session `ttl` actually expires a cookie (verified by reading code only), and that a Blob image upload mints a token and completes.
+
+## Before the first deploy — wire the database gate
+
+`npm run db:check` compares the migrations this code expects against the ones the
+database actually has. It exists because the same failure happened twice in two days:
+a migration generated and never applied, which broke the panel once and silenced the
+bot for every member once — the second time invisibly, because the webhook returns
+200 no matter what.
+
+**It is not yet wired into anything.** Nothing runs it automatically: `build` is plain
+`next build`, and there is no `vercel.json`. Turning it into a real gate is one line,
+and it is left as a deliberate decision because it needs `DATABASE_URL` present at
+build time — get that wrong and every deploy fails instead of every bot.
+
+```bash
+# In Vercel → Settings → Build & Development Settings → Build Command
+npm run db:check && npm run build
+```
+
+Until that is done, run it by hand after every `npm run db:generate`, and read
+`/owner` after every deploy — the console shows the same drift in pt-BR, in red,
+above everything else.

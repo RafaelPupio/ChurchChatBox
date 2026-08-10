@@ -403,7 +403,14 @@ describe('where the check is wired', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('is exposed as a deploy gate that exits non-zero', () => {
+  // NAMED FOR WHAT IT CHECKS, not for what we wish it checked. An earlier title
+  // called this a deploy gate; it is not one. Nothing invokes db:check — `build`
+  // is plain `next build` and there is no vercel.json — so the gate exists and
+  // never runs, and a test claiming otherwise reads as protection to whoever
+  // skims it. Wiring it into the build is a deployment decision (it needs
+  // DATABASE_URL at build time, and a wrong call there fails every deploy), so it
+  // is written down as a launch step rather than switched on unilaterally.
+  it('provides a db:check script that exits non-zero and names its fix', () => {
     const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
