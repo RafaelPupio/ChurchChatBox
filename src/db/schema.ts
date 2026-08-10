@@ -41,9 +41,18 @@ export const church = pgTable('church', {
    *  The ONLY bot text carrying a database-level default, and only because it was
    *  added to a table that already had rows: `ADD COLUMN … NOT NULL` without one
    *  fails against every church already in production. The value is imported from
-   *  CHURCH_DEFAULTS rather than retyped, so the seed a new church gets and the
-   *  backfill an existing church got cannot drift into two different sentences.
-   *  It stays editable data either way — Configurações writes this column. */
+   *  CHURCH_DEFAULTS so the two are the same sentence AT THE MOMENT the migration
+   *  is generated — and no longer than that. `drizzle-kit generate` bakes the
+   *  literal into SQL, so editing CHURCH_DEFAULTS afterwards changes what a NEW
+   *  church is seeded with and cannot reach a row already backfilled. That
+   *  happened within the hour: the wording was improved right after 0005 was
+   *  generated, and the two diverged.
+   *
+   *  So this default is a one-time floor for rows that predate the column, not a
+   *  live mirror of CHURCH_DEFAULTS. If the wording changes again and existing
+   *  churches should follow, that is a data migration, written deliberately —
+   *  and only for rows a church has not edited, since this column is theirs.
+   *  It stays editable either way: Configurações writes it. */
   courtesyText: text('courtesy_text').notNull().default(CHURCH_DEFAULTS.courtesyText),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
