@@ -1244,7 +1244,15 @@ describe('pageMessages', () => {
       { createdAt: first[1].createdAt, id: first[1].id },
       2,
     );
-    expect(second.map((m) => m.body)).toEqual(['terceira', 'empate A']);
+    // 'terceira' has a createdAt strictly between 'segunda' and the tied pair, so
+    // it is always next regardless of id. Which of 'empate A' / 'empate B' follows
+    // it depends on their id — gen_random_uuid(), NOT insertion order — so
+    // asserting a specific label pins the test to a coin flip rather than to the
+    // paging contract. Measured flaky 4/5 before this was corrected.
+    expect(second[0].body).toBe('terceira');
+    expect(second[1].body).toMatch(/^empate /);
+    const firstIds = first.map((m) => m.id);
+    expect(second.map((m) => m.id)).not.toEqual(expect.arrayContaining(firstIds));
   });
 
   it('splits rows that share a created_at to the millisecond', async () => {
@@ -1260,7 +1268,11 @@ describe('pageMessages', () => {
       { createdAt: tied[0].createdAt, id: tied[0].id },
       100,
     );
-    expect(afterFirstTie.map((m) => m.body)).toEqual(['empate B']);
+    // Exactly the OTHER tied row: not zero (a `>` on created_at alone would skip
+    // it), not both again (a `>=` alone would re-export tied[0]). Which literal
+    // label that is depends on the pair's random ids, so build the expectation from
+    // the query's own first tied row.
+    expect(afterFirstTie.map((m) => m.body)).toEqual([tied[1].body]);
   });
 
   it('returns the rows the export builder needs and nothing extra', async () => {
@@ -1316,7 +1328,7 @@ Expected: FAIL — `Failed to resolve import "@/lib/repo/member-data"`.
 - [ ] **Step 3: Write `src/lib/repo/member-data.ts`**
 
 ```ts
-import { and, asc, count, eq, gt, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, or, type AnyColumn } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { contact, message, prayerRequest } from '@/db/schema';
 import type { ExportMessageRow, ExportPrayerRow } from '@/lib/member-export';
@@ -1399,9 +1411,12 @@ export interface Cursor {
  *
  *  Covered by message_contact_keyset_idx (church_id, contact_id, created_at, id) —
  *  exactly these four columns, in this order. */
+// Typed STRUCTURALLY, not as `typeof message.createdAt`. Pinning to message's own
+// columns makes this helper reject prayerRequest's, which is a real tsc error — the
+// helper serves both tables.
 function keysetAfter(
-  createdAtCol: typeof message.createdAt,
-  idCol: typeof message.id,
+  createdAtCol: AnyColumn<{ data: Date }>,
+  idCol: AnyColumn<{ data: string }>,
   after: Cursor | null,
 ) {
   if (!after) return undefined;
@@ -1513,7 +1528,7 @@ import {
 } from '@/lib/repo/member-data';
 ```
 
-And append this describe block at the end of the file:
+**⚠ Place this block BEFORE the existing test that inserts a deliberately mis-paired `prayer_request` row** (`church_id = A`, `contact_id = B`, used for an unrelated purpose). That row legitimately matches the new predicates and produces a false failure if the new block runs after it. Reorder rather than weakening any assertion:
 
 ```ts
 describe('member-data repo tenant isolation', () => {

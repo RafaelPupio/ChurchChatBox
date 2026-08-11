@@ -37,7 +37,18 @@ describe('hashPhone', () => {
     expect(hashPhone('5511999998888')).not.toBe(a);
   });
 
-  it('returns null when the secret is unset — it never throws', () => {
+  it('never throws on a non-string input, it returns null', () => {
+    // The previous name promised "it never throws" while only exercising the
+    // missing-secret path — the same overclaiming shape a sibling review caught in
+    // this subsystem's Task 1. These are the inputs that actually threw.
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(hashPhone(null as unknown as string)).toBeNull();
+    expect(hashPhone(undefined as unknown as string)).toBeNull();
+    expect(hashPhone(5511999998888 as unknown as string)).toBeNull();
+    expect(hashPhone({} as unknown as string)).toBeNull();
+  });
+
+  it('returns null when the secret is unset', () => {
     // Fails TOWARD the member's right, mirroring effectiveStatus's fail-toward-
     // service. A missing operator env var must never be the reason a statutory
     // erasure does not happen; the erasure proceeds and stores a null hash.

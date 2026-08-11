@@ -14,6 +14,14 @@ import { createHmac } from 'node:crypto';
  *  under LGPD. It is retained under Art. 16 I as the accountability record Art. 6 X
  *  requires — which is also why it never crosses to the vendor's /owner view. */
 export function hashPhone(phone: string): string | null {
+  // Type-guarded before anything else. The contract below says this function never
+  // throws, and an earlier version honoured that only for the missing-secret path:
+  // hashPhone(null) raised a TypeError on .replace(). A function whose entire
+  // justification is "never be the reason a statutory erasure fails" must not have
+  // an input shape that makes it exactly that. Null is the same answer a missing
+  // secret gives, and callers already handle it by storing a null hash.
+  if (typeof phone !== 'string') return null;
+
   const secret = process.env.ERASURE_HASH_SECRET;
   // Deliberately not a throw. See the test: a missing operator env var must never
   // block a statutory erasure. The caller stores null and the verify box says the
