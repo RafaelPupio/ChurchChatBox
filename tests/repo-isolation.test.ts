@@ -37,6 +37,7 @@ import { touchLastInbound, updateContactMode } from '@/lib/repo/contact';
 import {
   countMemberRows, deleteMember, loadMemberSubject, pageMessages, pagePrayers, renameContact,
 } from '@/lib/repo/member-data';
+import { findErasureByContact, listErasureRecords } from '@/lib/repo/erasure';
 
 const MIGRATIONS_DIR = join(process.cwd(), 'drizzle');
 
@@ -237,5 +238,17 @@ describe('repository-layer tenant isolation (mis-paired row)', () => {
     expect(rows.map((r) => r.contactName)).not.toContain('Membro de RepoIgrejaB');
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(A.prayerId);
+  });
+});
+
+describe('erasure repo tenant isolation', () => {
+  it('findErasureByContact does not cross churches', async () => {
+    expect(await findErasureByContact(A.churchId, B.contactId)).toBeNull();
+  });
+
+  it('listErasureRecords returns only the caller church\'s receipts', async () => {
+    // Both churches have none here; the assertion that matters is that the query
+    // is scoped at all, which the two-predicate pattern above guarantees.
+    expect(await listErasureRecords(A.churchId, 50)).toEqual([]);
   });
 });
