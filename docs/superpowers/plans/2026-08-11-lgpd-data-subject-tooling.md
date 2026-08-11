@@ -354,8 +354,17 @@ describe('erasure_record schema', () => {
   });
 
   it('REJECTS a second subject_request receipt for the same contact', async () => {
-    // This is the double-click guard, at the schema level. If drizzle-kit dropped
-    // the partial predicate this insert succeeds and the test fails here.
+    // Proves the double-click guard's BEHAVIOUR: one receipt per contact, enforced
+    // by the database rather than by an application pre-check.
+    //
+    // ⚠ It does NOT discriminate a partial index from a total one, and an earlier
+    // draft of this plan claimed it did. Two reasons, both verified by stripping
+    // the WHERE clause and re-running: subject_contact_id is always NON-NULL on
+    // subject_request rows, so a total unique index rejects the duplicate
+    // identically; and it is always NULL on retention rows, where Postgres treats
+    // every NULL as distinct, so a total index permits unlimited retention rows for
+    // a reason unrelated to the predicate. The predicate is pinned by the two tests
+    // at the end of this file instead.
     await expect(
       client.query(
         `insert into erasure_record (church_id,reason,status,subject_contact_id)
@@ -433,13 +442,58 @@ describe('the indexes the purge and export predicates need', () => {
 });
 ```
 
+- [ ] **Step 7b: Add the two tests that actually pin the partial predicate**
+
+The `REJECTS a second subject_request receipt` test above proves the guard's behaviour but **cannot** detect a dropped `WHERE` clause. Append these to `tests/erasure-schema.test.ts`:
+
+```ts
+  it('the subject_uq index carries the partial WHERE predicate, not just the columns', async () => {
+    // The schema-shape half. Mirrors the coalesce assertion below, so both
+    // hand-check shapes from Step 6 are pinned the same way.
+    const idx = await client.query<{ indexdef: string }>(
+      `select indexdef from pg_indexes where indexname = 'erasure_record_subject_uq'`,
+    );
+    const def = idx.rows[0].indexdef.toLowerCase();
+    expect(def).toContain('where');
+    expect(def).toContain('subject_request');
+  });
+
+  it('two retention rows may share a subject_contact_id — only a PARTIAL index allows it', async () => {
+    // The behavioural half, and the one that fails loudest. These rows sit OUTSIDE
+    // a partial index keyed on reason = 'subject_request', so both insert. Under a
+    // total unique index on (church_id, subject_contact_id) the second is rejected.
+    // The application never writes this shape; the test exists so that a future
+    // writer who does is not silently blocked by an index that lost its predicate.
+    const ct = await client.query<{ id: string }>(
+      `insert into contact (church_id,phone) values ($1,'5511911111111') returning id`,
+      [churchId],
+    );
+    for (let i = 0; i < 2; i += 1) {
+      await client.query(
+        `insert into erasure_record (church_id,reason,status,subject_contact_id)
+         values ($1,'retention','done',$2)`,
+        [churchId, ct.rows[0].id],
+      );
+    }
+    const rows = await client.query<{ n: string }>(
+      `select count(*) as n from erasure_record where subject_contact_id = $1 and reason = 'retention'`,
+      [ct.rows[0].id],
+    );
+    expect(Number(rows.rows[0].n)).toBe(2);
+  });
+```
+
+**Verify these discriminate, rather than assuming it.** Strip the `WHERE … = 'subject_request'` from the generated migration, run `npx vitest run tests/erasure-schema.test.ts`, and confirm **these two fail while the other six pass**. Then `git checkout drizzle/` to restore the file byte-identically and re-run. A test you have not seen fail is not a regression test.
+
 - [ ] **Step 8: Run the test and watch it fail if the migration is wrong**
 
 ```bash
 npx vitest run tests/erasure-schema.test.ts
 ```
 
-Expected: PASS if steps 1–6 were done correctly. If `REJECTS a second subject_request receipt` fails, the partial predicate was dropped — go back to step 6.1. If `the idle one is over the coalesce EXPRESSION` fails, go back to step 6.2.
+Expected: PASS. If `the subject_uq index carries the partial WHERE predicate` or `two retention rows may share a subject_contact_id` fails, the partial predicate was dropped — go back to step 6.1. If `the idle one is over the coalesce EXPRESSION` fails, go back to step 6.2.
+
+⚠ **`REJECTS a second subject_request receipt` is NOT the predicate's regression test**, despite reading like one. It passes with the `WHERE` clause stripped — see the comment on that test. The two tests added in Step 7b are what actually fail when the predicate goes.
 
 - [ ] **Step 9: Run the full suite — the migration touches every PGlite test**
 
