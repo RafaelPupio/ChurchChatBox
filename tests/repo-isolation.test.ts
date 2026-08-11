@@ -34,6 +34,9 @@ import { listMenuItemsForAdmin, updateMenuItem } from '@/lib/repo/menu-admin';
 import { listPrayerRequests, updatePrayerStatus } from '@/lib/repo/prayer-admin';
 import { deleteAdmin, listAdmins } from '@/lib/repo/admin';
 import { touchLastInbound, updateContactMode } from '@/lib/repo/contact';
+import {
+  countMemberRows, deleteMember, loadMemberSubject, pageMessages, pagePrayers, renameContact,
+} from '@/lib/repo/member-data';
 
 const MIGRATIONS_DIR = join(process.cwd(), 'drizzle');
 
@@ -173,11 +176,56 @@ describe('repository-layer tenant isolation', () => {
       new Date(before.rows[0].last_inbound_at).getTime(),
     );
   });
+});
 
+describe('member-data repo tenant isolation', () => {
+  // Runs BEFORE the mis-paired-row test below, deliberately. That test inserts a
+  // prayer_request with church_id = A.churchId, contact_id = B.contactId on
+  // purpose — the two disagree by construction, to prove listPrayerRequests's
+  // JOIN is church-scoped too. If this block ran after that insert existed,
+  // pagePrayers(A.churchId, B.contactId) would legitimately find that row: it
+  // genuinely matches both of member-data's predicates on the prayer_request
+  // table's own columns, so returning it would not be an isolation bug, only
+  // stale test ordering. Attacking here, before that row exists, keeps this
+  // suite honest about what it is actually proving.
+  it('loadMemberSubject with another church\'s contactId returns null', async () => {
+    expect(await loadMemberSubject(A.churchId, B.contactId)).toBeNull();
+  });
+
+  it('countMemberRows across churches counts nothing', async () => {
+    expect(await countMemberRows(A.churchId, B.contactId))
+      .toEqual({ messages: 0, prayers: 0, prayersNovo: 0 });
+  });
+
+  it('pageMessages and pagePrayers across churches return nothing', async () => {
+    expect(await pageMessages(A.churchId, B.contactId, null, 100)).toEqual([]);
+    expect(await pagePrayers(A.churchId, B.contactId, null, 100)).toEqual([]);
+  });
+
+  it('renameContact cannot rename another church\'s member', async () => {
+    expect(await renameContact(A.churchId, B.contactId, 'Invadido')).toBe(0);
+    const survivor = await loadMemberSubject(B.churchId, B.contactId);
+    expect(survivor!.name).not.toBe('Invadido');
+  });
+
+  it('deleteMember cannot delete another church\'s member', async () => {
+    // The most destructive function in the subsystem, attacked last so the rows it
+    // would have destroyed are still present for the assertions above.
+    expect(await deleteMember(A.churchId, B.contactId)).toBe(0);
+    expect(await loadMemberSubject(B.churchId, B.contactId)).not.toBeNull();
+  });
+});
+
+describe('repository-layer tenant isolation (mis-paired row)', () => {
   it('listPrayerRequests hides a mis-paired row instead of exposing the other church\'s member', async () => {
     // A prayer_request whose church_id and contact_id disagree: the shape a bad
     // backfill or bulk import produces. Joining on contact_id alone would render
     // church B's member name and phone number inside church A's prayer list.
+    //
+    // Placed after member-data's isolation block, not before: this insert makes
+    // church_id = A.churchId, contact_id = B.contactId a real row, which would
+    // make pageMessages/pagePrayers(A.churchId, B.contactId) legitimately
+    // non-empty and turn that block's assertions into false failures.
     await client.query(
       `insert into prayer_request (church_id,contact_id,text) values ($1,$2,'linha mal pareada')`,
       [A.churchId, B.contactId],
