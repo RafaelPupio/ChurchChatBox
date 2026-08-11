@@ -5758,6 +5758,84 @@ describe('the display rule: no filter', () => {
 });
 ```
 
+- [ ] **Step 4c: Add `phoneHashCandidates` to `src/lib/erasure-hash.ts`**
+
+Task 2 deliberately left `hashPhone` as a single, exact fingerprint and did not widen it — correct, because the erasure path must hash exactly one thing. The ambiguity lives at the *reading* end, where a human types the number, so the fan-out belongs here and not in `hashPhone`.
+
+```ts
+/** Every digit-form of a typed number worth testing against a stored hash.
+ *
+ *  Stored numbers come from Meta's `from` field: E.164 without the plus, country
+ *  code always present (5511999998888). Numbers in the verify box come from a
+ *  secretary's keyboard, and "(11) 99999-8888" is the normal way to write one in
+ *  Brazil. hashPhone strips punctuation but cannot invent a country code, so the
+ *  two hash differently and a single-hash lookup reports "not erased" for someone
+ *  who was — a false negative that reads exactly like a clean answer.
+ *
+ *  So: try what was typed, and if it looks like a Brazilian number missing its
+ *  country code, try it with 55 as well. Ordered most-likely-first; the caller
+ *  stops at the first hit.
+ *
+ *  Deliberately NOT a general E.164 parser. This product serves Brazilian churches
+ *  and every stored number begins 55; a library that guessed at forty country
+ *  conventions would add failure modes to buy nothing. It also never STRIPS a
+ *  leading 55, because 55 is also a valid area code prefix in other countries and
+ *  guessing wrong would silently widen a lookup keyed on an audit record.
+ *
+ *  Returns [] when the secret is unset — same reason hashPhone returns null. */
+export function phoneHashCandidates(typed: string): string[] {
+  const digits = typed.replace(/\D+/g, '');
+  if (!digits) return [];
+
+  const forms = [digits];
+  // 10 digits = landline + area code, 11 = mobile with the nono dígito. Either
+  // way, no country code — so the same line stored by the webhook carries 55.
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+    forms.push(`55${digits}`);
+  }
+
+  return forms.map(hashPhone).filter((h): h is string => h !== null);
+}
+```
+
+Add to `tests/erasure-hash.test.ts`:
+
+```ts
+describe('phoneHashCandidates', () => {
+  it('matches a stored webhook number when the secretary types a local one', () => {
+    // The whole point. Stored: 5511999998888 (Meta's `from`).
+    // Typed:  (11) 99999-8888. Without the 55 variant these never meet.
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    const stored = hashPhone('5511999998888');
+    expect(phoneHashCandidates('(11) 99999-8888')).toContain(stored);
+  });
+
+  it('still matches when the secretary types the full number', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('+55 11 99999-8888')).toContain(hashPhone('5511999998888'));
+  });
+
+  it('covers a 10-digit landline too', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('11 3333-4444')).toContain(hashPhone('551133334444'));
+  });
+
+  it('does not invent a 55 for a number that already has one', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('5511999998888')).toEqual([hashPhone('5511999998888')]);
+  });
+
+  it('returns [] with no secret, and [] for a number with no digits', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('sem números')).toEqual([]);
+    vi.stubEnv('ERASURE_HASH_SECRET', '');
+    expect(phoneHashCandidates('5511999998888')).toEqual([]);
+  });
+});
+```
+
+**Known residual, not closed here:** the *nono dígito*. Brazilian mobiles gained a 9th digit between 2012 and 2016, so an old `11 9999-8888` and today's `11 99999-8888` are the same line with genuinely different digits — not a punctuation difference this can normalise away. Every number this product stores arrives from WhatsApp in current format, so the case is close to unreachable; it is recorded rather than fixed because the fix is number-plan inference and would guess.
+
 - [ ] **Step 5: Write the verification action**
 
 Create `src/app/admin/(protected)/configuracoes/verify-actions.ts`:
@@ -5766,7 +5844,7 @@ Create `src/app/admin/(protected)/configuracoes/verify-actions.ts`:
 'use server';
 
 import { requireReadableSession } from '@/lib/auth/writable';
-import { hashPhone } from '@/lib/erasure-hash';
+import { phoneHashCandidates } from '@/lib/erasure-hash';
 import { findErasureByPhoneHash } from '@/lib/repo/erasure';
 
 export type VerifyResult = { message: string };
@@ -5780,10 +5858,23 @@ export type VerifyResult = { message: string };
 export async function verifyErasure(_prev: VerifyResult, formData: FormData): Promise<VerifyResult> {
   const { churchId } = await requireReadableSession();
 
-  const hash = hashPhone(String(formData.get('phone') ?? ''));
-  if (!hash) return { message: 'A verificação não está disponível nesta instalação.' };
+  // NOT a single hash. The stored number came from Meta's `from` field, which is
+  // always E.164 without the plus — 5511999998888, country code included. The
+  // number in this box was TYPED by a secretary, who will very reasonably write
+  // (11) 99999-8888. Digit-stripping alone makes those two different strings, so a
+  // single hash would answer "nenhuma exclusão registrada" for a member whose data
+  // WAS erased — the one question this box exists to answer correctly, wrong, in
+  // the direction that looks like a clean bill of health.
+  const candidates = phoneHashCandidates(String(formData.get('phone') ?? ''));
+  if (candidates.length === 0) {
+    return { message: 'A verificação não está disponível nesta instalação.' };
+  }
 
-  const found = await findErasureByPhoneHash(churchId, hash);
+  let found = null;
+  for (const hash of candidates) {
+    found = await findErasureByPhoneHash(churchId, hash);
+    if (found) break;
+  }
   if (!found) return { message: 'Nenhuma exclusão registrada para este número.' };
 
   return {
