@@ -22,9 +22,36 @@ Every task's requirements implicitly include this section.
 - **C4 — no church may read or write another church's data.** Every church-scoped query carries both predicates (`church_id` AND the row key). The single exception is `repo/retention.ts` and `listErasureSignals`, which are cross-church by construction and live behind the privilege boundary.
 - **C5 — `src/lib/repo/platform.ts` is OWNER-ONLY.** Nothing under `src/app/admin/`, `src/app/api/` or `src/lib/` may import it. After Task 8 this is expressed as an empty importer set in `RESTRICTED`, not as a scanner exemption.
 - **C6 — no member data leaves the request.** Nothing is written to Vercel Blob, to disk, to a log line, or to any store that outlives the request. The export exists only as stream chunks and then only in the secretary's browser.
-- **C7 — the retention purge must ship before the Privacidade text v2.** Task 14 rewrites the text to promise *"as conversas e os pedidos de oração são apagados automaticamente após 12 meses"*. That sentence is only true once Task 8's cron runs. Shipping it earlier reintroduces the exact defect the current softened wording exists to avoid: the one menu item whose job is telling members the truth about their data becoming the one place the product lies. **Task 14 must not be started before Task 8 is complete.**
+- **C7 — NOTHING may promise the 12-month purge until the purge exists.** The sentence *"as conversas e os pedidos de oração são apagados automaticamente após 12 meses"* is only true once Task 8's cron runs. Shipping it earlier reintroduces the exact defect the current softened wording exists to avoid: the one artifact whose job is telling members the truth about their data becoming the place the product lies. See the seven-line comment at `src/lib/church-defaults.ts:51-57`, which is the record of this happening once already.
+
+  **The sentence appears in FOUR places, not one.** An earlier draft of this plan gated only Task 14 and left the other three open — which would have shipped the identical false promise inside the file the member actually receives:
+
+  | Where | Task | Gated? |
+  |---|---|---|
+  | `RETENTION_NOTE` in `member-export.ts` | 3 | **yes** — see below |
+  | The member's export file (`retencao` key) | 10 | **yes** |
+  | `RetentionPanel` standing text | 12 | **yes** |
+  | `PRIVACY_ITEM.bodyText` | 14 | **yes** |
+
+  **The mechanism, rather than four separate gates:** Task 3 defines `RETENTION_NOTE` with the *honest present-tense* wording and Task 14 — which runs after Task 8 — flips it to the promise, in the same commit that flips the Privacidade text. So no task order can ship the promise early, and only one commit ever makes the claim true. **Tasks 10 and 12 consume the constant and are therefore correct by construction; only Task 14 is order-gated.**
 - **C8 — `neon-http` has no transactions.** `db.transaction` does not exist. Multi-statement atomicity is unavailable; every design here is either a single statement (which Postgres runs in an implicit transaction) or is explicitly idempotent and resumable.
 - **C9 — the spec has drifted from the code in one place, and the code wins.** The spec (§"Schema changes") says `src/db/schema.ts:1-3` imports `uniqueIndex` but not `index`, and schedules an edit adding it. **That is now false**: [`schema.ts:2`](src/db/schema.ts) already imports `index` and `unique`, both added with the later `webhook_failure` table. Only `import { sql } from 'drizzle-orm'` is genuinely new. Task 1 states the real edit. No other spec claim was found stale, but implementers should read the file before trusting a line citation.
+- **C12 — THIS PROJECT HAS NO TAILWIND.** No `tailwindcss`, `postcss` or `autoprefixer` in `package.json`; no `tailwind.config.*`; zero utility classes anywhere in `src`. Styling is `src/app/globals.css`, a hand-written stylesheet on CSS custom properties with a **closed vocabulary of semantic class names**. Every new component uses it or ships unstyled. The ones this plan needs:
+
+  | Class | Use |
+  |---|---|
+  | `.container` | page wrapper (max-width 880, padding) |
+  | `.card` | a bordered section |
+  | `.alarm` / `.alarm .alarm-warn` | the red / amber boxes; **they style their own `h2` and `p`** |
+  | `button.primary` / `button.danger` | the two button variants; `button:disabled` already dims |
+  | `.btnlink` / `.btnlink.primary` | the same, for `<a>`/`<Link>` |
+  | `.error` / `.warn` / `.hint` | red / amber / muted text |
+  | `.row` + `.grow` | a wrapping row; `.grow` carries `min-width:0` + `overflow-wrap` |
+  | `.item-actions` | a wrapping button row |
+  | `.chip`, `.pill`, `.sr-only` | status badges, screen-reader-only text |
+
+  **`label`, `input`, `textarea`, `select` and `button` are styled globally** — full width, 16px font (below that iOS Safari zooms on focus and never zooms back), `min-height: var(--tap)` = 44px. Do not add per-element sizing; `tests/tap-targets.test.ts` and `tests/mobile-css.test.ts` assert that floor **against the stylesheet**, so a utility class would be invisible to them as well as inert.
+
 - **C10 — the test suite needs `--maxWorkers=4`.** `npx vitest run` unbounded spawns a PGlite instance per worker and times out on a loaded machine. Every "run the full suite" step in this plan uses `npx vitest run --maxWorkers=4`.
 - **C11 — never soften a promise to hide a defect.** Where a count can lag, the copy says the count is unreliable; where an export is truncated, the file says so. Truncation, interruption and partial results are always visible to the reader, never silently absorbed.
 
@@ -84,13 +111,20 @@ Every task's requirements implicitly include this section.
            │                              │                   │
            ├── 4 repo/member-data ────────┘                   └── 12 Configurações panel
            │
-           ├── 6 guards ── 7 repo/retention ── 8 cron+boundary ── 11 prayer warning+export
-           │                                        │
-           │                                        └── C7 gate ── 14 privacy text v2
+           ├── 6 guards ── 7 repo/retention ── 8 cron+boundary ─┬─ C7 gate ── 14 privacy text v2
+           │                                                     │
+           │            9 ─┬─→ 11 prayer warning+export ── 12 Configurações panel
+           │           10 ─┘
            └── 15 redaction (independent)
 ```
 
-Tasks 1–8 must run in order. Tasks 9–13 depend on 1–6 and may be reordered among themselves. **Task 14 is gated on Task 8 by C7.** Task 15 is independent and may run at any point.
+Tasks 1–8 must run in order. **Tasks 9–13 are NOT freely reorderable** — three hard edges inside that range:
+
+- **9 → 11 and 10 → 11.** Task 11's data-rights allowlist test asserts the caller set is *exactly three* paths, two of which Tasks 9 and 10 create. Run 11 first and the equality fails on files that do not exist yet.
+- **11 → 12.** Task 12 imports `EXPIRING_WINDOW_MS`, `countExpiringPrayers` and `ExpiringWarning`, all created in Task 11.
+- **13** depends only on 1–6 and may run any time after Task 5.
+
+**Task 14 is gated on Task 8 by C7.** Task 15 is independent and may run at any point.
 
 ---
 
@@ -797,6 +831,9 @@ describe('exportFooter', () => {
     const footer = exportFooter({ truncatedAt: null, continuation: null });
     expect(footer.compartilhamento).toEqual(SHARING_DISCLOSURE);
     expect(footer.retencao).toBe(RETENTION_NOTE);
+    // C7: until the purge exists this must NOT promise 12 months. Task 14 flips
+    // the constant and updates this assertion in the same commit.
+    expect(RETENTION_NOTE).not.toContain('12 meses');
     expect(footer.observacoes).toEqual(EXPORT_NOTES);
     expect('aviso' in footer).toBe(false);
     expect('continuacao' in footer).toBe(false);
@@ -867,8 +904,16 @@ export const SHARING_DISCLOSURE: string[] = [
   'Não vendemos, alugamos nem cedemos estes dados a terceiros.',
 ];
 
+/** ⚠ C7. This sentence describes what the system does TODAY. Task 14 — which runs
+ *  only after the purge exists (Task 8) — replaces it with the 12-month promise,
+ *  in the SAME commit that flips PRIVACY_ITEM.bodyText.
+ *
+ *  Written this way so that no task order can ship the promise early: the member's
+ *  export file reads this constant, so a promise here is a promise in the artifact
+ *  the member actually receives. That is the defect the repo already fixed once —
+ *  see src/lib/church-defaults.ts:51-57. */
 export const RETENTION_NOTE =
-  'As conversas e os pedidos de oração são apagados automaticamente após 12 meses.';
+  'A igreja guarda estes dados enquanto precisar deles para te atender. Você pode pedir a exclusão a qualquer momento.';
 
 export const EXPORT_NOTES: string[] = [
   'Áudios, fotos e outros arquivos enviados não são guardados por nós — apenas o registro de que uma mídia chegou.',
@@ -1390,7 +1435,7 @@ export async function renameContact(
 }
 ```
 
-Note: the unused `sql` import above must be removed if the linter objects — it is listed only because `keysetAfter`'s signature may need widening. Prefer removing it.
+Note: `sql` is unused here — remove it from the import line. Nothing will tell you: this repo has no ESLint config and no `lint` script, and `tsc` does not flag unused imports.
 
 - [ ] **Step 4: Run it and watch it pass**
 
@@ -1926,7 +1971,7 @@ const PWD_AT = new Date('2026-01-01T00:00:00.000Z');
 const SESSION = {
   adminUserId: 'admin-1', churchId: 'church-1', name: 'Secretária', pwdAt: PWD_AT.getTime(),
 };
-const ADMIN = { id: 'admin-1', churchId: 'church-1', passwordChangedAt: PWD_AT };
+const ADMIN = { id: 'admin-1', churchId: 'church-1', email: 'secretaria@igreja.org', passwordChangedAt: PWD_AT };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -1938,9 +1983,14 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('requireDataRightsSession', () => {
-  it('returns the identity for a current secretary', async () => {
+  it('returns the identity INCLUDING the email, sourced from the admin row', async () => {
+    // erasure_record.performed_by_email must be a durable identifier. The session
+    // carries no email, so it comes from the row verifyIdentity already fetched.
     const result = await requireDataRightsSession();
-    expect(result).toEqual({ adminUserId: 'admin-1', churchId: 'church-1', name: 'Secretária' });
+    expect(result).toEqual({
+      adminUserId: 'admin-1', churchId: 'church-1', name: 'Secretária',
+      email: 'secretaria@igreja.org',
+    });
   });
 
   it('NEVER calls getChurchById — suspension is deliberately not checked', async () => {
@@ -1985,6 +2035,7 @@ describe('checkDataRightsSession', () => {
   it('returns the identity for a current secretary', async () => {
     expect(await checkDataRightsSession()).toEqual({
       adminUserId: 'admin-1', churchId: 'church-1', name: 'Secretária',
+      email: 'secretaria@igreja.org',
     });
   });
 
@@ -2010,7 +2061,27 @@ Expected: FAIL — `checkDataRightsSession is not a function`.
 
 - [ ] **Step 3: Extract `verifyIdentity` and add the two guards**
 
-In `src/lib/auth/writable.ts`, insert this **above** the existing `verifyWritable`:
+In `src/lib/auth/writable.ts`, first add the identity type beside the existing `AdminIdentity` (which is left untouched, so no existing caller changes):
+
+```ts
+/** AdminIdentity plus the acting staff EMAIL.
+ *
+ *  Only the data-rights guards return this. erasure_record.performed_by_email is a
+ *  durable snapshot of who performed an erasure — it must survive that person
+ *  leaving the church, and it is read back in Configurações as "· por {email}".
+ *  A display name is neither unique nor an identifier, and SessionData carries no
+ *  email at all, so it comes from the admin row verifyIdentity already fetches:
+ *  one extra field, zero extra queries.
+ *
+ *  Deliberately NOT added to AdminIdentity: every read page and every write action
+ *  would then carry a staff email it has no use for, and identityOf's job is to
+ *  hand application code the least it needs. */
+export interface DataRightsIdentity extends AdminIdentity {
+  email: string;
+}
+```
+
+Then insert this **above** the existing `verifyWritable`:
 
 ```ts
 /** Checks 1 and 2 of the three below, and NOT check 3.
@@ -2022,11 +2093,15 @@ In `src/lib/auth/writable.ts`, insert this **above** the existing `verifyWritabl
  *  page load. */
 async function verifyIdentity(
   session: SessionClaims,
-): Promise<AdminIdentity | { blocked: 'revoked' }> {
+): Promise<DataRightsIdentity | { blocked: 'revoked' }> {
   const admin = await findAdminById(session.adminUserId);
   if (!admin || admin.churchId !== session.churchId) return { blocked: 'revoked' };
   if (!sessionMatchesPassword(session, admin.passwordChangedAt)) return { blocked: 'revoked' };
-  return identityOf(session);
+  // The EMAIL comes from the admin row this function already fetched — never from
+  // the session, which does not carry one (see SessionData). erasure_record needs a
+  // durable identifier for "who did this", and a WhatsApp-era display name is
+  // neither unique nor an identifier. One extra field, zero extra queries.
+  return { ...identityOf(session), email: admin.email };
 }
 ```
 
@@ -2038,6 +2113,9 @@ async function verifyWritable(
 ): Promise<AdminIdentity | { blocked: 'suspended' | 'revoked' }> {
   const identity = await verifyIdentity(session);
   if ('blocked' in identity) return identity;
+  // Narrowed back to AdminIdentity: the writable path has no use for the email,
+  // and widening every write action's identity would be scope creep.
+  const { email: _email, ...adminIdentity } = identity;
 
   // getChurchById lives ONLY on this path. Its existence check is near-redundant —
   // admin_user.church_id is ON DELETE CASCADE, so a deleted church takes its admin
@@ -2050,7 +2128,7 @@ async function verifyWritable(
     return { blocked: 'suspended' };
   }
 
-  return identity;
+  return adminIdentity;
 }
 ```
 
@@ -2092,7 +2170,7 @@ Now append the two new guards after `requireReadableSession`:
  *  EXACTLY THREE FILES may call these. tests/privilege-boundary.test.ts asserts
  *  that set, so a fourth caller fails the suite rather than passing review. */
 export async function requireDataRightsSession(): Promise<
-  AdminIdentity | { blocked: 'revoked' }
+  DataRightsIdentity | { blocked: 'revoked' }
 > {
   const session = await requireSession();
   return verifyIdentity(session);
@@ -2103,7 +2181,7 @@ export async function requireDataRightsSession(): Promise<
  *  NEXT_REDIRECT escape would serialise a framework control-flow signal into its
  *  own JSON error body. */
 export async function checkDataRightsSession(): Promise<
-  AdminIdentity | { blocked: 'unauthenticated' | 'revoked' }
+  DataRightsIdentity | { blocked: 'unauthenticated' | 'revoked' }
 > {
   const session = await getSession();
   if (!isAuthenticated(session) || !session.churchId) return { blocked: 'unauthenticated' };
@@ -2421,9 +2499,18 @@ describe('fairness across churches', () => {
     // platform gets purged tomorrow instead of never.
     const a = await makeChurch('Grande');
     const b = await makeChurch('Pequena');
-    expect(await listChurchIdsForPurge(10)).toEqual([a, b]);
+
+    // NOT toEqual([a, b]) on two never-purged churches. Both cursors are NULL, so
+    // the order falls entirely to the `asc(church.id)` tiebreak — and church.id is
+    // gen_random_uuid(). Measured on PGlite over 200 trials, insertion order held
+    // 54% of the time: an assertion on it is a coin flip that fails half of all
+    // runs. Compare the SET while nothing distinguishes them, then assert the
+    // ORDER once the cursor actually does.
+    expect((await listChurchIdsForPurge(10)).slice().sort()).toEqual([a, b].slice().sort());
 
     await markChurchPurged(a, NOW);
+    // b is still NULL (never purged) and NULLS FIRST puts it ahead of a's real
+    // timestamp. This ordering IS deterministic, because the cursors now differ.
     expect(await listChurchIdsForPurge(10)).toEqual([b, a]);
   });
 });
@@ -2771,7 +2858,7 @@ export async function listStalePendingErasures(olderThan: Date): Promise<StalePe
 }
 ```
 
-Note: remove any of `isNull` / `asc` from the import line if unused after writing — the linter will say.
+Note: `isNull` is unused — drop it from the import. `asc` **is** used (the `listChurchIdsForPurge` tiebreak), so keep it. This repo has no ESLint config and no `lint` script, and `tsc` does not flag unused imports, so nothing will tell you: check by reading.
 
 - [ ] **Step 4: Run it and watch it pass**
 
@@ -2779,7 +2866,88 @@ Note: remove any of `isNull` / `asc` from the import line if unused after writin
 npx vitest run tests/retention-purge.test.ts
 ```
 
-Expected: PASS, 16 tests. The one to watch is `reports EVERY deleted row` — it must read exactly `1240`. If it reads `340`, the ordering was inverted and a cascade fired.
+Expected: PASS, 17 tests. The one to watch is `reports EVERY deleted row` — it must read exactly `1240`. If it reads `340`, the ordering was inverted and a cascade fired.
+
+- [ ] **Step 4b: Add the two receipt-failure tests the spec requires**
+
+Both are named in the spec's Testing section and neither is covered by the suite above. Append to `tests/retention-purge.test.ts`:
+
+```ts
+describe('receipt failures, in both directions', () => {
+  it('UNDER-REPORTS but never over-reports when the count update is lost', async () => {
+    // The killed-between-DELETE-and-UPDATE case, driven for real rather than by
+    // ageing a row by hand. The rows are gone and the receipt still reads 0 — which
+    // is exactly why Configurações must LIST an all-zero done row instead of
+    // hiding it. The invariant is one-directional: a receipt never overstates.
+    const churchId = await makeChurch('Igreja Perdida');
+    const ct = await makeContact(churchId, '5511000000000', RECENT);
+    await addMessages(churchId, ct, 5, OLD);
+
+    const recordId = await openRetentionRecord(churchId);
+    const deleted = await purgeMessageBatch(churchId, CUTOFF, 500);
+    expect(deleted).toBe(5);
+    // The +n UPDATE never happens — the function died here.
+
+    expect(await countRows('message', churchId)).toBe(0);
+    const row = await client.query<{ messages_deleted: number }>(
+      `select messages_deleted from erasure_record where id = $1`, [recordId],
+    );
+    expect(Number(row.rows[0].messages_deleted)).toBe(0);
+
+    await client.query(`update erasure_record set created_at = $2 where id = $1`,
+      [recordId, '2026-08-10T00:00:00Z']);
+    expect(await sweepStaleRetentionRecords(new Date('2026-08-11T00:00:00Z'))).toBe(1);
+
+    const swept = await client.query<{ status: string; messages_deleted: number }>(
+      `select status, messages_deleted from erasure_record where id = $1`, [recordId],
+    );
+    expect(swept.rows[0].status).toBe('done');
+    // 0/0/0 and DONE — the exact row describeErasureRecord must render as
+    // "a execução foi interrompida antes de registrar a contagem".
+    expect(Number(swept.rows[0].messages_deleted)).toBe(0);
+  });
+
+  it('deletes NOTHING when the receipt cannot be opened', async () => {
+    // Evidence before destruction. The reverse ordering would destroy a year of
+    // message bodies with zero Art. 6 X evidence and nothing to detect it.
+    const churchId = await makeChurch('Igreja Sem Recibo');
+    const ct = await makeContact(churchId, '5511000000000', RECENT);
+    await addMessages(churchId, ct, 5, OLD);
+
+    // Simulate the insert failing by dropping the table the receipt goes in.
+    await client.exec(`alter table erasure_record rename to erasure_record_hidden`);
+    await expect(openRetentionRecord(churchId)).rejects.toThrow();
+    await client.exec(`alter table erasure_record_hidden rename to erasure_record`);
+
+    // The caller aborts this church's slice; nothing was purged.
+    expect(await countRows('message', churchId)).toBe(5);
+  });
+});
+```
+
+- [ ] **Step 4c: Prove the warning is not a consent gate**
+
+The spec requires this **tested rather than asserted**. Append:
+
+```ts
+describe('the prayer warning is a courtesy, not a gate', () => {
+  it('purges expiring prayers with the export never having been called', async () => {
+    // Nothing about the purge is conditional on the export: the cron does not check
+    // whether a warning was shown or a file downloaded, and erasure_record has no
+    // field it could check with. This test is the proof of that, and it fails the
+    // day someone adds such a condition.
+    const churchId = await makeChurch('Igreja Que Ignorou');
+    const ct = await makeContact(churchId, '5511000000000', RECENT);
+    await client.query(
+      `insert into prayer_request (church_id,contact_id,text,created_at) values ($1,$2,'antiga',$3)`,
+      [churchId, ct, OLD],
+    );
+
+    expect(await purgePrayerBatch(churchId, CUTOFF, 500)).toBe(1);
+    expect(await countRows('prayer_request', churchId)).toBe(0);
+  });
+});
+```
 
 - [ ] **Step 5: Commit**
 
@@ -3195,7 +3363,94 @@ Replace the first `it(...)` inside `describe('privilege boundary', ...)` with th
 npx vitest run tests/privilege-boundary.test.ts
 ```
 
-Expected: PASS. If `no file imports a restricted module` now reports `src/lib/repo/platform.ts -> …`, then `platform.ts` imports something restricted — it should import only `drizzle-orm`, `@/db/client`, `@/db/schema` and `@/lib/church-status`, none of which is restricted. Investigate rather than re-adding an exemption.
+Expected: PASS. If `no file imports a restricted module` now reports `src/lib/repo/platform.ts -> …`, then `platform.ts` imports something restricted — it imports `drizzle-orm`, `@/db/client`, `@/db/schema`, `@/lib/church-status` and `@/lib/migration-drift` — verified against the real file, and none of them is restricted. Investigate rather than re-adding an exemption.
+
+- [ ] **Step 8b: Add the cross-church fairness test — the cron has no behavioural test otherwise**
+
+Everything above tests the cron's declarations and its auth. Nothing exercises the rotation, which is the part the spec calls out. Create `tests/cron-fairness.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const listChurchIdsForPurge = vi.fn();
+const markChurchPurged = vi.fn();
+const hasPurgeWork = vi.fn();
+const openRetentionRecord = vi.fn();
+
+vi.mock('@/lib/repo/retention', () => ({
+  listChurchIdsForPurge, markChurchPurged, hasPurgeWork, openRetentionRecord,
+  addRetentionCounts: vi.fn(), purgeMessageBatch: vi.fn().mockResolvedValue(0),
+  purgePrayerBatch: vi.fn().mockResolvedValue(0), purgeContactBatch: vi.fn().mockResolvedValue(0),
+  completeErasureRecordSystem: vi.fn(), sweepStaleRetentionRecords: vi.fn().mockResolvedValue(0),
+  listStalePendingErasures: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('@/lib/repo/member-data', () => ({ deleteMember: vi.fn() }));
+
+import { GET } from '@/app/api/cron/purge/route';
+
+const ok = () => new Request('https://x/api/cron/purge', { headers: { authorization: 'Bearer s3cr3t' } });
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv('CRON_SECRET', 's3cr3t');
+  hasPurgeWork.mockResolvedValue(true);
+  openRetentionRecord.mockResolvedValue('rec');
+});
+
+describe('the rotation', () => {
+  it('advances the cursor for EVERY church it visits, finished or not', async () => {
+    // This is what makes the rotation a rotation. A church whose slice is cut short
+    // must still move to the back of the queue, or one large church starves the
+    // platform forever.
+    listChurchIdsForPurge.mockResolvedValue(['a', 'b', 'c']);
+    await GET(ok());
+    expect(markChurchPurged.mock.calls.map((c) => c[0])).toEqual(['a', 'b', 'c']);
+  });
+
+  it('advances the cursor and writes NO record for a church with no work', async () => {
+    // Keeps "a retention row means something was actually deleted" true, while
+    // still writing the row before the deletes.
+    listChurchIdsForPurge.mockResolvedValue(['quiet']);
+    hasPurgeWork.mockResolvedValue(false);
+    await GET(ok());
+    expect(openRetentionRecord).not.toHaveBeenCalled();
+    expect(markChurchPurged).toHaveBeenCalledWith('quiet', expect.any(Date));
+  });
+
+  it('one church throwing does not end the run for the others', async () => {
+    listChurchIdsForPurge.mockResolvedValue(['a', 'boom', 'c']);
+    hasPurgeWork.mockImplementation(async (id: string) => {
+      if (id === 'boom') throw new Error('neon down');
+      return true;
+    });
+    const res = await GET(ok());
+    expect(res.status).toBe(200);
+    // Including the failed one: its slice ended, so its cursor advances too.
+    expect(markChurchPurged.mock.calls.map((c) => c[0])).toEqual(['a', 'boom', 'c']);
+  });
+
+  it('completes stale erasures BEFORE spending the budget on the purge', async () => {
+    // The sweeps are cheap and they heal receipts from a run that died. Doing them
+    // first means an interrupted erasure finishes even on a night the purge runs long.
+    const { listStalePendingErasures } = await import('@/lib/repo/retention');
+    (listStalePendingErasures as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'r1', churchId: 'c1', subjectContactId: 'ct1' },
+    ]);
+    const { deleteMember } = await import('@/lib/repo/member-data');
+    listChurchIdsForPurge.mockResolvedValue([]);
+
+    const res = await GET(ok());
+    expect(deleteMember).toHaveBeenCalledWith('c1', 'ct1');
+    expect((await res.json()).erasuresCompleted).toBe(1);
+  });
+});
+```
+
+```bash
+npx vitest run tests/cron-fairness.test.ts
+```
+
+Expected: PASS, 4 tests.
 
 - [ ] **Step 9: Run the full suite**
 
@@ -3208,7 +3463,7 @@ Expected: all green.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/app/api/cron/purge/route.ts vercel.json tests/cron-purge.test.ts tests/privilege-boundary.test.ts
+git add src/app/api/cron/purge/route.ts vercel.json tests/cron-fairness.test.ts tests/cron-purge.test.ts tests/privilege-boundary.test.ts
 git commit -m "feat(lgpd): the purge runs nightly, and the module that can reach every church has exactly one door"
 ```
 
@@ -3279,7 +3534,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { deleteMemberData, renameMember } from '@/app/admin/(protected)/caixa/[contactId]/dados/actions';
 
-const SESSION = { adminUserId: 'a1', churchId: 'c1', name: 'Secretária' };
+const SESSION = { adminUserId: 'a1', churchId: 'c1', name: 'Secretária', email: 'secretaria@igreja.org' };
 const CONTACT = { id: 'ct1', name: 'Maria', phone: '5511999998888', mode: 'bot', lastInboundAt: null, createdAt: new Date() };
 const OPENED_AT = new Date('2026-08-11T10:00:00.000Z');
 
@@ -3332,7 +3587,7 @@ describe('deleteMemberData — the happy path', () => {
     await deleteMemberData('ct1', {}, confirmed());
     expect(openSubjectErasure).toHaveBeenCalledWith({
       churchId: 'c1', contactId: 'ct1', phoneHash: 'hash-abc',
-      performedByEmail: 'Secretária', messages: 412, prayers: 3,
+      performedByEmail: 'secretaria@igreja.org', messages: 412, prayers: 3,
     });
   });
 
@@ -3399,7 +3654,7 @@ describe('deleteMemberData — failures', () => {
     expect(deleteMember).not.toHaveBeenCalled();
   });
 
-  it('reports the pending banner when the delete throws after the receipt opened', async () => {
+  it('reports the "started but did not finish" error when the delete throws after the receipt opened', async () => {
     deleteMember.mockRejectedValue(new Error('neon down'));
     expect(await deleteMemberData('ct1', {}, confirmed())).toEqual({
       error: 'A exclusão foi iniciada mas não terminou. Ela ficou marcada como pendente e será concluída automaticamente; você também pode tentar de novo agora.',
@@ -3491,7 +3746,9 @@ export async function deleteMemberData(
 ): Promise<DeleteResult> {
   const session = await requireDataRightsSession();
   if ('blocked' in session) return { error: blockedMessage(session.blocked) };
-  const { churchId, name } = session;
+  // EMAIL, not name. The receipt must survive the staff member leaving the church,
+  // and it is read back as "· por {email}" in Configurações.
+  const { churchId, email } = session;
 
   // Nothing is read or written before the confirmation. A destructive action must
   // not have side effects on the path where the user got the confirmation wrong.
@@ -3513,7 +3770,7 @@ export async function deleteMemberData(
         // Pure, in memory, never logged. Null when the secret is unset — the
         // erasure still proceeds.
         phoneHash: hashPhone(contact.phone),
-        performedByEmail: name,
+        performedByEmail: email,
         messages: counts.messages,
         prayers: counts.prayers,
       });
@@ -3619,66 +3876,51 @@ export function DeleteForm({
     {},
   );
 
+  // `.alarm` is the repo's red box — it already styles its own h2 and p, so the
+  // markup carries no per-element classes. This project has NO Tailwind: see the
+  // note under Global Constraints on the real class vocabulary.
   return (
-    <section className="rounded-lg border border-red-300 bg-red-50 p-4">
-      <h2 className="text-lg font-semibold text-red-900">Apagar os dados desta pessoa</h2>
-      <p className="mt-2 text-sm text-red-900">
+    <section className="alarm">
+      <h2>Apagar os dados desta pessoa</h2>
+      <p>
         Apaga o cadastro, todas as mensagens e todos os pedidos de oração desta pessoa.
         É definitivo e não pode ser desfeito.
       </p>
 
       {prayersNovo > 0 && (
-        <p className="mt-2 text-sm font-medium text-red-900">
+        <p>
           Atenção: {prayersNovo} pedido(s) de oração ainda marcado(s) como &quot;novo&quot; também será(ão) apagado(s).
         </p>
       )}
 
       {inFlight && (
-        <p className="mt-2 text-sm font-medium text-red-900">
+        <p>
           Esta conversa está em atendimento e a janela de 24 horas ainda está aberta.
           Depois de apagar não será possível responder por aqui — se precisar avisar a pessoa, faça isso antes.
         </p>
       )}
 
-      <p className="mt-2 text-sm text-red-900">
-        Apagar não bloqueia o número. Se a pessoa escrever de novo, uma nova conversa começa do zero.
-      </p>
+      <p>Apagar não bloqueia o número. Se a pessoa escrever de novo, uma nova conversa começa do zero.</p>
 
-      <form action={action} className="mt-4">
-        <label htmlFor="confirm" className="block text-sm font-medium text-red-900">
-          Para confirmar, escreva APAGAR
-        </label>
-        <input
-          id="confirm"
-          name="confirm"
-          autoComplete="off"
-          className="mt-1 w-full min-h-11 rounded border border-red-300 px-3 py-2"
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className="mt-3 min-h-11 w-full rounded bg-red-700 px-4 py-2 font-medium text-white disabled:opacity-60"
-        >
+      <form action={action}>
+        {/* The stylesheet styles `label` and `input` globally — full width, 16px
+            font (below that iOS Safari zooms on focus and never zooms back), and
+            min-height: var(--tap). No utility classes needed or available. */}
+        <label htmlFor="confirm">Para confirmar, escreva APAGAR</label>
+        <input id="confirm" name="confirm" autoComplete="off" />
+        <button type="submit" className="danger" disabled={pending} style={{ marginTop: 12 }}>
           Apagar definitivamente
         </button>
       </form>
 
       {'ok' in state && state.ok && (
-        <p className="mt-3 text-sm font-medium text-green-800">
-          Dados apagados. Comprovante registrado em {fmt(state.recordedAt)}.
-        </p>
+        <p>Dados apagados. Comprovante registrado em {fmt(state.recordedAt)}.</p>
       )}
-      {'alreadyDeleted' in state && (
-        <p className="mt-3 text-sm text-red-900">Estes dados já haviam sido apagados.</p>
-      )}
+      {'alreadyDeleted' in state && <p>Estes dados já haviam sido apagados.</p>}
       {'pending' in state && (
-        <p className="mt-3 text-sm text-red-900">
-          Exclusão pendente desde {fmt(state.since)}. Tente novamente para concluir.
-        </p>
+        <p>Exclusão pendente desde {fmt(state.since)}. Tente novamente para concluir.</p>
       )}
-      {'error' in state && state.error && (
-        <p className="mt-3 text-sm text-red-900">{state.error}</p>
-      )}
+      {'error' in state && state.error && <p className="error">{state.error}</p>}
     </section>
   );
 }
@@ -3718,25 +3960,23 @@ export default async function MemberDataPage({
   const fmt = (d: Date | null) => (d ? d.toLocaleDateString('pt-BR') : '—');
 
   return (
-    <main className="mx-auto w-full max-w-2xl space-y-6 p-4">
-      <Link href={`/admin/caixa/${contactId}`} className="text-sm text-blue-700 underline">
-        ← Voltar para a conversa
-      </Link>
+    <main className="container">
+      <Link href={`/admin/caixa/${contactId}`} className="back">← Voltar para a conversa</Link>
 
-      <header>
-        <h1 className="text-xl font-semibold">Dados desta pessoa</h1>
-        <p className="mt-2 text-sm text-gray-700">
-          Tudo o que a igreja guarda sobre esta pessoa. Use esta página quando alguém pedir uma
-          cópia dos seus dados, a correção do nome ou a exclusão de tudo (LGPD, art. 18).
-        </p>
-        <p className="mt-2 text-sm text-gray-600">
-          Se o número da pessoa não aparece na Caixa de Entrada, a igreja não guarda nada sobre
-          ela — pode responder isso.
-        </p>
-      </header>
+      <h1>Dados desta pessoa</h1>
+      <p className="hint">
+        Tudo o que a igreja guarda sobre esta pessoa. Use esta página quando alguém pedir uma
+        cópia dos seus dados, a correção do nome ou a exclusão de tudo (LGPD, art. 18).
+      </p>
+      <p className="hint">
+        Se o número da pessoa não aparece na Caixa de Entrada, a igreja não guarda nada sobre
+        ela — pode responder isso.
+      </p>
 
-      <section className="rounded-lg border p-4 text-sm">
-        <p className="break-words">
+      <section className="card">
+        {/* .grow carries overflow-wrap: break-word — this line is long and full of
+            data, and it must not push document.scrollWidth past 375px. */}
+        <p className="grow">
           <strong>Cadastro:</strong> nome e número de WhatsApp · <strong>Mensagens:</strong>{' '}
           {counts.messages} · <strong>Pedidos de oração:</strong> {counts.prayers} ·{' '}
           <strong>Primeiro registro:</strong> {fmt(contact.createdAt)} ·{' '}
@@ -3746,7 +3986,7 @@ export default async function MemberDataPage({
 
       <NameForm contactId={contactId} currentName={contact.name} />
 
-      <p className="text-sm text-gray-600">
+      <p className="hint">
         As mensagens e os pedidos de oração não podem ser editados: são o registro do que foi
         dito. Se a pessoa quiser que algo saia daqui, a saída é apagar os dados dela.
       </p>
@@ -3776,23 +4016,14 @@ export function NameForm({ contactId, currentName }: { contactId: string; curren
   );
 
   return (
-    <form action={action} className="rounded-lg border p-4">
-      <label htmlFor="name" className="block text-sm font-medium">Nome</label>
-      <input
-        id="name"
-        name="name"
-        defaultValue={currentName ?? ''}
-        className="mt-1 w-full min-h-11 rounded border px-3 py-2"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="mt-3 min-h-11 rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-60"
-      >
+    <form action={action} className="card">
+      <label htmlFor="name">Nome</label>
+      <input id="name" name="name" defaultValue={currentName ?? ''} />
+      <button className="primary" type="submit" disabled={pending} style={{ marginTop: 12 }}>
         Salvar nome
       </button>
-      {state.ok && <p className="mt-2 text-sm text-green-800">{state.ok}</p>}
-      {state.error && <p className="mt-2 text-sm text-red-800">{state.error}</p>}
+      {state.ok && <p className="hint">{state.ok}</p>}
+      {state.error && <p className="error">{state.error}</p>}
     </form>
   );
 }
@@ -3803,10 +4034,7 @@ export function NameForm({ contactId, currentName }: { contactId: string; curren
 In `src/app/admin/(protected)/caixa/[contactId]/page.tsx`, add a link in the header area (beside the existing back link), pointing at the new page:
 
 ```tsx
-      <Link
-        href={`/admin/caixa/${contactId}/dados`}
-        className="text-sm text-blue-700 underline"
-      >
+      <Link href={`/admin/caixa/${contactId}/dados`} className="btnlink">
         Dados e privacidade
       </Link>
 ```
@@ -3851,7 +4079,7 @@ git commit -m "feat(lgpd): the page a secretary opens when someone asks what the
 
 **Bounding, and why each number is where it is:**
 
-- Response body is a `ReadableStream`. **At most one page — 1 000 rows — in memory at a time.**
+- Response body is a `ReadableStream`, and **at most one page — 1 000 rows — is held as a database result set at a time.** ⚠ **State this precisely, because the spec overstates it.** The spec says "at most one page in memory"; that is true of the *rows*, not of the *response*. This route enqueues from `start()` without consulting `controller.desiredSize`, so chunks accumulate in the stream's internal queue until the consumer drains them — bounded by `ROW_CEILING`, not by the page size. Backpressure via `pull()` is the real fix and is **deliberately out of scope here**: it restructures the whole drain loop to close a bound that `ROW_CEILING` already caps. What matters is that the claim in the code comments matches what the code does — see C11, which applies to this plan's own claims as much as to the product's.
 - Paging is **keyset** on `(created_at, id)`, ascending, covered by `message_contact_keyset_idx`.
 - **Ceiling:** 50 000 rows per collection, or a **45 s** wall-clock budget, whichever comes first.
 - **`maxDuration = 60` is not decoration.** No file under `src/` set it before this subsystem, so this route would inherit Vercel's 10 s Hobby default — and the entire 45 s bounding design would be dead code on precisely the member whose history is large enough to need it.
@@ -4088,6 +4316,11 @@ export async function GET(
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // Enqueued without backpressure: chunks queue until the consumer drains
+      // them, so peak memory is bounded by ROW_CEILING rather than by PAGE_SIZE.
+      // What IS bounded to one page is the database result set. Moving this loop
+      // into pull() would bound the queue too — a worthwhile follow-up, not done
+      // here, and not claimed to be done.
       const write = (s: string) => controller.enqueue(encoder.encode(s));
       let truncatedAt: Date | null = null;
       let continuation: string | null = null;
@@ -4210,6 +4443,50 @@ npx vitest run tests/member-export-route.test.ts
 
 Expected: PASS, 9 tests.
 
+- [ ] **Step 4b: Prove the continuation is exact — no overlap, no gap**
+
+The spec requires this specifically, and the shape-only assertion above does not deliver it. Append to `tests/member-export-route.test.ts`:
+
+```ts
+describe('the continuation is exact', () => {
+  it('two files union to every message exactly once, including a millisecond tie', async () => {
+    // 2 500 messages, page size forced small by the mock. The tie matters: several
+    // messages sharing one created_at to the millisecond is the case a date cursor
+    // provably cannot split in either direction, and the (created_at, id) cursor can.
+    const TIE = '2026-03-12T19:04:11.208Z';
+    const all = Array.from({ length: 2500 }, (_, i) =>
+      msg(i, i >= 1000 && i < 1010 ? TIE : new Date(Date.parse('2026-01-01T00:00:00Z') + i * 1000).toISOString()));
+
+    // Serve keyset pages out of the fixture, exactly as the repo would.
+    pageMessages.mockImplementation(async (_c, _ct, after, limit) => {
+      const start = after
+        ? all.findIndex((m) => m.createdAt.getTime() === after.createdAt.getTime() && m.id === after.id) + 1
+        : 0;
+      return all.slice(start, start + limit);
+    });
+    countMemberRows.mockResolvedValue({ messages: 2500, prayers: 0, prayersNovo: 0 });
+
+    const first = JSON.parse(await (await call()).text());
+    expect(first.continuacao).toBeDefined();
+
+    const second = JSON.parse(await (await call(
+      `https://x/api/dados/ct1?apos=${encodeURIComponent(first.continuacao)}`,
+    )).text());
+
+    const union = [...first.mensagens, ...second.mensagens];
+    // No gap: every message present. No overlap: none of them twice.
+    expect(union).toHaveLength(2500);
+    expect(new Set(union.map((m: { texto: string }) => m.texto)).size).toBe(2500);
+  });
+});
+```
+
+```bash
+npx vitest run tests/member-export-route.test.ts
+```
+
+Expected: PASS, 10 tests.
+
 - [ ] **Step 5: Rewrite `ExportButtons.tsx` to fetch, download, and read the continuation**
 
 ```tsx
@@ -4263,35 +4540,29 @@ export function ExportButtons({ contactId }: { contactId: string }) {
   }
 
   return (
-    <section className="rounded-lg border p-4">
-      <button
-        type="button"
-        onClick={() => download()}
-        disabled={busy}
-        className="min-h-11 w-full rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-60"
-      >
-        Baixar cópia dos dados (JSON)
-      </button>
-      <p className="mt-2 text-sm text-gray-600">
+    <section className="card">
+      <div className="item-actions">
+        <button type="button" className="primary" onClick={() => download()} disabled={busy}>
+          Baixar cópia dos dados (JSON)
+        </button>
+      </div>
+      <p className="hint">
         O arquivo é gerado na hora e não fica guardado no sistema. Ele contém dados pessoais:
         entregue apenas à própria pessoa e apague do computador depois.
       </p>
-      {error && <p className="mt-2 text-sm text-red-800">{error}</p>}
+      {error && <p className="error">{error}</p>}
       {truncated && (
-        <div className="mt-3">
-          <p className="text-sm text-gray-800">
+        <>
+          <p className="warn">
             O arquivo ficou grande demais e foi até {truncated.date}. Baixe o restante no botão
             abaixo e entregue os dois arquivos à pessoa.
           </p>
-          <button
-            type="button"
-            onClick={() => download(truncated.cursor)}
-            disabled={busy}
-            className="mt-2 min-h-11 w-full rounded border border-blue-700 px-4 py-2 text-blue-700 disabled:opacity-60"
-          >
-            Baixar o restante (a partir de {truncated.date})
-          </button>
-        </div>
+          <div className="item-actions">
+            <button type="button" onClick={() => download(truncated.cursor)} disabled={busy}>
+              Baixar o restante (a partir de {truncated.date})
+            </button>
+          </div>
+        </>
       )}
     </section>
   );
@@ -4321,7 +4592,7 @@ git commit -m "feat(lgpd): a copy that streams, bounds itself, and says so when 
 - Modify: `src/lib/repo/prayer-admin.ts`
 - Create: `src/app/api/dados/oracoes-expirando/route.ts`
 - Create: `src/app/admin/(protected)/oracao/ExpiringWarning.tsx`
-- Modify: `src/app/admin/(protected)/oracao/page.tsx`
+- Modify: `src/app/admin/(protected)/oracao/page.tsx` **and `PrayerList.tsx`** (the page renders no rows)
 - Modify: `tests/privilege-boundary.test.ts` (the allowlist test)
 - Create: `tests/expiring-prayers.test.ts`
 
@@ -4655,7 +4926,7 @@ export async function GET(request: Request): Promise<Response> {
 }
 ```
 
-Note the unused `truncationNotice` import — remove it; `exportFooter` already builds the `aviso`.
+Note: `truncationNotice` is unused — remove it from the import line; `exportFooter` already builds the `aviso`. Nothing will flag it (no ESLint, and `tsc` ignores unused imports).
 
 - [ ] **Step 6: Create the shared window constant**
 
@@ -4725,70 +4996,84 @@ export function ExpiringWarning({ count }: { count: number }) {
     }
   }
 
+  // `.alarm .alarm-warn` is the repo's amber box, and it styles its own h2 and p.
   return (
-    <section className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-      <h2 className="font-semibold text-amber-900">Pedidos de oração que serão apagados em breve</h2>
-      <p className="mt-2 text-sm text-amber-900">
+    <section className="alarm alarm-warn">
+      <h2>Pedidos de oração que serão apagados em breve</h2>
+      <p>
         {count} pedido(s) de oração completam 12 meses nos próximos 30 dias e serão apagados
         automaticamente. Se a igreja quiser guardar esse histórico, baixe a cópia antes — depois
         de apagados não há como recuperar.
       </p>
-      <p className="mt-2 text-sm font-medium text-amber-900">
+      <p>
         A limpeza acontece mesmo que ninguém baixe o arquivo. Este aviso é uma cortesia, não um
         pedido de autorização.
       </p>
-      <button
-        type="button"
-        onClick={() => download()}
-        disabled={busy}
-        className="mt-3 min-h-11 w-full rounded bg-amber-700 px-4 py-2 text-white disabled:opacity-60"
-      >
-        Baixar os pedidos que serão apagados (JSON)
-      </button>
-      <p className="mt-2 text-sm text-amber-900">
+      <div className="item-actions">
+        <button type="button" className="primary" onClick={() => download()} disabled={busy}>
+          Baixar os pedidos que serão apagados (JSON)
+        </button>
+      </div>
+      <p>
         O arquivo traz o nome e o número de quem fez cada pedido, junto com o texto. É o arquivo
         mais sensível do sistema: guarde em lugar seguro e não compartilhe fora da equipe.
       </p>
-      {error && <p className="mt-2 text-sm text-red-800">{error}</p>}
+      {error && <p className="error">{error}</p>}
       {truncated && (
-        <div className="mt-3">
-          <p className="text-sm text-amber-900">
+        <>
+          <p>
             O arquivo ficou grande demais e foi até {truncated.date}. Baixe o restante no botão
             abaixo e guarde os dois arquivos.
           </p>
-          <button
-            type="button"
-            onClick={() => download(truncated.cursor)}
-            disabled={busy}
-            className="mt-2 min-h-11 w-full rounded border border-amber-700 px-4 py-2 text-amber-900 disabled:opacity-60"
-          >
-            Baixar o restante (a partir de {truncated.date})
-          </button>
-        </div>
+          <div className="item-actions">
+            <button type="button" onClick={() => download(truncated.cursor)} disabled={busy}>
+              Baixar o restante (a partir de {truncated.date})
+            </button>
+          </div>
+        </>
       )}
     </section>
   );
 }
 ```
 
-- [ ] **Step 8: Wire the warning and the per-row link into the Oração page**
+- [ ] **Step 8: Wire the warning and the per-row link — through `PrayerList.tsx`, not the page**
 
-In `src/app/admin/(protected)/oracao/page.tsx`, after the existing `requireReadableSession()` call add:
+⚠ **`oracao/page.tsx` is 23 lines and renders no rows.** It projects `PrayerRequestWithContact` down to a narrower `PrayerRow { id, text, status, who, when }` and hands it to the client component `PrayerList`, which does the rendering. Adding `contactId` to the repo interface is not enough — it has to be threaded through `PrayerRow` or it does not exist at the point the link needs it.
+
+**In `src/app/admin/(protected)/oracao/page.tsx`** — after the existing `requireReadableSession()` call:
 
 ```tsx
   const expiringBefore = new Date(retentionCutoff(new Date()).getTime() + EXPIRING_WINDOW_MS);
   const expiring = await countExpiringPrayers(churchId, expiringBefore);
 ```
 
-Render `<ExpiringWarning count={expiring} />` at the top of the page body, and add a link to each prayer row:
+Add `contactId: r.contactId,` to the existing `requests.map(...)` projection, and render `<ExpiringWarning count={expiring} />` above `<PrayerList prayers={prayers} />`.
+
+Imports to add here: `retentionCutoff` from `@/lib/retention`, `EXPIRING_WINDOW_MS` from `@/lib/expiring-window`, `countExpiringPrayers` from `@/lib/repo/prayer-admin`, `ExpiringWarning` from `./ExpiringWarning`.
+
+**In `src/app/admin/(protected)/oracao/PrayerList.tsx`** — widen the exported row type:
 
 ```tsx
-        <Link href={`/admin/caixa/${p.contactId}/dados`} className="text-sm text-blue-700 underline">
-          Ver dados desta pessoa
-        </Link>
+export interface PrayerRow {
+  id: string;
+  text: string;
+  status: 'novo' | 'orado';
+  who: string;
+  when: string;
+  contactId: string;
+}
 ```
 
-Imports to add: `Link` from `next/link`, `retentionCutoff` from `@/lib/retention`, `EXPIRING_WINDOW_MS` from `@/lib/expiring-window`, `countExpiringPrayers` from `@/lib/repo/prayer-admin`, `ExpiringWarning` from `./ExpiringWarning`.
+and add the link inside the existing `.item-actions` div, before the `<span className="grow" />`:
+
+```tsx
+            <Link href={`/admin/caixa/${p.contactId}/dados`} className="btnlink">
+              Ver dados desta pessoa
+            </Link>
+```
+
+with `import Link from 'next/link';` at the top.
 
 - [ ] **Step 9: Add the data-rights guard allowlist test**
 
@@ -4847,7 +5132,7 @@ Expected: all green. If `exactly three files` reports a fourth, that file must b
 - [ ] **Step 11: Commit**
 
 ```bash
-git add src/lib/repo/prayer-admin.ts src/lib/expiring-window.ts "src/app/api/dados/oracoes-expirando" "src/app/admin/(protected)/oracao" tests/expiring-prayers.test.ts tests/privilege-boundary.test.ts
+git add src/lib/repo/prayer-admin.ts src/lib/expiring-window.ts "src/app/api/dados/oracoes-expirando" "src/app/admin/(protected)/oracao/page.tsx" "src/app/admin/(protected)/oracao/PrayerList.tsx" "src/app/admin/(protected)/oracao/ExpiringWarning.tsx" tests/expiring-prayers.test.ts tests/privilege-boundary.test.ts
 git commit -m "feat(lgpd): warn before the prayers go, and say plainly that the warning is not a veto"
 ```
 
@@ -4965,6 +5250,29 @@ npx vitest run tests/retention-panel.test.ts
 
 Expected: PASS, 5 tests.
 
+- [ ] **Step 4b: Prove the interrupted row reaches the list, not just the formatter**
+
+`describeErasureRecord` is pure and tested above; the display *rule* is that the row is not filtered out on the way to it. Append to `tests/retention-panel.test.ts`:
+
+```ts
+describe('the display rule: no filter', () => {
+  it('an all-zero done row survives into the rendered lines', () => {
+    // Revision 2 of the spec hid exactly this row. Trace what that costs: 500
+    // message bodies committed, the +500 update lost, the sweep freezes it at
+    // 0/0/0 — and the church is shown NO LINE AT ALL. The filter is the defect.
+    const rows = [
+      { ...base, reason: 'retention' as const, status: 'done' as const,
+        messagesDeleted: 0, prayersDeleted: 0, contactsDeleted: 0 },
+      { ...base, reason: 'retention' as const, status: 'done' as const,
+        messagesDeleted: 1240, prayersDeleted: 12, contactsDeleted: 3 },
+    ];
+    const lines = rows.map(describeErasureRecord);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('interrompida');
+  });
+});
+```
+
 - [ ] **Step 5: Write the verification action**
 
 Create `src/app/admin/(protected)/configuracoes/verify-actions.ts`:
@@ -5013,38 +5321,34 @@ export function RetentionPanel({ lines }: { lines: string[] }) {
   const [state, action, pending] = useActionState<VerifyResult, FormData>(verifyErasure, { message: '' });
 
   return (
-    <section className="rounded-lg border p-4">
-      <h2 className="text-lg font-semibold">Retenção e exclusões</h2>
-      <p className="mt-2 text-sm text-gray-700">
+    <section className="card">
+      <h2>Retenção e exclusões</h2>
+      {/* C7: this sentence is only true because the nightly purge exists. It ships
+          in the same commit as the Privacidade text v2 — see Global Constraint C7. */}
+      <p className="hint">
         As conversas e os pedidos de oração são apagados automaticamente após 12 meses.
         A limpeza roda todos os dias de madrugada.
       </p>
 
       {lines.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-600">Nenhuma exclusão registrada ainda.</p>
+        <p className="hint">Nenhuma exclusão registrada ainda.</p>
       ) : (
-        <ul className="mt-3 space-y-1 text-sm">
+        <ul>
           {lines.map((line) => (
-            <li key={line} className="break-words text-gray-800">{line}</li>
+            <li key={line} className="grow">{line}</li>
           ))}
         </ul>
       )}
 
-      <form action={action} className="mt-5 border-t pt-4">
-        <h3 className="font-medium">Verificar uma exclusão</h3>
-        <label htmlFor="phone" className="mt-2 block text-sm">Número de WhatsApp</label>
-        <input id="phone" name="phone" inputMode="tel" className="mt-1 w-full min-h-11 rounded border px-3 py-2" />
-        <button
-          type="submit"
-          disabled={pending}
-          className="mt-2 min-h-11 rounded border border-blue-700 px-4 py-2 text-blue-700 disabled:opacity-60"
-        >
-          Verificar
-        </button>
-        <p className="mt-2 text-xs text-gray-600">
+      <form action={action}>
+        <h3>Verificar uma exclusão</h3>
+        <label htmlFor="phone">Número de WhatsApp</label>
+        <input id="phone" name="phone" inputMode="tel" />
+        <button type="submit" disabled={pending} style={{ marginTop: 12 }}>Verificar</button>
+        <p className="hint">
           O número apagado não fica guardado. A verificação usa uma impressão digital (hash) do número.
         </p>
-        {state.message && <p className="mt-2 text-sm text-gray-900">{state.message}</p>}
+        {state.message && <p>{state.message}</p>}
       </form>
     </section>
   );
@@ -5283,7 +5587,7 @@ export async function listErasureSignals(limit = 100): Promise<ErasureSignal[]> 
 npx vitest run tests/erasure-signal.test.ts
 ```
 
-Expected: PASS, 5 tests.
+Expected: PASS, 4 tests.
 
 - [ ] **Step 5: Render the block in `/owner`**
 
@@ -5301,18 +5605,23 @@ In `src/app/owner/(protected)/page.tsx`, fetch defensively — matching the exis
 And render beneath the church list:
 
 ```tsx
-      <section className="mt-8 rounded-lg border p-4">
-        <h2 className="text-lg font-semibold">Exclusões recentes</h2>
-        <p className="mt-2 text-sm text-gray-700">
+      <section className="card">
+        <h2>Exclusões recentes</h2>
+        <p className="hint">
           Toda exclusão de dados feita por uma igreja aparece aqui, inclusive quando a assinatura
           está suspensa. Esta lista não mostra de quem eram os dados.
         </p>
         {signals.length === 0 ? (
-          <p className="mt-3 text-sm text-gray-600">Nenhuma exclusão registrada.</p>
+          <p className="hint">Nenhuma exclusão registrada.</p>
         ) : (
-          <ul className="mt-3 space-y-1 text-sm">
-            {signals.map((s) => (
-              <li key={`${s.churchId}-${s.createdAt.toISOString()}`} className="break-words">
+          <ul>
+            {/* Index key, deliberately: the projection excludes erasure_record.id
+                (it is not needed for "an erasure occurred and for which church"),
+                so there is no unique value available — two erasures in one church
+                in the same millisecond would collide on any composite key. */}
+            {signals.map((s, i) => (
+              // eslint-disable-next-line react/no-array-index-key -- see below
+              <li key={i} className="grow">
                 {s.createdAt.toLocaleDateString('pt-BR')} · {s.churchName} ·{' '}
                 {s.reason === 'retention' ? 'Limpeza automática (12 meses)' : 'Pedido do titular'} ·{' '}
                 {s.messagesDeleted} mensagens, {s.prayersDeleted} pedidos de oração,{' '}
@@ -5350,8 +5659,12 @@ git commit -m "feat(lgpd): a church may destroy its own records, but never invis
 
 **Files:**
 - Modify: `src/lib/church-defaults.ts`
+- Modify: `src/lib/member-export.ts` — **`RETENTION_NOTE` flips here, in this commit** (C7)
+- Modify: `tests/member-export.test.ts` — the C7 assertion inverts with it
+- Modify: `tests/provisioning.test.ts` — **line 73 asserts `toContain('LGPD')` and Task 14 removes that word**
 - Modify: `src/app/owner/(protected)/[churchId]/actions.ts`
-- Modify: `src/app/admin/(protected)/conteudo/page.tsx` (one hint)
+- Modify: `src/app/owner/(protected)/[churchId]/page.tsx` (the rollout button)
+- Modify: `src/app/admin/(protected)/conteudo/MenuList.tsx` (the hint — **not `page.tsx`**, see Step 7)
 - Create: `tests/privacy-text-v2.test.ts`
 
 **Five changes to the current text, each with a reason:**
@@ -5535,9 +5848,45 @@ npx vitest run tests/privacy-text-v2.test.ts
 
 Expected: PASS, 8 tests. If `freezes every previous default` fails, step 1's recovery was incomplete.
 
+- [ ] **Step 5b: Flip `RETENTION_NOTE` — the other half of C7**
+
+This is the commit in which the 12-month promise becomes true, so it is the commit in which every artifact may start making it. In `src/lib/member-export.ts`:
+
+```ts
+/** True as of the commit that shipped the nightly purge (Task 8). Before that this
+ *  constant carried the present-tense wording, because the member's export file
+ *  reads it and a promise here is a promise in the artifact the member receives. */
+export const RETENTION_NOTE =
+  'As conversas e os pedidos de oração são apagados automaticamente após 12 meses.';
+```
+
+And invert the C7 guard in `tests/member-export.test.ts`:
+
+```ts
+    // C7 is satisfied: the purge exists, so the promise may be made.
+    expect(RETENTION_NOTE).toContain('12 meses');
+```
+
+- [ ] **Step 5c: Fix `tests/provisioning.test.ts:73`**
+
+It currently asserts `expect(items[0].bodyText).toContain('LGPD')` — which Task 14's own test asserts is now **absent**, since v2 deliberately never names the statute. The assertion cannot be re-pointed at the constant; it must be replaced with something that survives future rewordings:
+
+```ts
+      // Was toContain('LGPD'). v2 deliberately never names the statute — a member
+      // reads "tratados de acordo com a LGPD" as "this is compliant", which the bot
+      // must never claim. Assert the item is the privacy notice, not that it cites a law.
+      expect(items[0].bodyText).toContain('Privacidade e seus dados');
+```
+
 - [ ] **Step 6: Add the owner rollout action**
 
-Append to `src/app/owner/(protected)/[churchId]/actions.ts` — beside the existing `seedPrivacyItem`, which it deliberately does not modify:
+Append to `src/app/owner/(protected)/[churchId]/actions.ts` — beside the existing `seedPrivacyItem`, which it deliberately does not modify. **The file today imports only `countMenuItems, createMenuItem` from `@/lib/repo/menu-admin`**, so extend that import and add one more:
+
+```ts
+import { countMenuItems, createMenuItem, listMenuItemsForAdmin, updateMenuItem } from '@/lib/repo/menu-admin';
+import { PRIVACY_ITEM, PRIVACY_ITEM_PREVIOUS_BODIES } from '@/lib/church-defaults';
+```
+
 
 ```ts
 /** Rewrites a church's 🔒 Privacidade body to the current default, and ONLY when
@@ -5572,12 +5921,12 @@ export async function updatePrivacyText(churchId: string): Promise<{ ok?: string
 
 Render a button labelled `Atualizar texto de Privacidade` on `src/app/owner/(protected)/[churchId]/page.tsx`, surfacing the returned message.
 
-- [ ] **Step 7: Move the editing guidance to the Conteúdo page**
+- [ ] **Step 7: Move the editing guidance to the Conteúdo list**
 
-In `src/app/admin/(protected)/conteudo/page.tsx`, render this hint on the Privacidade item's row (replacing the line removed from the bot text):
+⚠ Same shape as Task 11 Step 8: **`conteudo/page.tsx` renders no rows.** It projects to `MenuListItem { id, label, kind, isActive, hasImage }` and delegates to `MenuList.tsx`. Put the hint in **`src/app/admin/(protected)/conteudo/MenuList.tsx`**, rendered only on the row whose `label` matches `PRIVACY_ITEM.label` (replacing the line removed from the bot text):
 
 ```tsx
-        <p className="mt-1 text-xs text-gray-600">
+        <p className="hint">
           O item 🔒 Privacidade é o aviso que os membros leem no WhatsApp. Você pode editá-lo, mas
           mantenha o que é guardado, por quê, por quanto tempo, com quem é compartilhado e como
           pedir cópia ou exclusão.
@@ -5595,7 +5944,7 @@ Expected: green. `tests/provisioning.test.ts` may assert against the old body �
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/lib/church-defaults.ts "src/app/owner/(protected)/[churchId]" "src/app/admin/(protected)/conteudo/page.tsx" tests/privacy-text-v2.test.ts
+git add src/lib/church-defaults.ts src/lib/member-export.ts "src/app/owner/(protected)/[churchId]" "src/app/admin/(protected)/conteudo/MenuList.tsx" tests/privacy-text-v2.test.ts tests/member-export.test.ts tests/provisioning.test.ts
 git commit -m "feat(lgpd): the privacy notice can promise the purge now, because the purge exists"
 ```
 
@@ -5608,6 +5957,8 @@ git commit -m "feat(lgpd): the privacy notice can promise the purge now, because
 - Modify: `src/app/api/whatsapp/webhook/route.ts` (one line)
 - Modify: `src/app/admin/(protected)/caixa/actions.ts` (one line)
 - Create: `tests/redact.test.ts`
+
+**Note on wording:** the spec and an earlier draft of this plan called both sites "catch-alls". Only `webhook/route.ts:181` is one; `caixa/actions.ts:51` is a targeted `catch` around `sendText`. Both still log an `Error` whose message may carry a Graph API body, which is what matters here.
 
 **This is defence-in-depth, not a fix for an observed leak — and it is not a launch blocker.** `src/lib/whatsapp.ts` throws `` `Graph API ${status}: ${detail}` `` where `detail` is Meta's raw response body. Meta's `/messages` error payloads are documented to carry request context, and the recipient number is plausibly in it. **Nobody here has seen a real Graph error body** — there is no Meta app in this repository — so this guards a class of vector rather than a confirmed leak.
 
@@ -5730,10 +6081,10 @@ In `src/app/api/whatsapp/webhook/route.ts`, change the catch-block log:
     console.error('Webhook processing failed', redactError(error));
 ```
 
-In `src/app/admin/(protected)/caixa/actions.ts`, the equivalent line:
+In `src/app/admin/(protected)/caixa/actions.ts` **line 51** — the real text is `Reply send failed`, not `Reply failed`; keep the message identical and wrap only the value, so the log stays greppable:
 
 ```ts
-    console.error('Reply failed', redactError(error));
+    console.error('Reply send failed', redactError(error));
 ```
 
 Add `import { redactError } from '@/lib/redact';` to both.
@@ -5808,3 +6159,24 @@ After Task 15, before opening the PR:
 
 **One risk I could not close from here:** whether `drizzle-kit generate` emits the partial-index `WHERE` and the `coalesce` expression index correctly. Task 1 Step 6 makes both a read-the-diff item, and the dropped `WHERE` fails a test — but **a wrong expression index fails no correctness test**. That asymmetry is called out at the step rather than hidden.
 
+---
+
+## Revision 1 — after adversarial review (2026-08-11)
+
+An independent reviewer read this plan, the spec, and the real source, and ran PGlite and drizzle probes against the SQL. Five CRITICAL findings, six IMPORTANT, and a set of MINOR ones. All are closed below. **I verified each critical finding against the repository myself rather than taking the report at face value; four were exactly as reported, one was the reviewer's error.**
+
+**Critical.**
+
+- **C-1 — the entire UI was written in Tailwind, and this project has no Tailwind.** No `tailwindcss`/`postcss`/`autoprefixer` in `package.json`, no config file, and `grep` for utility classes across `src` returns **zero**. Eight components would have shipped as unstyled markup — including the red delete-confirmation box and the amber expiring-prayers banner, which are the only visual signal on the two most destructive flows in the product. **Closed** by rewriting all eight against the real vocabulary and adding **Global Constraint C12**, which documents that vocabulary so the next component does not repeat it.
+- **C-2 — `performed_by_email` was written with the staff DISPLAY NAME.** `AdminIdentity` carries no email and `SessionData` never had one, so `session.name` was being stored in a column the spec defines as a durable email snapshot and the panel renders as `· por {email}`. **Closed** with a new `DataRightsIdentity extends AdminIdentity` returning `email` from the `admin_user` row `verifyIdentity` already fetches — one field, zero extra queries — and `verifyWritable` narrows it back off so no existing caller widens.
+- **C-3 — a test that fails ~half the time.** `expect(await listChurchIdsForPurge(10)).toEqual([a, b])` on two never-purged churches: both cursors NULL, so ordering falls entirely to the `asc(church.id)` tiebreak, and `church.id` is `gen_random_uuid()`. The reviewer measured **108/200 (54%)** on PGlite. **Closed** — compare the set while nothing distinguishes them, assert the order only once a cursor does.
+- **C-4 — C7 gated one place and the promise leaked through three others.** `RETENTION_NOTE` (Task 3) is byte-identical to the gated sentence and is emitted into **the member's own export file** in Task 10, on a dependency path that never passes through Task 8. This is precisely the defect the repo already fixed once and wrote a seven-line comment about. **Closed** structurally rather than with three more gates: `RETENTION_NOTE` ships with honest present-tense wording and Task 14 flips it in the same commit that flips the Privacidade text, so no task order can ship the promise early.
+- **C-5 — Tasks 9–13 were declared freely reorderable and are not.** Task 11's allowlist test asserts *exactly three* callers, two of which Tasks 9 and 10 create; Task 12 imports three things Task 11 creates. **Closed** — the three edges are now in the diagram and the prose.
+
+**Important.** Task 11 and Task 14 pointed at `page.tsx` files that render no rows — `PrayerList.tsx` and `MenuList.tsx` are the real sites, and `PrayerRow` needed widening with `contactId` (**closed**). `tests/provisioning.test.ts:73` asserts `toContain('LGPD')`, which Task 14 removes, and the guidance to "update those assertions" was not actionable (**closed** with the replacement assertion). The export route's "at most one page in memory" claim is false as written — it enqueues from `start()` with no backpressure, so the bound is `ROW_CEILING`, not `PAGE_SIZE`; **closed by stating it accurately** rather than by claiming a bound the code does not deliver, with `pull()` named as the real fix and explicitly deferred. Task 15 targeted `'Reply failed'`; the real line is `'Reply send failed'` at `caixa/actions.ts:51` (**closed**). Five spec-required tests were missing, including the "courtesy, not a gate" property the spec says must be *tested rather than asserted*, and the cron route had **no behavioural test at all** (**closed** — added to Tasks 7, 8, 10 and 12).
+
+**One reviewer error, recorded because it matters.** The report states `.superpowers/sdd/owner-decisions-2026-08-07.md` "does not exist in this repository", and flags the owner decisions this plan inherits as unverified — pointed at the spec's documented history of a fabricated attribution at exactly that citation. **The file exists.** `.superpowers/sdd/.gitignore` is `*`, so the directory is git-ignored and invisible to git-based search. I read it: decision 7 (prayer requests purged on the 12-month clock, warned and exportable first) and decision 8 (a suspended church keeps a working delete button, and every erasure is visible to the vendor) are both there, in the owner's words — **and the file carries its own note correcting the earlier fabrication**, confirming that the version this plan implements is the real decision and not the invented one.
+
+**What the reviewer verified as correct, and is worth not re-litigating:** the partial-index `ON CONFLICT … WHERE` syntax is valid and PGlite accepts it (first insert 1 row, second 0, three retention rows unaffected); drizzle-kit 0.31.10 does emit both the `WHERE` predicate and the `coalesce` expression index, so Task 1 Step 6's hand-restore is probably unnecessary but stays as a cheap check; `db.execute` returns `{ rows }` as cast; the `drain()` closure emits well-formed JSON on every path including truncated-mid-messages; `deleteMemberData.bind(null, contactId)` types correctly against React 19 `useActionState`; the privilege-boundary amendment is sound and `platform.ts` imports nothing restricted; the `beforeEach` schema drop/recreate works against the module-level PGlite client; and Task 14's git recovery of the v0 body is byte-exact.
+
+**Still unverifiable from here,** unchanged from the spec: `neon-http` return shapes for booleans and timestamps (only PGlite is exercisable), whether `maxDuration = 60` is honoured on the plan in force, whether Vercel Cron issues a GET with a Bearer header, and the query plans.
