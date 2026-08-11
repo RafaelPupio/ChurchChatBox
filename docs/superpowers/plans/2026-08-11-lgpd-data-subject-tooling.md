@@ -35,7 +35,11 @@ Every task's requirements implicitly include this section.
 
   **The mechanism, rather than four separate gates:** Task 3 defines `RETENTION_NOTE` with the *honest present-tense* wording and Task 14 — which runs after Task 8 — flips it to the promise, in the same commit that flips the Privacidade text. So no task order can ship the promise early, and only one commit ever makes the claim true. **Tasks 10 and 12 consume the constant and are therefore correct by construction; only Task 14 is order-gated.**
 - **C8 — `neon-http` has no transactions.** `db.transaction` does not exist. Multi-statement atomicity is unavailable; every design here is either a single statement (which Postgres runs in an implicit transaction) or is explicitly idempotent and resumable.
-- **C9 — the spec has drifted from the code in one place, and the code wins.** The spec (§"Schema changes") says `src/db/schema.ts:1-3` imports `uniqueIndex` but not `index`, and schedules an edit adding it. **That is now false**: [`schema.ts:2`](src/db/schema.ts) already imports `index` and `unique`, both added with the later `webhook_failure` table. Only `import { sql } from 'drizzle-orm'` is genuinely new. Task 1 states the real edit. No other spec claim was found stale, but implementers should read the file before trusting a line citation.
+- **C9 — the spec has drifted from the code in one place, and the code wins.** The spec (§"Schema changes") says `src/db/schema.ts:1-3` imports `uniqueIndex` but not `index`, and schedules an edit adding it. **That is now false**: [`schema.ts:2`](src/db/schema.ts) already imports `index` and `unique`. Only `import { sql } from 'drizzle-orm'` is genuinely new. Task 1 states the real edit.
+
+  **The claim was TRUE when the spec was written** — at `b24efb1` (2026-08-07) line 2 read `boolean, integer, pgEnum, …` with no `index`. It drifted because two later commits added imports this subsystem does not need: `index` in `2a7db46` (2026-08-08, the password-reset token table's `adminUserIdIdx`) and `unique` in `7bc4e1e` (2026-08-10, `webhook_failure`). An earlier draft of this constraint attributed **both** to `webhook_failure`; that was wrong about `index`, and it is corrected here rather than quietly — the point of C9 is that citations rot, and a correction that itself asserts an unchecked cause is the same failure one level up.
+
+  **Generalise from it:** the spec's line citations are dated, and the whole `schema.ts:NN` family in particular has shifted **+21 lines**. Read the file before trusting any of them.
 - **C12 — THIS PROJECT HAS NO TAILWIND.** No `tailwindcss`, `postcss` or `autoprefixer` in `package.json`; no `tailwind.config.*`; zero utility classes anywhere in `src`. Styling is `src/app/globals.css`, a hand-written stylesheet on CSS custom properties with a **closed vocabulary of semantic class names**. Every new component uses it or ships unstyled. The ones this plan needs:
 
   | Class | Use |
@@ -1520,6 +1524,7 @@ git commit -m "feat(lgpd): one member's data, scoped so another church's id is s
   - `findErasureByContact(churchId, contactId): Promise<ErasureRecordRow | null>`
   - `listErasureRecords(churchId, limit): Promise<ErasureRecordRow[]>`
   - `findErasureByPhoneHash(churchId, hash): Promise<ErasureRecordRow | null>`
+  - `receiptCreatedAt(value: unknown, observedAt: Date): Date` — the driver-shape guard on the one timestamp that arrives through raw SQL. Exported only so it can be tested; nothing else calls it.
 
 **The load-bearing idea:** `openSubjectErasure` is **one statement with two guards** — an `INSERT … SELECT FROM contact WHERE id AND church_id` (so a receipt cannot be minted for a contact that is already gone) plus `ON CONFLICT … DO NOTHING` against the partial unique index (so a second receipt for the same contact is impossible). Both guards are inside one statement, so both are atomic under Postgres's per-statement implicit transaction. **No pre-check** — a pre-check is TOCTOU.
 
@@ -1550,6 +1555,7 @@ import {
   findErasureByPhoneHash,
   listErasureRecords,
   openSubjectErasure,
+  receiptCreatedAt,
 } from '@/lib/repo/erasure';
 
 const MIGRATIONS_DIR = join(process.cwd(), 'drizzle');
@@ -1703,6 +1709,39 @@ describe('listErasureRecords', () => {
     expect(await listErasureRecords(otherChurchId, 50)).toEqual([]);
   });
 });
+
+describe('receiptCreatedAt — the driver shapes only PGlite can be trusted about', () => {
+  // openSubjectErasure reads created_at off a RAW statement, so drizzle applies no
+  // timestamp mapper and the value is whatever the driver chose. PGlite is the only
+  // driver this suite can exercise, and it is the one that returns a real Date —
+  // which is precisely why the string case has to be tested by hand.
+  const OBSERVED = new Date('2026-08-11T07:00:00.000Z');
+
+  it('passes a real Date through, which is what PGlite returns', () => {
+    const d = new Date('2026-08-11T06:00:00.803Z');
+    expect(receiptCreatedAt(d, OBSERVED).toISOString()).toBe('2026-08-11T06:00:00.803Z');
+  });
+
+  it('parses Postgres timestamp text, which is what an unmapped neon-http value is', () => {
+    expect(receiptCreatedAt('2026-08-11 06:00:00.803+00', OBSERVED).toISOString())
+      .toBe('2026-08-11T06:00:00.803Z');
+  });
+
+  it('never yields an Invalid Date, and says so operator-side when it has to guess', () => {
+    // The receipt renders this: `Comprovante registrado em {fmt(recordedAt)}`, and
+    // toLocaleDateString on an Invalid Date returns the literal string
+    // "Invalid Date". The most consequential confirmation in the product would
+    // read "Comprovante registrado em Invalid Date."
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (const bad of [null, undefined, 'lixo', {}, new Date('nada')]) {
+      const got = receiptCreatedAt(bad, OBSERVED);
+      expect(Number.isNaN(got.getTime())).toBe(false);
+      expect(got.toISOString()).toBe(OBSERVED.toISOString());
+    }
+    expect(spy).toHaveBeenCalledTimes(5);
+    spy.mockRestore();
+  });
+});
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -1761,6 +1800,51 @@ export interface OpenSubjectErasureInput {
   prayers: number;
 }
 
+/** `created_at` read off a RAW statement, made into a Date that is safe to RENDER.
+ *
+ *  `sql` carries no column metadata, so drizzle has no timestamp mapper to apply
+ *  and the value is whatever the driver chose: PGlite returns a Date, neon-http
+ *  returns the string '2026-08-11 06:00:00.803+00'. That much is already the house
+ *  convention — src/lib/repo/platform.ts has the same four lines and the incident
+ *  comment above them, written after a `sql<Date>` assertion that was false in
+ *  production and true in every test. platform.ts is OWNER-ONLY (C5) and cannot be
+ *  imported here, so these four lines live in both places on purpose.
+ *
+ *  WHAT IS DIFFERENT HERE IS THE FALLBACK, and it is deliberately not null.
+ *  platform.ts returns null because null has a rendering there ("nenhuma mensagem
+ *  recebida ainda"). This value has no such rendering: it comes back as
+ *  `recordedAt` and the page prints `Comprovante registrado em {fmt(recordedAt)}`
+ *  at the moment a member's data is destroyed. The two rejected options:
+ *
+ *   - Leave it unguarded. `toLocaleDateString` on an Invalid Date returns the
+ *     literal string "Invalid Date", so the single most consequential confirmation
+ *     in the product would read "Comprovante registrado em Invalid Date."
+ *   - Return null. That pushes `Date | null` through three call sites and two
+ *     result shapes to arrive at an em-dash — a worse receipt than a good guess,
+ *     for more code.
+ *
+ *  So the fallback is `observedAt`: the moment this process read the row it had
+ *  just inserted. That is accurate to one round trip and is a TRUE statement about
+ *  when the receipt was opened, which an em-dash is not. It is never silent — a
+ *  timestamp we had to guess is a driver-shape defect and the vendor is the only
+ *  party who can fix one. The value itself is not logged: it belongs to a row
+ *  about one identified member, and Task 15's rule is that diagnostic value never
+ *  buys that. Its type is the diagnostic that matters anyway.
+ *
+ *  Exported ONLY so the shapes neon-http might return can be tested; this suite can
+ *  exercise PGlite and nothing else. No other module calls it. */
+export function receiptCreatedAt(value: unknown, observedAt: Date): Date {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  console.error('[erasure] unparseable created_at on a fresh receipt; using the observation time', {
+    type: typeof value,
+  });
+  return observedAt;
+}
+
 /** ONE statement, TWO guards, no pre-check.
  *
  *  Guard 1 — `SELECT … FROM contact WHERE c.id = $ AND c.church_id = $`: it is
@@ -1799,10 +1883,12 @@ export async function openSubjectErasure(
     returning id, created_at
   `);
 
-  // Both drivers return { rows: [...] }; the shapes differ in everything else.
-  const rows = (result as unknown as { rows: Array<{ id: string; created_at: string | Date }> }).rows;
+  // Both drivers return { rows: [...] }; the shapes differ in everything else —
+  // which is why created_at is typed `unknown` and goes through the guard rather
+  // than being asserted into a Date the driver never promised.
+  const rows = (result as unknown as { rows: Array<{ id: string; created_at: unknown }> }).rows;
   if (rows.length === 0) return null;
-  return { id: rows[0].id, createdAt: new Date(rows[0].created_at) };
+  return { id: rows[0].id, createdAt: receiptCreatedAt(rows[0].created_at, new Date()) };
 }
 
 /** A STATUS FLIP ONLY. Deliberately takes no counts.
@@ -1868,7 +1954,7 @@ export async function listErasureRecords(
 npx vitest run tests/erasure-repo.test.ts
 ```
 
-Expected: PASS, 12 tests. If `returns null on a SECOND attempt` fails, the partial unique index lost its predicate — re-check Task 1 Step 6.
+Expected: PASS, 15 tests. If `returns null on a SECOND attempt` fails, the partial unique index lost its predicate — re-check Task 1 Step 6.
 
 - [ ] **Step 5: Add the erasure repo to the isolation attack list**
 
@@ -2231,6 +2317,7 @@ git commit -m "feat(lgpd): a billing dispute must not be why a church misses a l
   - `listChurchIdsForPurge(limit): Promise<string[]>` — least-recently-purged first
   - `markChurchPurged(churchId, at): Promise<void>`
   - `hasPurgeWork(churchId, cutoff): Promise<boolean>`
+  - `interpretWorkFlag(churchId, value: unknown): boolean` — the driver-shape guard on that boolean, and the decision about which way to fail. Exported only so it can be tested.
   - `openRetentionRecord(churchId): Promise<string>` — the record id
   - `addRetentionCounts(recordId, churchId, delta: PurgeDelta): Promise<void>`
   - `purgeMessageBatch(churchId, cutoff, limit): Promise<number>`
@@ -2276,6 +2363,7 @@ import {
   addRetentionCounts,
   completeErasureRecordSystem,
   hasPurgeWork,
+  interpretWorkFlag,
   listChurchIdsForPurge,
   listStalePendingErasures,
   markChurchPurged,
@@ -2482,6 +2570,46 @@ describe('hasPurgeWork', () => {
   });
 });
 
+describe('interpretWorkFlag — which way this probe fails', () => {
+  // The two tests above run on PGlite, which returns a real JS boolean. neon-http
+  // is not exercisable from here at all, and Postgres's own wire form for a boolean
+  // is the text 't'/'f' — on which `=== true` is false (right by accident) and a
+  // truthiness test is TRUE for 'f' (wrong). Neither naive form is safe on a value
+  // whose type is unverified, so the shapes get named.
+  it('reads the two real booleans', () => {
+    expect(interpretWorkFlag('c1', true)).toBe(true);
+    expect(interpretWorkFlag('c1', false)).toBe(false);
+  });
+
+  it('reads the text and numeric spellings a driver without a bool parser produces', () => {
+    for (const yes of ['t', 'true', 'TRUE', 1, '1']) expect(interpretWorkFlag('c1', yes)).toBe(true);
+    for (const no of ['f', 'false', 'FALSE', 0, '0']) expect(interpretWorkFlag('c1', no)).toBe(false);
+  });
+
+  it('assumes WORK EXISTS for any shape it does not recognise', () => {
+    // The asymmetry is the whole point. A wrong `false` means this church is never
+    // purged — every night, forever, invisibly — and its members' data lives past
+    // 12 months. A wrong `true` means an all-zero receipt, which is noise a human
+    // notices. Only a value positively recognised as "no work" may return false.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (const weird of [undefined, null, 'sim', 'nao', 2, {}, []]) {
+      expect(interpretWorkFlag('c1', weird)).toBe(true);
+    }
+    spy.mockRestore();
+  });
+
+  it('says so operator-side rather than guessing quietly', () => {
+    // English, like every other operator-facing line (C1). A guess nobody can see
+    // is how a shape defect survives a year.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    interpretWorkFlag('c1', undefined);
+    expect(spy).toHaveBeenCalledTimes(1);
+    interpretWorkFlag('c1', true);
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+});
+
 describe('fairness across churches', () => {
   it('orders least-recently-purged first, with never-purged at the front', async () => {
     const never = await makeChurch('Nunca');
@@ -2668,11 +2796,65 @@ export async function markChurchPurged(churchId: string, at: Date): Promise<void
   await db.update(church).set({ retentionPurgedAt: at }).where(eq(church.id, churchId));
 }
 
+/** What a raw `exists(...)` actually gives back, made into the boolean the
+ *  interface promises — and, where it cannot be recognised, made into the SAFE
+ *  boolean rather than the plausible one.
+ *
+ *  PGlite returns a real JS `true`. neon-http is unverified from here (this repo
+ *  can exercise PGlite and nothing else), and Postgres's own wire representation of
+ *  a boolean is the text 't'/'f', so a driver that skipped the bool parser would
+ *  hand back a STRING. Note that BOTH naive readings break on that string, in
+ *  opposite directions: `'f' === true` is false, which happens to be right, while
+ *  `'f'` under a truthiness test is TRUE, which is wrong. A value whose type is not
+ *  known cannot be read by either.
+ *
+ *  THE DIRECTION OF THE GUESS IS THE WHOLE POINT, and it is not symmetric:
+ *
+ *   - Guessing FALSE wrongly: the cron advances the cursor, writes no record and
+ *     moves on — every night, for that church, forever, because the next run reads
+ *     the same shape and makes the same guess. Its members' messages and prayer
+ *     requests live past 12 months, nothing in the product says so, and neither the
+ *     church nor the vendor has anything to notice. That is the statutory failure
+ *     this entire subsystem exists to prevent, arriving silently.
+ *   - Guessing TRUE wrongly: a retention receipt is opened, the three purge loops
+ *     find nothing past the cutoff and delete nothing, and the church sees a done
+ *     receipt reading "0 mensagens, 0 pedidos de oração, 0 cadastros". That is
+ *     noise on a page a secretary reads — and it is LOUD. An all-zero receipt is
+ *     the exact shape a human notices and asks about.
+ *
+ *  So only a value positively recognised as "no work" returns false. An unknown
+ *  type, a missing column, a missing row — all return true and log. Doing
+ *  unnecessary work noisily beats skipping necessary work silently, and the noisy
+ *  version is also the one that gets reported and fixed.
+ *
+ *  Exported ONLY so these shapes can be tested; hasPurgeWork is its one caller. */
+export function interpretWorkFlag(churchId: string, value: unknown): boolean {
+  if (value === true || value === false) return value;
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (v === 't' || v === 'true') return true;
+    if (v === 'f' || v === 'false') return false;
+  }
+  if (value === 1 || value === '1') return true;
+  if (value === 0 || value === '0') return false;
+  // Operator-facing and English, like every console line in this codebase (C1).
+  // The value is the result of an `exists()` — a single scalar about whether ANY
+  // row is old, carrying nothing about any member — so logging it is not a C6
+  // problem, and its type is what actually identifies the driver defect.
+  console.error('[retention] unrecognised hasPurgeWork result; assuming work exists', {
+    churchId,
+    type: typeof value,
+    value,
+  });
+  return true;
+}
+
 /** One statement, one round trip: does this church have anything to purge at all?
  *
  *  False → advance the cursor, write NO record, move on. This is what keeps "a
  *  retention row means something was actually deleted" true while still writing
- *  the row BEFORE the deletes. */
+ *  the row BEFORE the deletes — and it is also why a WRONG false is so expensive,
+ *  which is what interpretWorkFlag above is about. */
 export async function hasPurgeWork(churchId: string, cutoff: Date): Promise<boolean> {
   const iso = cutoff.toISOString();
   const result = await db.execute(sql`
@@ -2682,8 +2864,12 @@ export async function hasPurgeWork(churchId: string, cutoff: Date): Promise<bool
       or exists(select 1 from contact        where church_id = ${churchId}::uuid
                  and coalesce(last_inbound_at, created_at) < ${iso}::timestamptz) as work
   `);
-  const rows = (result as unknown as { rows: Array<{ work: boolean }> }).rows;
-  return rows[0]?.work === true;
+  // Both drivers return { rows: [...] }; the shapes differ in everything else.
+  // `unknown` rather than `boolean` because asserting the type here is exactly the
+  // lie platform.ts's `sql<Date>` told. An empty rows array reaches the guard as
+  // undefined and takes the same safe branch as a wrong type.
+  const rows = (result as unknown as { rows: Array<{ work: unknown }> }).rows;
+  return interpretWorkFlag(churchId, rows[0]?.work);
 }
 
 export async function openRetentionRecord(churchId: string): Promise<string> {
@@ -2866,7 +3052,7 @@ Note: `isNull` is unused — drop it from the import. `asc` **is** used (the `li
 npx vitest run tests/retention-purge.test.ts
 ```
 
-Expected: PASS, 17 tests. The one to watch is `reports EVERY deleted row` — it must read exactly `1240`. If it reads `340`, the ordering was inverted and a cascade fired.
+Expected: PASS, 21 tests. The one to watch is `reports EVERY deleted row` — it must read exactly `1240`. If it reads `340`, the ordering was inverted and a cascade fired.
 
 - [ ] **Step 4b: Add the two receipt-failure tests the spec requires**
 
@@ -4079,7 +4265,9 @@ git commit -m "feat(lgpd): the page a secretary opens when someone asks what the
 
 **Bounding, and why each number is where it is:**
 
-- Response body is a `ReadableStream`, and **at most one page — 1 000 rows — is held as a database result set at a time.** ⚠ **State this precisely, because the spec overstates it.** The spec says "at most one page in memory"; that is true of the *rows*, not of the *response*. This route enqueues from `start()` without consulting `controller.desiredSize`, so chunks accumulate in the stream's internal queue until the consumer drains them — bounded by `ROW_CEILING`, not by the page size. Backpressure via `pull()` is the real fix and is **deliberately out of scope here**: it restructures the whole drain loop to close a bound that `ROW_CEILING` already caps. What matters is that the claim in the code comments matches what the code does — see C11, which applies to this plan's own claims as much as to the product's.
+- Response body is a `ReadableStream` driven from **`pull()`**, and **at most one page — 1 000 rows — is held at a time, plus at most one serialised row waiting in the stream's queue.** ⚠ **State this precisely, because an earlier draft of this plan did not.** That draft enqueued from `start()` and never consulted `controller.desiredSize`, so chunks piled into the stream's internal queue whether or not anyone was reading: the *rows* were bounded by `PAGE_SIZE`, but the *response* was bounded by `ROW_CEILING` × an unbounded `message.body` — 50 000 message texts resident at once on exactly the member whose history made the ceiling matter. `pull()` closes that. The stream asks for the next chunk only when its queue has room, so the producer runs at the speed of the secretary's browser and the queue holds one chunk, stated explicitly as `new CountQueuingStrategy({ highWaterMark: 1 })` rather than inherited from a default.
+
+  **The restructuring's own hazard is the comma.** Production now stops mid-array and resumes on a later `pull()`, so `first` — the flag deciding whether a row is preceded by a comma — has to survive suspension. It is answered by making the producer an **async generator**: the suspended frame *is* the state, so `first`, `after` and `emitted` stay in the loop that owns them and the drain loop is otherwise unchanged. A hand-rolled state machine would put the one bug that emits `[,{…}]` or `[{…}{…}]` in the seam between two pulls, which is the seam hardest to reach from a test.
 - Paging is **keyset** on `(created_at, id)`, ascending, covered by `message_contact_keyset_idx`.
 - **Ceiling:** 50 000 rows per collection, or a **45 s** wall-clock budget, whichever comes first.
 - **`maxDuration = 60` is not decoration.** No file under `src/` set it before this subsystem, so this route would inherit Vercel's 10 s Hobby default — and the entire 45 s bounding design would be dead code on precisely the member whose history is large enough to need it.
@@ -4125,6 +4313,16 @@ function msg(i: number, at: string) {
 
 async function call(url = 'https://x/api/dados/ct1'): Promise<Response> {
   return GET(new Request(url), { params: Promise.resolve({ contactId: 'ct1' }) });
+}
+
+/** Cross a MACROTASK boundary, three times over. This is the whole discriminating
+ *  power of the backpressure test below: an eager producer that only ever awaits
+ *  already-resolved promises is a pure microtask chain, and the microtask queue
+ *  drains completely before the first setTimeout fires. So one `settle()` is
+ *  enough to let a runaway producer run to its ceiling — and a demand-driven one
+ *  cannot advance at all, because nothing read. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0));
 }
 
 beforeEach(() => {
@@ -4229,7 +4427,68 @@ describe('truncation', () => {
     expect(pageMessages).toHaveBeenCalledWith('c1', 'ct1', null, expect.any(Number));
   });
 });
+
+describe('backpressure', () => {
+  it('does not produce the document ahead of the consumer', async () => {
+    // ⚠ THIS IS THE TEST THAT FAILS AGAINST THE start()-BASED VERSION. Every page
+    // the mock can serve is full, so nothing but the ceiling stops an eager
+    // producer: measured against the old code it reaches 50 loads (ROW_CEILING /
+    // PAGE_SIZE) before the first setTimeout fires. The pull() version has not
+    // called the loader at ALL by this point — the header alone is more chunks
+    // than a highWaterMark of 1 will take.
+    pageMessages.mockResolvedValue(Array.from({ length: 1000 }, (_, i) => msg(i, '2026-03-12T19:04:11.208Z')));
+
+    const reader = (await call()).body!.getReader();
+    await reader.read();
+    await settle();
+
+    // ≤ 1 rather than 0: the assertion is "the producer stays within a page of the
+    // reader", not "the header is exactly this many chunks". 50 fails it either way.
+    expect(pageMessages.mock.calls.length).toBeLessThanOrEqual(1);
+    await reader.cancel();
+  });
+
+  it('stays valid JSON when the consumer reads one chunk at a time, across page boundaries', async () => {
+    // The comma hazard exercised where it lives. 2 500 rows is three pages, the
+    // last short, so `first` has to survive suspension BETWEEN rows and BETWEEN
+    // pages — and every chunk boundary here is a real pull() boundary, because the
+    // reader takes exactly one chunk per turn.
+    const all = Array.from({ length: 2500 }, (_, i) =>
+      msg(i, new Date(Date.parse('2026-01-01T00:00:00Z') + i * 1000).toISOString()));
+    pageMessages.mockImplementation(async (_c, _ct, after, limit) => {
+      const start = after ? all.findIndex((r) => r.id === after.id) + 1 : 0;
+      return all.slice(start, start + limit);
+    });
+    countMemberRows.mockResolvedValue({ messages: 2500, prayers: 0, prayersNovo: 0 });
+
+    const reader = (await call()).body!.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+
+    // The two shapes a lost or doubled `first` produces, named rather than left to
+    // JSON.parse: an array opening on a comma, and two rows with nothing between
+    // them. Neither can occur legitimately anywhere in this document.
+    expect(text).not.toContain('[,');
+    expect(text).not.toContain('}{');
+
+    const parsed = JSON.parse(text);
+    expect(parsed.mensagens).toHaveLength(2500);
+    expect(parsed.mensagens[0].texto).toBe('msg 0');
+    expect(parsed.mensagens[2499].texto).toBe('msg 2499');
+    expect(parsed.aviso).toBeUndefined();
+    // 1 000 + 1 000 + 500: three pages and not one row fetched ahead of need.
+    expect(pageMessages).toHaveBeenCalledTimes(3);
+  });
+});
 ```
+
+**What this pair does and does not prove.** It proves the producer is *demand-driven* — that no page is loaded and no row serialised before the consumer asks — which is the property the old code lacked and the only one that changes the memory bound. It does **not** measure bytes resident in the stream's queue: `ReadableStream` exposes `desiredSize` to the *producer* and nothing to a test, so a direct "the queue never exceeded N bytes" assertion is not writable with the tools here. Rather than dress the call-count assertion up as a memory assertion, this plan states the gap: the queue bound rests on the explicit `highWaterMark` and on the `pull()` loop honouring `desiredSize`, both of which are read in review, not asserted in a test.
 
 - [ ] **Step 2: Run it and watch it fail**
 
@@ -4314,108 +4573,155 @@ export async function GET(
   const startedAt = Date.now();
   const encoder = new TextEncoder();
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      // Enqueued without backpressure: chunks queue until the consumer drains
-      // them, so peak memory is bounded by ROW_CEILING rather than by PAGE_SIZE.
-      // What IS bounded to one page is the database result set. Moving this loop
-      // into pull() would bound the queue too — a worthwhile follow-up, not done
-      // here, and not claimed to be done.
-      const write = (s: string) => controller.enqueue(encoder.encode(s));
-      let truncatedAt: Date | null = null;
-      let continuation: string | null = null;
+  /** The whole document, in order, as a sequence of chunks — and the ONLY thing
+   *  that holds state between them.
+   *
+   *  A generator rather than a loop inside start() FOR THE COMMA LOGIC. Under
+   *  backpressure, production stops mid-array and resumes on a later pull(), and
+   *  `first` — the flag deciding whether a row is preceded by a comma — is exactly
+   *  the state that has to survive that suspension. Hoisting `first`, `after` and
+   *  `emitted` out into a hand-rolled state machine would move the one bug that
+   *  emits `[,{…}]` or `[{…}{…}]` into the seam between two pulls, which is the
+   *  seam a test reaches last. A suspended generator frame keeps them where they
+   *  were written: the drain loop below is the same loop as before and `yield` is
+   *  the only new statement in it. */
+  async function* documentChunks(): AsyncGenerator<string, void, void> {
+    const header = exportHeader({
+      churchName: church?.name ?? '',
+      contact,
+      counts: { messages: counts.messages, prayers: counts.prayers },
+      now: new Date(),
+    });
+    // Written by hand rather than JSON.stringify'ing the whole document: the
+    // whole point is that no page is ever all in memory at once.
+    yield `{${JSON.stringify('gerado_em').slice(0)}:${JSON.stringify(header.gerado_em)}`;
+    yield `,"igreja":${JSON.stringify(header.igreja)}`;
+    yield `,"titular":${JSON.stringify(header.titular)}`;
 
-      try {
-        const header = exportHeader({
-          churchName: church?.name ?? '',
-          contact,
-          counts: { messages: counts.messages, prayers: counts.prayers },
-          now: new Date(),
-        });
-        // Written by hand rather than JSON.stringify'ing the whole document: the
-        // whole point is that no page is ever all in memory at once.
-        write(`{${JSON.stringify('gerado_em').slice(0)}:${JSON.stringify(header.gerado_em)}`);
-        write(`,"igreja":${JSON.stringify(header.igreja)}`);
-        write(`,"titular":${JSON.stringify(header.titular)}`);
+    let truncatedAt: Date | null = null;
+    let continuation: string | null = null;
 
-        /** One collection, paged. Returns the cursor it stopped at, or null if it
-         *  ran to completion. */
-        async function drain<T extends { id: string; createdAt: Date }>(
-          key: string,
-          load: (after: Cursor | null, limit: number) => Promise<T[]>,
-          entry: (row: T) => unknown,
-          from: Cursor | null,
-          skip: boolean,
-        ): Promise<Cursor | null> {
-          write(`,"${key}":[`);
-          if (skip) { write(']'); return null; }
+    /** One collection, paged. Returns the cursor it stopped at, or null if it ran
+     *  to completion — `yield*` at the call site hands that return value back. */
+    async function* drain<T extends { id: string; createdAt: Date }>(
+      key: string,
+      load: (after: Cursor | null, limit: number) => Promise<T[]>,
+      entry: (row: T) => unknown,
+      from: Cursor | null,
+      skip: boolean,
+    ): AsyncGenerator<string, Cursor | null, void> {
+      yield `,"${key}":[`;
+      if (skip) { yield ']'; return null; }
 
-          let after = from;
-          let emitted = 0;
-          let first = true;
-          for (;;) {
-            const rows = await load(after, PAGE_SIZE);
-            for (const row of rows) {
-              if (!first) write(',');
-              write(JSON.stringify(entry(row)));
-              first = false;
-              emitted += 1;
-              after = { createdAt: row.createdAt, id: row.id };
-            }
-            // Bounded by BOTH: rows, and wall clock. The ceiling is predictable
-            // from a count; the budget is not, which is why the resume point is
-            // written into the file rather than guessed by the panel.
-            if (rows.length < PAGE_SIZE) { write(']'); return null; }
-            if (emitted >= ROW_CEILING || Date.now() - startedAt > BUDGET_MS) {
-              write(']');
-              return after;
-            }
-          }
+      let after = from;
+      let emitted = 0;
+      let first = true;
+      for (;;) {
+        // `rows` is a local of this frame, so exactly one page is reachable while
+        // the generator is suspended below — and the next page is not requested
+        // until this one has been yielded row by row.
+        const rows = await load(after, PAGE_SIZE);
+        for (const row of rows) {
+          // The separator travels in the SAME chunk as the row it precedes.
+          // Two chunks would admit a state where the comma was enqueued and the
+          // row was not; an error or a cancel landing between them closes the
+          // array on a trailing comma, which is the one way this loop could emit
+          // invalid JSON.
+          yield `${first ? '' : ','}${JSON.stringify(entry(row))}`;
+          first = false;
+          emitted += 1;
+          after = { createdAt: row.createdAt, id: row.id };
         }
-
-        // Messages first, then prayers — so truncation is either mid-messages
-        // (prayers not started) or mid-prayers (messages complete). One truncation
-        // point, therefore one cursor.
-        const resumingPrayers = resume?.collection === 'oracoes';
-        const stoppedMessages = await drain(
-          'mensagens',
-          (after, limit) => pageMessages(churchId, contactId, after, limit),
-          exportMessageEntry,
-          resume?.collection === 'mensagens' ? resume.cursor : null,
-          resumingPrayers,
-        );
-        if (stoppedMessages) {
-          truncatedAt = stoppedMessages.createdAt;
-          continuation = `mensagens:${stoppedMessages.createdAt.toISOString()},${stoppedMessages.id}`;
-          write(`,"pedidos_de_oracao":[]`);
-        } else {
-          const stoppedPrayers = await drain(
-            'pedidos_de_oracao',
-            (after, limit) => pagePrayers(churchId, contactId, after, limit),
-            exportPrayerEntry,
-            resumingPrayers ? resume!.cursor : null,
-            false,
-          );
-          if (stoppedPrayers) {
-            truncatedAt = stoppedPrayers.createdAt;
-            continuation = `oracoes:${stoppedPrayers.createdAt.toISOString()},${stoppedPrayers.id}`;
-          }
+        // Bounded by BOTH: rows, and wall clock. The ceiling is predictable
+        // from a count; the budget is not, which is why the resume point is
+        // written into the file rather than guessed by the panel.
+        if (rows.length < PAGE_SIZE) { yield ']'; return null; }
+        if (emitted >= ROW_CEILING || Date.now() - startedAt > BUDGET_MS) {
+          yield ']';
+          return after;
         }
-
-        const footer = exportFooter({ truncatedAt, continuation });
-        for (const [k, v] of Object.entries(footer)) write(`,${JSON.stringify(k)}:${JSON.stringify(v)}`);
-        write('}');
-        controller.close();
-      } catch (error) {
-        // A stream that has already emitted bytes cannot become a 500. Closing
-        // with an explicit incomplete marker is the honest end: the panel sees
-        // invalid JSON and shows the failure string rather than handing the
-        // secretary a truncated file that looks complete.
-        console.error('[dados] export stream failed', error);
-        controller.error(error);
       }
+    }
+
+    // Messages first, then prayers — so truncation is either mid-messages
+    // (prayers not started) or mid-prayers (messages complete). One truncation
+    // point, therefore one cursor.
+    const resumingPrayers = resume?.collection === 'oracoes';
+    const stoppedMessages = yield* drain(
+      'mensagens',
+      (after, limit) => pageMessages(churchId, contactId, after, limit),
+      exportMessageEntry,
+      resume?.collection === 'mensagens' ? resume.cursor : null,
+      resumingPrayers,
+    );
+    if (stoppedMessages) {
+      truncatedAt = stoppedMessages.createdAt;
+      continuation = `mensagens:${stoppedMessages.createdAt.toISOString()},${stoppedMessages.id}`;
+      yield `,"pedidos_de_oracao":[]`;
+    } else {
+      const stoppedPrayers = yield* drain(
+        'pedidos_de_oracao',
+        (after, limit) => pagePrayers(churchId, contactId, after, limit),
+        exportPrayerEntry,
+        resumingPrayers ? resume!.cursor : null,
+        false,
+      );
+      if (stoppedPrayers) {
+        truncatedAt = stoppedPrayers.createdAt;
+        continuation = `oracoes:${stoppedPrayers.createdAt.toISOString()},${stoppedPrayers.id}`;
+      }
+    }
+
+    const footer = exportFooter({ truncatedAt, continuation });
+    for (const [k, v] of Object.entries(footer)) yield `,${JSON.stringify(k)}:${JSON.stringify(v)}`;
+    yield '}';
+  }
+
+  const chunks = documentChunks();
+
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      // pull(), not start(): the stream asks, the generator answers. An enqueue
+      // loop in start() has no backpressure at all — it fills the internal queue
+      // whether or not anyone is reading, which made peak memory a function of
+      // ROW_CEILING × an unbounded message.body instead of PAGE_SIZE.
+      async pull(controller) {
+        try {
+          // Produce until the queue is full, then RETURN. Returning while the
+          // queue is full is the entire mechanism: the stream calls pull() again
+          // only once the consumer has drained what is there.
+          do {
+            const next = await chunks.next();
+            if (next.done) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(encoder.encode(next.value));
+          } while ((controller.desiredSize ?? 0) > 0);
+        } catch (error) {
+          // A stream that has already emitted bytes cannot become a 500. Erroring
+          // it is the honest end: the panel sees invalid JSON and shows the
+          // failure string rather than handing the secretary a truncated file that
+          // looks complete. `desiredSize` reads null once the stream is errored or
+          // closed, and `?? 0` makes that end the loop rather than spin it.
+          console.error('[dados] export stream failed', error);
+          controller.error(error);
+        }
+      },
+      async cancel() {
+        // The secretary navigated away or the connection dropped mid-download.
+        // Returning the generator ends its frame and drops the page of rows it was
+        // holding; without this the suspended frame — and that page — waits on a
+        // pull() that will never come.
+        await chunks.return(undefined);
+      },
     },
-  });
+    // Stated rather than inherited. highWaterMark is the number the pull() loop
+    // above compares `desiredSize` against, so it IS the queue bound this route
+    // advertises; a platform default that changed under us would change that bound
+    // silently. One chunk is one row.
+    new CountQueuingStrategy({ highWaterMark: 1 }),
+  );
 
   const stamp = new Date().toISOString().slice(0, 10);
   return new Response(stream, {
@@ -4429,19 +4735,19 @@ export async function GET(
 }
 ```
 
-- [ ] **Step 4: Fix the header write, then run the test**
+- [ ] **Step 4: Fix the header chunk, then run the test**
 
-The first `write` above is deliberately awkward to draw attention to it; replace it with the plain form:
+The first `yield` above is deliberately awkward to draw attention to it; replace it with the plain form:
 
 ```ts
-        write(`{"gerado_em":${JSON.stringify(header.gerado_em)}`);
+    yield `{"gerado_em":${JSON.stringify(header.gerado_em)}`;
 ```
 
 ```bash
 npx vitest run tests/member-export-route.test.ts
 ```
 
-Expected: PASS, 9 tests.
+Expected: PASS, 11 tests.
 
 - [ ] **Step 4b: Prove the continuation is exact — no overlap, no gap**
 
@@ -4485,7 +4791,7 @@ describe('the continuation is exact', () => {
 npx vitest run tests/member-export-route.test.ts
 ```
 
-Expected: PASS, 10 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 5: Rewrite `ExportButtons.tsx` to fetch, download, and read the continuation**
 
@@ -4595,6 +4901,7 @@ git commit -m "feat(lgpd): a copy that streams, bounds itself, and says so when 
 - Modify: `src/app/admin/(protected)/oracao/page.tsx` **and `PrayerList.tsx`** (the page renders no rows)
 - Modify: `tests/privilege-boundary.test.ts` (the allowlist test)
 - Create: `tests/expiring-prayers.test.ts`
+- Create: `tests/expiring-prayers-route.test.ts`
 
 **Interfaces:**
 - Produces, from `@/lib/repo/prayer-admin`: `countExpiringPrayers(churchId, before): Promise<number>`, `pageExpiringPrayers(churchId, before, after, limit): Promise<ExpiringPrayerRow[]>`, and `contactId` added to `PrayerRequestWithContact`.
@@ -4865,55 +5172,86 @@ export async function GET(request: Request): Promise<Response> {
   const startedAt = Date.now();
   const encoder = new TextEncoder();
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const write = (s: string) => controller.enqueue(encoder.encode(s));
-      try {
-        write(`{"gerado_em":${JSON.stringify(now.toISOString())}`);
-        write(`,"igreja":${JSON.stringify(church?.name ?? '')}`);
-        write(`,"pedidos_de_oracao":[`);
+  /** Same shape as the member export, and for the same reason: the generator frame
+   *  is what carries `first`, `after` and `emitted` across the pull() boundaries
+   *  backpressure introduces. See the long comment on the member export route —
+   *  this one collection is the simple case of that one. */
+  async function* documentChunks(): AsyncGenerator<string, void, void> {
+    yield `{"gerado_em":${JSON.stringify(now.toISOString())}`;
+    yield `,"igreja":${JSON.stringify(church?.name ?? '')}`;
+    yield `,"pedidos_de_oracao":[`;
 
-        let after = resume;
-        let emitted = 0;
-        let first = true;
-        let stopped: { createdAt: Date; id: string } | null = null;
+    let after = resume;
+    let emitted = 0;
+    let first = true;
+    let stopped: { createdAt: Date; id: string } | null = null;
 
-        for (;;) {
-          const rows = await pageExpiringPrayers(churchId, before, after, PAGE_SIZE);
-          for (const row of rows) {
-            if (!first) write(',');
-            // nome and whatsapp are INCLUDED here, unlike the member export: this
-            // file goes to the controller, not to a member, and a prayer request
-            // the church cannot attach to a person is pastorally worthless.
-            write(JSON.stringify({
-              quando: row.createdAt.toISOString(),
-              situacao: row.status,
-              texto: row.text,
-              nome: row.contactName,
-              whatsapp: row.contactPhone,
-            }));
-            first = false;
-            emitted += 1;
-            after = { createdAt: row.createdAt, id: row.id };
-          }
-          if (rows.length < PAGE_SIZE) break;
-          if (emitted >= ROW_CEILING || Date.now() - startedAt > BUDGET_MS) { stopped = after; break; }
-        }
-        write(']');
-
-        const footer = exportFooter({
-          truncatedAt: stopped ? stopped.createdAt : null,
-          continuation: stopped ? `oracoes:${stopped.createdAt.toISOString()},${stopped.id}` : null,
-        });
-        for (const [k, v] of Object.entries(footer)) write(`,${JSON.stringify(k)}:${JSON.stringify(v)}`);
-        write('}');
-        controller.close();
-      } catch (error) {
-        console.error('[dados] expiring-prayers stream failed', error);
-        controller.error(error);
+    for (;;) {
+      const rows = await pageExpiringPrayers(churchId, before, after, PAGE_SIZE);
+      for (const row of rows) {
+        // The separator rides in the SAME chunk as the row it precedes, so there
+        // is no state in which a comma was emitted and its row was not.
+        //
+        // nome and whatsapp are INCLUDED here, unlike the member export: this
+        // file goes to the controller, not to a member, and a prayer request
+        // the church cannot attach to a person is pastorally worthless.
+        yield `${first ? '' : ','}${JSON.stringify({
+          quando: row.createdAt.toISOString(),
+          situacao: row.status,
+          texto: row.text,
+          nome: row.contactName,
+          whatsapp: row.contactPhone,
+        })}`;
+        first = false;
+        emitted += 1;
+        after = { createdAt: row.createdAt, id: row.id };
       }
+      if (rows.length < PAGE_SIZE) break;
+      if (emitted >= ROW_CEILING || Date.now() - startedAt > BUDGET_MS) { stopped = after; break; }
+    }
+    // Reached by BOTH breaks and by no other path, so the array closes exactly
+    // once whether the loop ran out of rows, hit the ceiling or hit the budget.
+    yield ']';
+
+    const footer = exportFooter({
+      truncatedAt: stopped ? stopped.createdAt : null,
+      continuation: stopped ? `oracoes:${stopped.createdAt.toISOString()},${stopped.id}` : null,
+    });
+    for (const [k, v] of Object.entries(footer)) yield `,${JSON.stringify(k)}:${JSON.stringify(v)}`;
+    yield '}';
+  }
+
+  const chunks = documentChunks();
+
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      // pull(), not start(). This file is the most sensitive artifact the
+      // subsystem produces AND the one with no per-contact bound on its size — a
+      // whole church's expiring archive — so producing it ahead of the reader is
+      // the version of this route that most deserved not to exist.
+      async pull(controller) {
+        try {
+          do {
+            const next = await chunks.next();
+            if (next.done) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(encoder.encode(next.value));
+          } while ((controller.desiredSize ?? 0) > 0);
+        } catch (error) {
+          console.error('[dados] expiring-prayers stream failed', error);
+          controller.error(error);
+        }
+      },
+      async cancel() {
+        // Ends the generator frame and drops the page of prayer requests — names,
+        // numbers and texts — it was holding for a reader that has gone away.
+        await chunks.return(undefined);
+      },
     },
-  });
+    new CountQueuingStrategy({ highWaterMark: 1 }),
+  );
 
   const stamp = now.toISOString().slice(0, 10);
   return new Response(stream, {
@@ -4953,6 +5291,153 @@ Create `src/lib/expiring-window.ts`:
  *  usage is quarterly, this number is what changes — not the purge. */
 export const EXPIRING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 ```
+
+- [ ] **Step 6b: Give this route its own test — it had none**
+
+Step 5 above writes a route with no behavioural test of its own; `tests/expiring-prayers.test.ts` covers the two repo functions and stops there. Create `tests/expiring-prayers-route.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const checkDataRightsSession = vi.fn();
+const getChurchById = vi.fn();
+const pageExpiringPrayers = vi.fn();
+
+vi.mock('@/lib/auth/writable', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/auth/writable')>('@/lib/auth/writable');
+  return { ...actual, checkDataRightsSession };
+});
+vi.mock('@/lib/repo/church-admin', () => ({ getChurchById }));
+vi.mock('@/lib/repo/prayer-admin', () => ({ pageExpiringPrayers }));
+
+import { GET } from '@/app/api/dados/oracoes-expirando/route';
+
+const ROUTE = join(process.cwd(), 'src/app/api/dados/oracoes-expirando/route.ts');
+
+function prayer(i: number, at: string) {
+  return {
+    id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+    text: `pedido ${i}`,
+    status: 'novo' as const,
+    createdAt: new Date(at),
+    contactName: 'Dona Cida',
+    contactPhone: '5511111111111',
+  };
+}
+
+const call = (url = 'https://x/api/dados/oracoes-expirando') => GET(new Request(url));
+// See the note in tests/member-export-route.test.ts: a macrotask boundary drains
+// the whole microtask queue, so an eager producer runs to its ceiling here and a
+// demand-driven one cannot advance at all.
+async function settle(): Promise<void> {
+  for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0));
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  checkDataRightsSession.mockResolvedValue({ adminUserId: 'a1', churchId: 'c1', name: 'Secretária' });
+  getChurchById.mockResolvedValue({ id: 'c1', name: 'Igreja Exemplo' });
+  pageExpiringPrayers.mockResolvedValue([]);
+});
+
+describe('route declarations', () => {
+  it('declares maxDuration 60 and force-dynamic', () => {
+    const src = readFileSync(ROUTE, 'utf8');
+    expect(src).toMatch(/export\s+const\s+maxDuration\s*=\s*60/);
+    expect(src).toMatch(/export\s+const\s+dynamic\s*=\s*'force-dynamic'/);
+  });
+});
+
+describe('the body', () => {
+  it('401s with no session, without leaking a redirect', async () => {
+    checkDataRightsSession.mockResolvedValue({ blocked: 'unauthenticated' });
+    const res = await call();
+    expect(res.status).toBe(401);
+    expect(await res.text()).not.toContain('NEXT_REDIRECT');
+  });
+
+  it('closes as valid JSON when there is nothing expiring', async () => {
+    // The empty collection is a real path: the warning renders only above zero,
+    // but nothing stops a secretary re-fetching after the window empties.
+    const parsed = JSON.parse(await (await call()).text());
+    expect(parsed.pedidos_de_oracao).toEqual([]);
+    expect(parsed.igreja).toBe('Igreja Exemplo');
+    expect(parsed.aviso).toBeUndefined();
+    expect(parsed.continuacao).toBeUndefined();
+  });
+
+  it('carries nome and whatsapp, which the member export never does', async () => {
+    pageExpiringPrayers.mockResolvedValueOnce([prayer(1, '2025-09-01T00:00:00Z')]).mockResolvedValue([]);
+    const parsed = JSON.parse(await (await call()).text());
+    expect(parsed.pedidos_de_oracao).toHaveLength(1);
+    expect(parsed.pedidos_de_oracao[0]).toEqual({
+      quando: '2025-09-01T00:00:00.000Z',
+      situacao: 'novo',
+      texto: 'pedido 1',
+      nome: 'Dona Cida',
+      whatsapp: '5511111111111',
+    });
+  });
+
+  it('closes as valid JSON with aviso AND continuacao when the ceiling is hit', async () => {
+    pageExpiringPrayers.mockResolvedValue(
+      Array.from({ length: 1000 }, (_, i) => prayer(i, '2025-09-01T00:00:00Z')),
+    );
+    const parsed = JSON.parse(await (await call()).text());
+    expect(parsed.aviso).toContain('01/09/2025');
+    expect(parsed.continuacao).toMatch(/^oracoes:2025-09-01T00:00:00\.000Z,/);
+  });
+});
+
+describe('backpressure', () => {
+  it('does not produce the file ahead of the consumer', async () => {
+    // Fails against a start()-based version, which reaches ROW_CEILING / PAGE_SIZE
+    // = 50 loads before the first setTimeout fires.
+    pageExpiringPrayers.mockResolvedValue(
+      Array.from({ length: 1000 }, (_, i) => prayer(i, '2025-09-01T00:00:00Z')),
+    );
+    const reader = (await call()).body!.getReader();
+    await reader.read();
+    await settle();
+    expect(pageExpiringPrayers.mock.calls.length).toBeLessThanOrEqual(1);
+    await reader.cancel();
+  });
+
+  it('stays valid JSON when the consumer reads one chunk at a time, across page boundaries', async () => {
+    const all = Array.from({ length: 2500 }, (_, i) =>
+      prayer(i, new Date(Date.parse('2025-09-01T00:00:00Z') + i * 1000).toISOString()));
+    pageExpiringPrayers.mockImplementation(async (_c, _b, after, limit) => {
+      const start = after ? all.findIndex((r) => r.id === after.id) + 1 : 0;
+      return all.slice(start, start + limit);
+    });
+
+    const reader = (await call()).body!.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+
+    expect(text).not.toContain('[,');
+    expect(text).not.toContain('}{');
+    const parsed = JSON.parse(text);
+    expect(parsed.pedidos_de_oracao).toHaveLength(2500);
+    expect(parsed.aviso).toBeUndefined();
+    expect(pageExpiringPrayers).toHaveBeenCalledTimes(3);
+  });
+});
+```
+
+```bash
+npx vitest run tests/expiring-prayers-route.test.ts
+```
+
+Expected: PASS, 7 tests.
 
 - [ ] **Step 7: Write the warning component**
 
@@ -5132,7 +5617,7 @@ Expected: all green. If `exactly three files` reports a fourth, that file must b
 - [ ] **Step 11: Commit**
 
 ```bash
-git add src/lib/repo/prayer-admin.ts src/lib/expiring-window.ts "src/app/api/dados/oracoes-expirando" "src/app/admin/(protected)/oracao/page.tsx" "src/app/admin/(protected)/oracao/PrayerList.tsx" "src/app/admin/(protected)/oracao/ExpiringWarning.tsx" tests/expiring-prayers.test.ts tests/privilege-boundary.test.ts
+git add src/lib/repo/prayer-admin.ts src/lib/expiring-window.ts "src/app/api/dados/oracoes-expirando" "src/app/admin/(protected)/oracao/page.tsx" "src/app/admin/(protected)/oracao/PrayerList.tsx" "src/app/admin/(protected)/oracao/ExpiringWarning.tsx" tests/expiring-prayers.test.ts tests/expiring-prayers-route.test.ts tests/privilege-boundary.test.ts
 git commit -m "feat(lgpd): warn before the prayers go, and say plainly that the warning is not a veto"
 ```
 
@@ -5694,6 +6179,7 @@ Create `tests/privacy-text-v2.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
 import { PRIVACY_ITEM, PRIVACY_ITEM_PREVIOUS_BODIES } from '@/lib/church-defaults';
+import { CHURCH_TEXT_MAX } from '@/lib/validation';
 
 describe('the Privacidade text v2', () => {
   const body = PRIVACY_ITEM.bodyText;
@@ -5732,10 +6218,13 @@ describe('the Privacidade text v2', () => {
     expect(body.toLowerCase()).not.toContain('dizimo');
   });
 
-  it('fits under the 1024-character WhatsApp image-caption cap', () => {
-    // A church may attach an image to this item; past 1024 the Graph API 400s and
-    // the member gets the error text instead of the privacy notice.
-    expect(body.length).toBeLessThan(1024);
+  it('fits under CHURCH_TEXT_MAX, the tightest cap any bot text hits', () => {
+    // 1024 is not an "image-caption cap" — that is how the spec describes it and it
+    // is wrong. It is src/lib/validation.ts:7's CHURCH_TEXT_MAX: Meta's interactive
+    // list caps `body.text` at 1024 and plain text at 4096, so 1024 is the tightest
+    // limit any of these values hits. The real reason is stronger than the one the
+    // spec gives, because it binds whether or not a church attaches an image.
+    expect(body.length).toBeLessThan(CHURCH_TEXT_MAX);
   });
 
   it('freezes every previous default so the rollout can recognise an unedited row', () => {
@@ -6153,7 +6642,7 @@ After Task 15, before opening the PR:
 - **`sweepStalePending` is split into two functions.** The spec names one; it has two windows (6 h / 15 min) and two behaviours (freeze vs. re-delete-then-complete). One function taking both would be a flag argument.
 - **`EXPIRING_WINDOW_MS` is its own module.** The spec leaves the 30-day constant unhomed; it is read by two pages and one route.
 
-**2. Placeholder scan.** No "TBD", no "add error handling", no "similar to Task N". Two intentional stubs, both explicitly replaced later: `ExportButtons` (Task 9 → Task 10) and the awkward header `write` (Task 10 Step 3 → Step 4).
+**2. Placeholder scan.** No "TBD", no "add error handling", no "similar to Task N". Two intentional stubs, both explicitly replaced later: `ExportButtons` (Task 9 → Task 10) and the awkward header `yield` (Task 10 Step 3 → Step 4).
 
 **3. Type consistency.** `Cursor { createdAt, id }` is used identically in Tasks 4, 10 and 11. `ErasureRecordRow` (Task 5) is what `describeErasureRecord` (Task 12) consumes. `ExportMessageRow`/`ExportPrayerRow` (Task 3) are what `pageMessages`/`pagePrayers` (Task 4) return and what the builders take. `PurgeDelta` names all three counters in both Task 7 and the Task 8 call sites. `DeleteResult`'s four shapes are identical in the contract, the action and the form.
 
@@ -6173,10 +6662,35 @@ An independent reviewer read this plan, the spec, and the real source, and ran P
 - **C-4 — C7 gated one place and the promise leaked through three others.** `RETENTION_NOTE` (Task 3) is byte-identical to the gated sentence and is emitted into **the member's own export file** in Task 10, on a dependency path that never passes through Task 8. This is precisely the defect the repo already fixed once and wrote a seven-line comment about. **Closed** structurally rather than with three more gates: `RETENTION_NOTE` ships with honest present-tense wording and Task 14 flips it in the same commit that flips the Privacidade text, so no task order can ship the promise early.
 - **C-5 — Tasks 9–13 were declared freely reorderable and are not.** Task 11's allowlist test asserts *exactly three* callers, two of which Tasks 9 and 10 create; Task 12 imports three things Task 11 creates. **Closed** — the three edges are now in the diagram and the prose.
 
-**Important.** Task 11 and Task 14 pointed at `page.tsx` files that render no rows — `PrayerList.tsx` and `MenuList.tsx` are the real sites, and `PrayerRow` needed widening with `contactId` (**closed**). `tests/provisioning.test.ts:73` asserts `toContain('LGPD')`, which Task 14 removes, and the guidance to "update those assertions" was not actionable (**closed** with the replacement assertion). The export route's "at most one page in memory" claim is false as written — it enqueues from `start()` with no backpressure, so the bound is `ROW_CEILING`, not `PAGE_SIZE`; **closed by stating it accurately** rather than by claiming a bound the code does not deliver, with `pull()` named as the real fix and explicitly deferred. Task 15 targeted `'Reply failed'`; the real line is `'Reply send failed'` at `caixa/actions.ts:51` (**closed**). Five spec-required tests were missing, including the "courtesy, not a gate" property the spec says must be *tested rather than asserted*, and the cron route had **no behavioural test at all** (**closed** — added to Tasks 7, 8, 10 and 12).
+**Important.** Task 11 and Task 14 pointed at `page.tsx` files that render no rows — `PrayerList.tsx` and `MenuList.tsx` are the real sites, and `PrayerRow` needed widening with `contactId` (**closed**). `tests/provisioning.test.ts:73` asserts `toContain('LGPD')`, which Task 14 removes, and the guidance to "update those assertions" was not actionable (**closed** with the replacement assertion). The export route's "at most one page in memory" claim is false as written — it enqueues from `start()` with no backpressure, so the bound is `ROW_CEILING`, not `PAGE_SIZE`; **closed by stating it accurately** rather than by claiming a bound the code does not deliver, with `pull()` named as the real fix and explicitly deferred. **— That deferral is superseded by Revision 2 below, which implements `pull()` in both routes; the accurate statement is no longer the fix, it is the history.** Task 15 targeted `'Reply failed'`; the real line is `'Reply send failed'` at `caixa/actions.ts:51` (**closed**). Five spec-required tests were missing, including the "courtesy, not a gate" property the spec says must be *tested rather than asserted*, and the cron route had **no behavioural test at all** (**closed** — added to Tasks 7, 8, 10 and 12).
 
 **One reviewer error, recorded because it matters.** The report states `.superpowers/sdd/owner-decisions-2026-08-07.md` "does not exist in this repository", and flags the owner decisions this plan inherits as unverified — pointed at the spec's documented history of a fabricated attribution at exactly that citation. **The file exists.** `.superpowers/sdd/.gitignore` is `*`, so the directory is git-ignored and invisible to git-based search. I read it: decision 7 (prayer requests purged on the 12-month clock, warned and exportable first) and decision 8 (a suspended church keeps a working delete button, and every erasure is visible to the vendor) are both there, in the owner's words — **and the file carries its own note correcting the earlier fabrication**, confirming that the version this plan implements is the real decision and not the invented one.
 
 **What the reviewer verified as correct, and is worth not re-litigating:** the partial-index `ON CONFLICT … WHERE` syntax is valid and PGlite accepts it (first insert 1 row, second 0, three retention rows unaffected); drizzle-kit 0.31.10 does emit both the `WHERE` predicate and the `coalesce` expression index, so Task 1 Step 6's hand-restore is probably unnecessary but stays as a cheap check; `db.execute` returns `{ rows }` as cast; the `drain()` closure emits well-formed JSON on every path including truncated-mid-messages; `deleteMemberData.bind(null, contactId)` types correctly against React 19 `useActionState`; the privilege-boundary amendment is sound and `platform.ts` imports nothing restricted; the `beforeEach` schema drop/recreate works against the module-level PGlite client; and Task 14's git recovery of the v0 body is byte-exact.
 
 **Still unverifiable from here,** unchanged from the spec: `neon-http` return shapes for booleans and timestamps (only PGlite is exercisable), whether `maxDuration = 60` is honoured on the plan in force, whether Vercel Cron issues a GET with a Bearer header, and the query plans.
+
+---
+
+## Revision 2 — two defects closed (2026-08-11)
+
+Two things Revision 1 left standing. Both were known and written down honestly; writing them down is not the same as closing them.
+
+**D-1 — neither export route had backpressure.** Both `src/app/api/dados/[contactId]/route.ts` (Task 10) and `src/app/api/dados/oracoes-expirando/route.ts` (Task 11) built their `ReadableStream` from `start()` and enqueued every chunk in a loop that never consulted `controller.desiredSize`. Nothing in a `ReadableStream` throttles that: the queue grows until the consumer drains it, so peak memory was `ROW_CEILING` (50 000) × an unbounded `message.body`, not `PAGE_SIZE` (1 000). Revision 1 closed the *claim* and deferred the *fix* on the grounds that `ROW_CEILING` already caps it — but a 50 000-row cap on rows whose bodies have no cap is not a memory bound, it is a row bound wearing one's coat, and the member it fails on is exactly the member the ceiling exists for.
+
+**Closed** by moving both routes to `pull()`, with an explicit `new CountQueuingStrategy({ highWaterMark: 1 })` so the bound is stated rather than inherited. What is resident is now one page of rows plus one serialised row.
+
+The restructuring's real hazard is not the queue, it is **`first`** — the comma flag, which was a local of `start()` and now has to survive suspension between pulls. The answer is an **async generator**: the suspended frame *is* the cross-call state, so `first`, `after` and `emitted` stay inside the loop that owns them, the drain loop is otherwise unchanged, and `yield` is the only new statement in it. A hand-rolled state machine would have hoisted all three into the seam between two pulls — the one place a test reaches last, and the only place `[,{…}]` or `[{…}{…}]` can be born. Two further details carry weight: the separator now travels in the **same chunk** as the row it precedes (two chunks would admit a state where the comma was enqueued and its row was not, closing the array on a trailing comma), and `']'` is still emitted on **every** exit from each collection — completion, ceiling and budget alike.
+
+**Tests.** Each route gains a `backpressure` describe with two cases, and Task 11's route — which had no behavioural test at all — gains `tests/expiring-prayers-route.test.ts` (7 tests, added as Step 6b after the constant it imports). The discriminating one is *"does not produce the document ahead of the consumer"*: it reads a single chunk, crosses a macrotask boundary, and asserts the loader has been called at most once. Measured against the `start()` version that is **50** calls — an eager producer awaiting only already-resolved promises is a pure microtask chain, and the microtask queue drains completely before the first `setTimeout` fires, so the assertion is deterministic rather than a race. The second case reads the whole document one chunk at a time across three page boundaries and asserts the text contains neither `[,` nor `}{` before parsing it.
+
+**What that pair does NOT prove, stated rather than implied:** it proves the producer is demand-driven, which is the property that changes the memory bound. It does not measure bytes resident in the queue — `ReadableStream` exposes `desiredSize` to the producer and nothing to a test — so the queue bound rests on the explicit `highWaterMark` and on the `pull()` loop honouring `desiredSize`, both read in review, neither asserted. Dressing the call-count assertion up as a memory assertion would have been the C11 failure in a test file.
+
+**D-2 — two unguarded driver return shapes.** `neon-http` and PGlite disagree about scalars, which is why `src/lib/repo/platform.ts` carries a `toDate` helper and a comment recording the incident where a `sql<Date>` assertion was false in production and true in every test. Two places in this plan assumed a shape without guarding, and the right failure mode differs in each:
+
+- **`hasPurgeWork` (Task 7)** read `rows[0]?.work === true`. Postgres's wire form for a boolean is the text `'t'`/`'f'`, on which `=== true` is false — right by accident — while a truthiness test makes `'f'` true, which is wrong. **Closed** with `interpretWorkFlag(churchId, value)`, which recognises `true`/`false`, `'t'`/`'f'`, `'true'`/`'false'` and `1`/`0`, and **returns `true` for everything else**. The asymmetry is the reasoning and it is in the comment: a wrong `false` means that church is never purged — every night, forever, invisibly — and member data lives past 12 months; a wrong `true` means an all-zero receipt, which is noise a human notices and reports. Only a value positively recognised as "no work" may return false, and the unrecognised branch logs operator-side in English.
+- **`openSubjectErasure` (Task 5)** did `new Date(rows[0].created_at)` with no `NaN` guard, and that value is returned as `recordedAt` and rendered as `Comprovante registrado em {fmt(recordedAt)}` on the confirmation the church reads at the moment a member's data is destroyed. `toLocaleDateString` on an Invalid Date returns the literal string `"Invalid Date"`. **Closed** with `receiptCreatedAt(value, observedAt)`. The fallback is deliberately **not** null — unlike `platform.ts`, where null has a rendering — but the observation time, which is accurate to one round trip and is a true statement about when the receipt was opened, where an em-dash is not. It logs, and it logs the value's *type* and not the value, because the row is about one identified member.
+
+Both guards are exported solely so the shapes can be tested; each has its own describe block, since PGlite is the only driver this suite can exercise and PGlite is the one that gets it right.
+
+**Still unverifiable from here,** unchanged: the actual `neon-http` shapes. That is what the guards are for — they no longer need the answer to be safe, in the direction that matters.
