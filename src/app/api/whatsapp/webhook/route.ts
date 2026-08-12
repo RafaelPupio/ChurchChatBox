@@ -216,7 +216,11 @@ export async function POST(request: NextRequest) {
     // to — an unverified body must never trigger an outbound message.
     // A suspended church must be completely silent — including apologies.
     if (verified && !suspended) {
-      await notifyFailure(verified).catch((e) => console.error('Could not send error message', e));
+      // Wrapped in redactError, same as the handler's own catch above: notifyFailure
+      // wraps a Graph API call DIRECTLY and only runs after something has already
+      // failed, which makes this the likeliest of the module's log sites to carry
+      // Meta's raw response body — and the recipient's number along with it.
+      await notifyFailure(verified).catch((e) => console.error('Could not send error message', redactError(e)));
     }
   }
 
