@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hashPhone } from '@/lib/erasure-hash';
+import { hashPhone, phoneHashCandidates } from '@/lib/erasure-hash';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -60,5 +60,37 @@ describe('hashPhone', () => {
     vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
     expect(hashPhone('')).toBeNull();
     expect(hashPhone('sem números')).toBeNull();
+  });
+});
+
+describe('phoneHashCandidates', () => {
+  it('matches a stored webhook number when the secretary types a local one', () => {
+    // The whole point. Stored: 5511999998888 (Meta's `from`).
+    // Typed:  (11) 99999-8888. Without the 55 variant these never meet.
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    const stored = hashPhone('5511999998888');
+    expect(phoneHashCandidates('(11) 99999-8888')).toContain(stored);
+  });
+
+  it('still matches when the secretary types the full number', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('+55 11 99999-8888')).toContain(hashPhone('5511999998888'));
+  });
+
+  it('covers a 10-digit landline too', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('11 3333-4444')).toContain(hashPhone('551133334444'));
+  });
+
+  it('does not invent a 55 for a number that already has one', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('5511999998888')).toEqual([hashPhone('5511999998888')]);
+  });
+
+  it('returns [] with no secret, and [] for a number with no digits', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('sem números')).toEqual([]);
+    vi.stubEnv('ERASURE_HASH_SECRET', '');
+    expect(phoneHashCandidates('5511999998888')).toEqual([]);
   });
 });

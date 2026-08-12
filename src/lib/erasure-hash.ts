@@ -35,3 +35,37 @@ export function hashPhone(phone: string): string | null {
 
   return createHmac('sha256', secret).update(digits).digest('hex');
 }
+
+/** Every digit-form of a typed number worth testing against a stored hash.
+ *
+ *  Stored numbers come from Meta's `from` field: E.164 without the plus, country
+ *  code always present (5511999998888). Numbers in the verify box come from a
+ *  secretary's keyboard, and "(11) 99999-8888" is the normal way to write one in
+ *  Brazil. hashPhone strips punctuation but cannot invent a country code, so the
+ *  two hash differently and a single-hash lookup reports "not erased" for someone
+ *  who was — a false negative that reads exactly like a clean answer.
+ *
+ *  So: try what was typed, and if it looks like a Brazilian number missing its
+ *  country code, try it with 55 as well. Ordered most-likely-first; the caller
+ *  stops at the first hit.
+ *
+ *  Deliberately NOT a general E.164 parser. This product serves Brazilian churches
+ *  and every stored number begins 55; a library that guessed at forty country
+ *  conventions would add failure modes to buy nothing. It also never STRIPS a
+ *  leading 55, because 55 is also a valid area code prefix in other countries and
+ *  guessing wrong would silently widen a lookup keyed on an audit record.
+ *
+ *  Returns [] when the secret is unset — same reason hashPhone returns null. */
+export function phoneHashCandidates(typed: string): string[] {
+  const digits = typed.replace(/\D+/g, '');
+  if (!digits) return [];
+
+  const forms = [digits];
+  // 10 digits = landline + area code, 11 = mobile with the nono dígito. Either
+  // way, no country code — so the same line stored by the webhook carries 55.
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+    forms.push(`55${digits}`);
+  }
+
+  return forms.map(hashPhone).filter((h): h is string => h !== null);
+}
