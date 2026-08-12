@@ -80,5 +80,26 @@ describe('listErasureSignals', () => {
     // privilege-boundary suite already enforces — no new machinery, just placement.
     const platform = readFileSync(join(process.cwd(), 'src/lib/repo/platform.ts'), 'utf8');
     expect(platform).toMatch(/export\s+async\s+function\s+listErasureSignals\b/);
+
+    // B3: the test name's own second half, previously unchecked. Two modules
+    // exporting the same function name is how an import can silently start
+    // resolving to the wrong one — and worse here, to a copy that skips the
+    // owner-only boundary this function is supposed to live behind.
+    const platformPath = join(process.cwd(), 'src/lib/repo/platform.ts');
+    const srcRoot = join(process.cwd(), 'src');
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.isFile() && /\.tsx?$/.test(entry.name) && full !== platformPath) {
+          const content = readFileSync(full, 'utf8');
+          if (/export\s+(async\s+)?function\s+listErasureSignals\b/.test(content)) offenders.push(full);
+        }
+      }
+    };
+    walk(srcRoot);
+    expect(offenders).toEqual([]);
   });
 });

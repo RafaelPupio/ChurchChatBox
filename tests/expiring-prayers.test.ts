@@ -60,6 +60,36 @@ describe('countExpiringPrayers', () => {
     expect(await countExpiringPrayers(churchA, BEFORE)).toBe(2);
   });
 
+  it('B3: also counts a prayer that has been overdue for months — the predicate is a single upper bound, not a window with a floor', async () => {
+    // The test above is honestly named for its OWN fixture, but read on its own
+    // the name "inside the 30-day window" suggests a bound on both ends. The
+    // actual contract (see countExpiringPrayers' own comment: `createdAt < before`)
+    // has no lower bound at all — deliberately, so a prayer that has been
+    // overdue for the purge for months does not silently drop out of the
+    // warning just because it is even older than "about to expire". A "repair"
+    // that added `createdAt >= before - 30 days` to literally match the other
+    // test's name would make already-expired prayers vanish from the count,
+    // and that other test alone would not catch it — churchA's fixture has no
+    // row old enough to expose the difference.
+    const c = await client.query<{ id: string }>(
+      `insert into church (name,greeting_text,menu_header_text,menu_button_label,fallback_text,
+         unsupported_media_text,error_text,prayer_prompt_text,prayer_thanks_text,handoff_text,handoff_closed_text)
+       values ('Igreja Atrasada','oi','menu','Ver opções','x','y','z','p','q','r','s') returning id`,
+    );
+    const churchId = c.rows[0].id;
+    const ct = await client.query<{ id: string }>(
+      `insert into contact (church_id,phone) values ($1,'5533333333333') returning id`,
+      [churchId],
+    );
+    // Years before BEFORE, let alone BEFORE minus 30 days.
+    await client.query(
+      `insert into prayer_request (church_id,contact_id,text,created_at) values
+        ($1,$2,'muito antigo','2019-01-01T00:00:00Z')`,
+      [churchId, ct.rows[0].id],
+    );
+    expect(await countExpiringPrayers(churchId, BEFORE)).toBe(1);
+  });
+
   it('is church-scoped', async () => {
     // Each church has its own two; neither sees four.
     expect(await countExpiringPrayers(churchB, BEFORE)).toBe(2);
