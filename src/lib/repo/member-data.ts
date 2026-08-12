@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gt, or, type AnyColumn } from 'drizzle-orm';
+import { and, asc, count, eq, gt, or, sql, type AnyColumn } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { contact, message, prayerRequest } from '@/db/schema';
 import type { ExportMessageRow, ExportPrayerRow } from '@/lib/member-export';
@@ -47,24 +47,28 @@ export interface MemberCounts {
   prayersNovo: number;
 }
 
+/** Three round trips collapsed to two. Over neon-http each is its own HTTPS
+ *  request (~177ms measured in this project), and this runs on both the
+ *  delete-confirmation screen and the member data page — every extra
+ *  round-trip here is paid twice. The two prayer counts (`total` and `novo`)
+ *  are ONE query, via `filter`, because they scan the same rows; the message
+ *  count is unrelated data and stays a separate query, run alongside the
+ *  prayer query with Promise.all rather than after it. */
 export async function countMemberRows(churchId: string, contactId: string): Promise<MemberCounts> {
-  const [m] = await db
-    .select({ n: count() })
-    .from(message)
-    .where(and(eq(message.churchId, churchId), eq(message.contactId, contactId)));
-  const [p] = await db
-    .select({ n: count() })
-    .from(prayerRequest)
-    .where(and(eq(prayerRequest.churchId, churchId), eq(prayerRequest.contactId, contactId)));
-  const [pn] = await db
-    .select({ n: count() })
-    .from(prayerRequest)
-    .where(and(
-      eq(prayerRequest.churchId, churchId),
-      eq(prayerRequest.contactId, contactId),
-      eq(prayerRequest.status, 'novo'),
-    ));
-  return { messages: m?.n ?? 0, prayers: p?.n ?? 0, prayersNovo: pn?.n ?? 0 };
+  const [[m], [p]] = await Promise.all([
+    db
+      .select({ n: count() })
+      .from(message)
+      .where(and(eq(message.churchId, churchId), eq(message.contactId, contactId))),
+    db
+      .select({
+        total: count(),
+        novo: sql<number>`count(*) filter (where ${prayerRequest.status} = 'novo')`.mapWith(Number),
+      })
+      .from(prayerRequest)
+      .where(and(eq(prayerRequest.churchId, churchId), eq(prayerRequest.contactId, contactId))),
+  ]);
+  return { messages: m?.n ?? 0, prayers: p?.total ?? 0, prayersNovo: p?.novo ?? 0 };
 }
 
 /** A position in a keyset page: the last row handed out. */
