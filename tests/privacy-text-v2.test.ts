@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PRIVACY_ITEM, PRIVACY_ITEM_PREVIOUS_BODIES } from '@/lib/church-defaults';
+import { RETENTION_NOTE } from '@/lib/member-export';
 import { CHURCH_TEXT_MAX } from '@/lib/validation';
 
 describe('the Privacidade text v2', () => {
@@ -13,6 +14,26 @@ describe('the Privacidade text v2', () => {
 
   it('promises the 12-month purge for conversations AND prayer requests', () => {
     expect(body).toContain('as conversas e os pedidos de oração são apagados automaticamente após 12 meses');
+  });
+
+  it('C7: carries the SAME retention promise as the member export (RETENTION_NOTE), not just a similar one', () => {
+    // RETENTION_NOTE (src/lib/member-export.ts) and this bodyText are the same
+    // promise made twice — to the bot's own notice, and to the member's export
+    // file. They must agree word for word or a member could read one and the
+    // other and see two different answers to "how long do you keep this".
+    // Sourcing the expectation from RETENTION_NOTE itself (rather than a second
+    // hardcoded literal, like the test above) is what makes this test actually
+    // fail if RETENTION_NOTE changes without bodyText changing too — the
+    // reviewer's mutation (dropping prayer requests from RETENTION_NOTE) left
+    // 33/33 of this file's tests passing precisely because none of them read
+    // RETENTION_NOTE at all.
+    //
+    // Case only: RETENTION_NOTE stands alone as its own sentence in the export
+    // footer ("As conversas..."), while this bodyText embeds the same sentence
+    // after "*Por quanto tempo:*" ("as conversas...") — a capitalisation
+    // difference from where each sits, not a wording difference.
+    const embedded = RETENTION_NOTE.charAt(0).toLowerCase() + RETENTION_NOTE.slice(1);
+    expect(body).toContain(embedded);
   });
 
   it('states that deletion does not block future contact', () => {
