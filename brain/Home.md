@@ -3,9 +3,10 @@
 The project's second brain. **Start here.** Every note is small on purpose — read only what the task needs.
 
 ## Quick status
-- **Stage:** everything is merged to `main` — bot core, admin panel, and the multi-church SaaS conversion (PR #9) — **212 tests green**. Stripe billing, nota fiscal and LGPD tooling are **specced and ready to plan**, none built. See [[Launch Roadmap]]
+- **Stage:** everything is merged to `main` — bot core, admin panel, the multi-church SaaS conversion, and **LGPD Art. 18 data-subject tooling** — **978 tests green**. Stripe billing and nota fiscal remain **specced and ready to plan**, neither built. See [[Launch Roadmap]]
 - **What it is:** a WhatsApp automated secretary **sold to churches**, answering in **Brazilian Portuguese** from each church's own number, with a pt-BR panel where staff edit everything the bot says — and a separate vendor console at `/owner` where Rafael provisions churches, holds their Meta credentials, and suspends non-payers. See [[Multi-Tenancy]].
 - **Next milestone:** Rafael creates a Meta app + test number → the bot's first *successful* outbound message. Everything inbound already works against live Neon.
+- **⚠ Deploy owes a promise (2026-08-12):** the 🔒 Privacidade notice now tells members their data is deleted after 12 months. That is true **only where the nightly cron runs** — `vercel.json` schedules it, but a merge does not deploy it. Ship the deploy, then confirm the cron is registered and `CRON_SECRET` is set. Until then the promise is live and the mechanism is not. See [[Launch Checklist]].
 - **✅ Running against real infrastructure** (2026-08-08): migrations applied to Neon, a church provisioned, both consoles driven in a browser, the privilege boundary verified live, and the webhook exercised end-to-end — forged signatures rejected, tenant routing correct, dedupe holding. **What has never succeeded once: an outbound message.** That needs a Meta app. Full breakdown in [[Whats Left]].
 - **Cost target:** R$ 0/month at this scale (Vercel + Neon + Blob free tiers; Meta is free for user-initiated chats)
 

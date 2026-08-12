@@ -70,7 +70,10 @@ describe('provisionChurch', () => {
       const items = await db.select().from(menuItem).where(eq(menuItem.churchId, churchId));
       expect(items).toHaveLength(1);
       expect(items[0].label).toContain('Privacidade');
-      expect(items[0].bodyText).toContain('LGPD');
+      // Was toContain('LGPD'). v2 deliberately never names the statute — a member
+      // reads "tratados de acordo com a LGPD" as "this is compliant", which the bot
+      // must never claim. Assert the item is the privacy notice, not that it cites a law.
+      expect(items[0].bodyText).toContain('Privacidade e seus dados');
     }
   });
 

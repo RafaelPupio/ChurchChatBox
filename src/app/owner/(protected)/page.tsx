@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireOwnerSession } from '@/lib/auth/owner-session';
-import { listChurches } from '@/lib/repo/platform';
+import { listChurches, listErasureSignals } from '@/lib/repo/platform';
 import { effectiveStatus } from '@/lib/church-status';
 import { timeAgo } from '@/lib/relative-time';
 import { MigrationDriftAlert } from './MigrationDriftAlert';
@@ -34,6 +34,14 @@ export default async function OwnerChurchesPage() {
   } catch (error) {
     console.error('[owner] church list failed — rendering the alarms alone:', error);
     listFailed = true;
+  }
+  // Same defensive pattern as the church list above: a failure here must not take
+  // down the console, which is also where migration-drift alarms surface.
+  let signals: Awaited<ReturnType<typeof listErasureSignals>> = [];
+  try {
+    signals = await listErasureSignals(100);
+  } catch (error) {
+    console.error('[owner] erasure signal list failed — rendering the rest:', error);
   }
   const now = new Date();
 
@@ -89,6 +97,33 @@ export default async function OwnerChurchesPage() {
           </Link>
         );
       })}
+
+      <section className="card">
+        <h2>Exclusões recentes</h2>
+        <p className="hint">
+          Toda exclusão de dados feita por uma igreja aparece aqui, inclusive quando a assinatura
+          está suspensa. Esta lista não mostra de quem eram os dados.
+        </p>
+        {signals.length === 0 ? (
+          <p className="hint">Nenhuma exclusão registrada.</p>
+        ) : (
+          <ul>
+            {/* Index key, deliberately: the projection excludes erasure_record.id
+                (it is not needed for "an erasure occurred and for which church"),
+                so there is no unique value available — two erasures in one church
+                in the same millisecond would collide on any composite key. */}
+            {signals.map((s, i) => (
+              <li key={i} className="grow">
+                {s.createdAt.toLocaleDateString('pt-BR')} · {s.churchName} ·{' '}
+                {s.reason === 'retention' ? 'Limpeza automática (12 meses)' : 'Pedido do titular'} ·{' '}
+                {s.messagesDeleted} mensagens, {s.prayersDeleted} pedidos de oração,{' '}
+                {s.contactsDeleted} cadastros
+                {s.status === 'pending' ? ' · pendente' : ''}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

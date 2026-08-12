@@ -8,3 +8,6 @@ node_modules/
 /.obsidian/
 *.tsbuildinfo
 next-env.d.ts
+
+# Ephemeral git worktrees used by review subagents.
+.claude/worktrees/

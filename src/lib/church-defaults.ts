@@ -25,21 +25,21 @@ export const CHURCH_DEFAULTS = {
   courtesyText: 'Amém! 🙏 Que Deus abençoe você.',
 };
 
-/** The one menu item every church starts with. LGPD Art. 9 gives members the
- *  right to clear information about how their data is used, so transparency is a
- *  compliance mechanism rather than optional content.
+/** Every body this item has ever been SEEDED with, frozen.
  *
- *  It states data is handled IN ACCORDANCE WITH the LGPD — a statement about
- *  practice. It deliberately does not claim "this app is compliant", which is a
- *  legal representation software cannot guarantee.
+ *  PRIVACY_ITEM is a seed: each church holds its own editable menu_item row, so
+ *  changing the constant updates nobody. The owner console's rollout button
+ *  rewrites a church's row ONLY when its current body is byte-identical to one of
+ *  these — which is the mechanism for "the vendor may replace vendor-authored
+ *  text, never the controller's own words".
  *
- *  It also does not promise an automated deletion command: that flow is the
- *  later LGPD plan. Until it exists, members are directed to the church. */
-export const PRIVACY_ITEM = {
-  position: 1,
-  label: '🔒 Privacidade',
-  kind: 'content' as const,
-  bodyText: [
+ *  Never edit an entry here. Append when PRIVACY_ITEM.bodyText changes, and move
+ *  the outgoing body in. A church still carrying an older default is otherwise
+ *  invisible to the rollout and would be left on text the product no longer
+ *  honours. */
+export const PRIVACY_ITEM_PREVIOUS_BODIES: readonly string[] = [
+  // v0 — promised a 12-month purge before anything deleted anything.
+  [
     '*Privacidade e seus dados*',
     '',
     'Seus dados são tratados de acordo com a LGPD (Lei nº 13.709/2018).',
@@ -48,16 +48,59 @@ export const PRIVACY_ITEM = {
     '',
     '*Por quê:* para responder às suas dúvidas e atender aos seus pedidos.',
     '',
-    // Deliberately NOT "apagadas após 12 meses" until the retention purge exists.
-    // That sentence shipped before anything deleted anything, which made the one
-    // menu item whose whole job is telling members the truth about their data the
-    // one place the product lied. A promise you do not keep is worse under LGPD
-    // than one you never made. Restore the 12-month wording in the same commit
-    // that ships the purge — see docs/superpowers/specs/2026-08-07-lgpd-data-subject-tooling.md
+    '*Por quanto tempo:* as conversas são apagadas após 12 meses.',
+    '',
+    '*Seus direitos:* você pode pedir acesso, correção ou exclusão dos seus dados a qualquer momento. Para isso, entre em contato com a secretaria da igreja.',
+    '',
+    '_Edite este texto no painel._',
+  ].join('\n'),
+  // v1 — the promise withdrawn, because no purge existed yet.
+  [
+    '*Privacidade e seus dados*',
+    '',
+    'Seus dados são tratados de acordo com a LGPD (Lei nº 13.709/2018).',
+    '',
+    '*O que guardamos:* seu número de WhatsApp, as mensagens desta conversa e, se você enviar, seu pedido de oração.',
+    '',
+    '*Por quê:* para responder às suas dúvidas e atender aos seus pedidos.',
+    '',
     '*Por quanto tempo:* enquanto a igreja precisar deles para te atender. Você pode pedir a exclusão a qualquer momento.',
     '',
     '*Seus direitos:* você pode pedir acesso, correção ou exclusão dos seus dados a qualquer momento. Para isso, entre em contato com a secretaria da igreja.',
     '',
     '_Edite este texto no painel._',
+  ].join('\n'),
+];
+
+/** The one menu item every church starts with.
+ *
+ *  v2. The statute is deliberately NOT named: "tratados de acordo com a LGPD"
+ *  reads as "this is compliant" to a member of a church in the interior of Minas
+ *  reading it on a phone, and the binding rule is that the bot never claims
+ *  compliance. The rights are described in plain language instead, and backed by
+ *  a real button in the panel — which is more use to a member than a law's number.
+ *
+ *  The retention sentence is only true because the nightly purge exists. If that
+ *  job is ever removed, this sentence comes out in the SAME commit. */
+export const PRIVACY_ITEM = {
+  position: 1,
+  label: '🔒 Privacidade',
+  kind: 'content' as const,
+  bodyText: [
+    '*Privacidade e seus dados*',
+    '',
+    'Abaixo está o que a igreja guarda sobre você, por quê, por quanto tempo e com quem isso é compartilhado.',
+    '',
+    '*O que guardamos:* seu número de WhatsApp, seu nome no WhatsApp, as mensagens desta conversa e, se você enviar, seu pedido de oração.',
+    '',
+    '*Por quê:* para responder às suas dúvidas e atender aos seus pedidos.',
+    '',
+    '*Por quanto tempo:* as conversas e os pedidos de oração são apagados automaticamente após 12 meses.',
+    '',
+    '*Com quem compartilhamos:* apenas com os serviços que fazem este atendimento funcionar — o WhatsApp (Meta) e as empresas que hospedam nosso sistema. Não vendemos nem cedemos seus dados.',
+    '',
+    '*Seus direitos:* você pode pedir a qualquer momento uma cópia dos seus dados, a correção do seu nome ou a exclusão de tudo. Fale com a secretaria da igreja.',
+    '',
+    'A conversa também fica no seu aparelho e nos servidores do WhatsApp, fora do nosso controle. E se você escrever de novo depois da exclusão, um novo histórico começa.',
   ].join('\n'),
 };

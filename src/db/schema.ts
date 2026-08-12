@@ -1,6 +1,9 @@
 import {
   boolean, index, integer, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
+// New: the partial-index predicate and the coalesce() expression index below are
+// raw SQL fragments. This file imported nothing from 'drizzle-orm' before.
+import { sql } from 'drizzle-orm';
 // Relative, not the '@/…' alias: drizzle-kit bundles this file outside Next's
 // tsconfig path resolution. The module it reaches is data only, no imports.
 import { CHURCH_DEFAULTS } from '../lib/church-defaults';
@@ -54,6 +57,12 @@ export const church = pgTable('church', {
    *  and only for rows a church has not edited, since this column is theirs.
    *  It stays editable either way: Configurações writes it. */
   courtesyText: text('courtesy_text').notNull().default(CHURCH_DEFAULTS.courtesyText),
+  /** Round-robin cursor for the cross-church retention purge. SYSTEM STATE: never
+   *  rendered to a church, never editable in either panel, never seeded. Lives on
+   *  `church` rather than in its own table so it disappears with the church for
+   *  free. NULL means "never purged", which sorts first — see
+   *  listChurchIdsForPurge's `NULLS FIRST`. */
+  retentionPurgedAt: timestamp('retention_purged_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   // Both nullable, both unique. Postgres allows many NULLs under a unique index,
@@ -95,6 +104,11 @@ export const contact = pgTable('contact', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   churchPhoneUq: uniqueIndex('contact_church_phone_uq').on(t.churchId, t.phone),
+  // An EXPRESSION index, deliberately NOT ('church_id','last_inbound_at'). The idle
+  // predicate is coalesce(last_inbound_at, created_at) < $cutoff, and a plain column
+  // index is not sargable against a coalesce() over two columns.
+  churchIdleIdx: index('contact_church_idle_idx')
+    .on(t.churchId, sql`coalesce(${t.lastInboundAt}, ${t.createdAt})`),
 }));
 
 export const message = pgTable('message', {
@@ -109,6 +123,13 @@ export const message = pgTable('message', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   waMessageIdUq: uniqueIndex('message_wa_message_id_uq').on(t.waMessageId),
+  // The purge's age arm: church_id = $1 AND created_at < $cutoff.
+  churchCreatedIdx: index('message_church_created_idx').on(t.churchId, t.createdAt),
+  // ONE index serving TWO predicates: the purge's church-scoped NOT EXISTS guard
+  // (leading pair) and the export's keyset page, whose ORDER BY is (created_at, id)
+  // within one contact (all four columns). Two narrower indexes would be one more
+  // than the work needs.
+  contactKeysetIdx: index('message_contact_keyset_idx').on(t.churchId, t.contactId, t.createdAt, t.id),
 }));
 
 export const prayerRequest = pgTable('prayer_request', {
@@ -118,7 +139,12 @@ export const prayerRequest = pgTable('prayer_request', {
   text: text('text').notNull(),
   status: prayerStatusEnum('status').notNull().default('novo'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // Serves the purge's age arm AND the 30-day expiring-prayers warning and export,
+  // which are the same predicate at two different cutoffs.
+  churchCreatedIdx: index('prayer_request_church_created_idx').on(t.churchId, t.createdAt),
+  contactKeysetIdx: index('prayer_request_contact_keyset_idx').on(t.churchId, t.contactId, t.createdAt, t.id),
+}));
 
 // Created now so the admin-panel plan needs no second migration.
 export const adminUser = pgTable('admin_user', {
@@ -234,4 +260,53 @@ export const webhookFailure = pgTable('webhook_failure', {
   churchReasonUq: unique('webhook_failure_church_reason_uq').on(t.churchId, t.reason).nullsNotDistinct(),
   // The owner console only ever asks "what failed recently", ordered by recency.
   lastSeenIdx: index('webhook_failure_last_seen_idx').on(t.lastSeenAt),
+}));
+
+export const erasureReasonEnum = pgEnum('erasure_reason', ['subject_request', 'retention']);
+export const erasureStatusEnum = pgEnum('erasure_status', ['pending', 'done']);
+
+/** Proof that a deletion happened, which is never a copy of what was deleted.
+ *
+ *  Two kinds of row share this table. A `subject_request` row is one member's
+ *  Art. 18 VI erasure, performed by a named secretary. A `retention` row is one
+ *  church's slice of one nightly purge. Both are written `pending` BEFORE any
+ *  delete and flipped to `done` after, so the dangerous direction — a receipt
+ *  asserting a deletion over data that still exists — is impossible by ordering
+ *  rather than prevented by care.
+ *
+ *  Holds no phone, no name and no body text. If someone with database access
+ *  wants to know WHO was erased they need ERASURE_HASH_SECRET and a candidate
+ *  number to test: a guessing game, not a list. */
+export const erasureRecord = pgTable('erasure_record', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  churchId: uuid('church_id').notNull().references(() => church.id, { onDelete: 'cascade' }),
+  reason: erasureReasonEnum('reason').notNull(),
+  status: erasureStatusEnum('status').notNull().default('pending'),
+  /** Deliberately NOT a foreign key to contact. An FK would cascade this proof
+   *  away together with the very row it exists to prove was deleted. Kept so the
+   *  pending→done resume can find its target and so the partial unique index has
+   *  something to key on; after the delete it is a random UUID correlating to
+   *  nothing without a copy of the old database. */
+  subjectContactId: uuid('subject_contact_id'),
+  subjectPhoneHash: text('subject_phone_hash'),
+  /** A text SNAPSHOT, not a reference to admin_user. An FK with ON DELETE SET NULL
+   *  would erase the actor from the audit trail the day that secretary leaves the
+   *  church — precisely when the record matters. */
+  performedByEmail: text('performed_by_email'),
+  messagesDeleted: integer('messages_deleted').notNull().default(0),
+  prayersDeleted: integer('prayers_deleted').notNull().default(0),
+  contactsDeleted: integer('contacts_deleted').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (t) => ({
+  churchCreatedIdx: index('erasure_record_church_created_idx').on(t.churchId, t.createdAt),
+  phoneHashIdx: index('erasure_record_phone_hash_idx').on(t.churchId, t.subjectPhoneHash),
+  /** THE guard that makes a double-click harmless: one subject-request receipt per
+   *  contact, enforced by Postgres rather than by a read-then-write pre-check that
+   *  would be TOCTOU. PARTIAL, so retention rows (subject_contact_id IS NULL) are
+   *  unaffected — and a total unique index would have allowed unlimited NULLs
+   *  anyway, i.e. enforced nothing where it matters. */
+  subjectUq: uniqueIndex('erasure_record_subject_uq')
+    .on(t.churchId, t.subjectContactId)
+    .where(sql`${t.reason} = 'subject_request'`),
 }));

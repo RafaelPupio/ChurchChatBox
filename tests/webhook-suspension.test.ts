@@ -23,6 +23,10 @@ const h = vi.hoisted(() => ({
    *  API failure, which is the non-suspension half of both bugs: a greeting or a
    *  prayer confirmation that never leaves must not be recorded as delivered. */
   throwOnNextSend: false,
+  /** Set to make the next sendText throw this instead of recording. sendText is
+   *  what notifyFailure calls for the apology — this models the apology's OWN
+   *  Graph API call also failing, the scenario Finding A5 targets. */
+  throwOnNextNotify: null as Error | null,
 }));
 
 vi.mock('@/db/client', async () => {
@@ -46,6 +50,11 @@ vi.mock('@/lib/whatsapp', async (importOriginal) => {
       h.sent.push({ kind: 'reply', to, reply });
     },
     sendText: async (_c: unknown, to: string) => {
+      if (h.throwOnNextNotify) {
+        const err = h.throwOnNextNotify;
+        h.throwOnNextNotify = null;
+        throw err;
+      }
       h.sent.push({ kind: 'text', to });
     },
   };
@@ -204,6 +213,7 @@ beforeAll(async () => {
 beforeEach(() => {
   h.sent.length = 0;
   h.throwOnNextSend = false;
+  h.throwOnNextNotify = null;
 });
 
 describe('webhook suspension gate', () => {
@@ -339,6 +349,36 @@ describe('suspension records everything it cannot send', () => {
     h.sent.length = 0;
     await post(payload('wamid.falha.2', 'oi', phone));
     expect(h.sent[0].reply?.bodyText).toBe('Olá!');
+  });
+
+  it('redacts a phone number out of a failed apology instead of logging it raw', async () => {
+    // Finding A5: notifyFailure's own .catch used to log the caught error
+    // straight to console.error. sendText (which notifyFailure calls) wraps a
+    // Graph API call DIRECTLY, and Meta's error bodies are documented to carry
+    // request context — the recipient's number is plausibly in it. This forces
+    // BOTH the original reply (reaching the outer catch, with `verified`
+    // already set) AND the apology itself to fail, so the .catch at
+    // "Could not send error message" actually fires.
+    const phone = freshPhone();
+    await setStatus('active', null);
+
+    h.throwOnNextSend = true;
+    h.throwOnNextNotify = new Error(`Graph API 400: recipient ${phone} is not opted in`);
+
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await post(payload('wamid.apologia-falha.1', 'oi', phone));
+      expect(response.status).toBe(200);
+
+      const call = errSpy.mock.calls.find(([msg]) => msg === 'Could not send error message');
+      expect(call, 'the apology-failure log line must have fired').toBeDefined();
+      // Not the raw Error object (whose message/stack carries the phone number
+      // verbatim) — the redacted string in its place.
+      expect(String(call![1])).not.toContain(phone);
+      expect(String(call![1])).toContain('+55…XX');
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 
   it('greets a member whose first message was a menu tap, on their next message', async () => {

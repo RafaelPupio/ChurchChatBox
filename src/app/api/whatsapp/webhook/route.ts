@@ -10,6 +10,7 @@ import { recordInboundMessage, recordOutboundMessage } from '@/lib/repo/message'
 import { recordWebhookFailure } from '@/lib/repo/webhook-failure';
 import { savePrayerRequest } from '@/lib/repo/prayer';
 import { effectiveStatus } from '@/lib/church-status';
+import { redactError } from '@/lib/redact';
 
 /** Meta's webhook verification handshake. */
 export async function GET(request: NextRequest) {
@@ -178,7 +179,14 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     // Fail toward the human, never toward silence.
-    console.error('Webhook processing failed', error);
+    //
+    // Wrapped in redactError, not logged raw: whatsapp.ts's Graph API errors carry
+    // Meta's raw response body, and that body is DOCUMENTED to include request
+    // context — the recipient's number is plausibly in it. This is defence in
+    // depth, not a fix for a confirmed leak (no Meta app exists in this repo to
+    // have produced one), and it stringifies the Error to do it — see redact.ts
+    // for the trade-off that accepts.
+    console.error('Webhook processing failed', redactError(error));
 
     // console.error goes to a log nobody is watching at 09:00 on a Sunday. THIS
     // is what makes the failure visible: one row, aggregated by (church, reason),
@@ -208,7 +216,11 @@ export async function POST(request: NextRequest) {
     // to — an unverified body must never trigger an outbound message.
     // A suspended church must be completely silent — including apologies.
     if (verified && !suspended) {
-      await notifyFailure(verified).catch((e) => console.error('Could not send error message', e));
+      // Wrapped in redactError, same as the handler's own catch above: notifyFailure
+      // wraps a Graph API call DIRECTLY and only runs after something has already
+      // failed, which makes this the likeliest of the module's log sites to carry
+      // Meta's raw response body — and the recipient's number along with it.
+      await notifyFailure(verified).catch((e) => console.error('Could not send error message', redactError(e)));
     }
   }
 

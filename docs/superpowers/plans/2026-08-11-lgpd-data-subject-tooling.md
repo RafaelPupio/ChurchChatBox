@@ -354,8 +354,17 @@ describe('erasure_record schema', () => {
   });
 
   it('REJECTS a second subject_request receipt for the same contact', async () => {
-    // This is the double-click guard, at the schema level. If drizzle-kit dropped
-    // the partial predicate this insert succeeds and the test fails here.
+    // Proves the double-click guard's BEHAVIOUR: one receipt per contact, enforced
+    // by the database rather than by an application pre-check.
+    //
+    // ⚠ It does NOT discriminate a partial index from a total one, and an earlier
+    // draft of this plan claimed it did. Two reasons, both verified by stripping
+    // the WHERE clause and re-running: subject_contact_id is always NON-NULL on
+    // subject_request rows, so a total unique index rejects the duplicate
+    // identically; and it is always NULL on retention rows, where Postgres treats
+    // every NULL as distinct, so a total index permits unlimited retention rows for
+    // a reason unrelated to the predicate. The predicate is pinned by the two tests
+    // at the end of this file instead.
     await expect(
       client.query(
         `insert into erasure_record (church_id,reason,status,subject_contact_id)
@@ -433,13 +442,58 @@ describe('the indexes the purge and export predicates need', () => {
 });
 ```
 
+- [ ] **Step 7b: Add the two tests that actually pin the partial predicate**
+
+The `REJECTS a second subject_request receipt` test above proves the guard's behaviour but **cannot** detect a dropped `WHERE` clause. Append these to `tests/erasure-schema.test.ts`:
+
+```ts
+  it('the subject_uq index carries the partial WHERE predicate, not just the columns', async () => {
+    // The schema-shape half. Mirrors the coalesce assertion below, so both
+    // hand-check shapes from Step 6 are pinned the same way.
+    const idx = await client.query<{ indexdef: string }>(
+      `select indexdef from pg_indexes where indexname = 'erasure_record_subject_uq'`,
+    );
+    const def = idx.rows[0].indexdef.toLowerCase();
+    expect(def).toContain('where');
+    expect(def).toContain('subject_request');
+  });
+
+  it('two retention rows may share a subject_contact_id — only a PARTIAL index allows it', async () => {
+    // The behavioural half, and the one that fails loudest. These rows sit OUTSIDE
+    // a partial index keyed on reason = 'subject_request', so both insert. Under a
+    // total unique index on (church_id, subject_contact_id) the second is rejected.
+    // The application never writes this shape; the test exists so that a future
+    // writer who does is not silently blocked by an index that lost its predicate.
+    const ct = await client.query<{ id: string }>(
+      `insert into contact (church_id,phone) values ($1,'5511911111111') returning id`,
+      [churchId],
+    );
+    for (let i = 0; i < 2; i += 1) {
+      await client.query(
+        `insert into erasure_record (church_id,reason,status,subject_contact_id)
+         values ($1,'retention','done',$2)`,
+        [churchId, ct.rows[0].id],
+      );
+    }
+    const rows = await client.query<{ n: string }>(
+      `select count(*) as n from erasure_record where subject_contact_id = $1 and reason = 'retention'`,
+      [ct.rows[0].id],
+    );
+    expect(Number(rows.rows[0].n)).toBe(2);
+  });
+```
+
+**Verify these discriminate, rather than assuming it.** Strip the `WHERE … = 'subject_request'` from the generated migration, run `npx vitest run tests/erasure-schema.test.ts`, and confirm **these two fail while the other six pass**. Then `git checkout drizzle/` to restore the file byte-identically and re-run. A test you have not seen fail is not a regression test.
+
 - [ ] **Step 8: Run the test and watch it fail if the migration is wrong**
 
 ```bash
 npx vitest run tests/erasure-schema.test.ts
 ```
 
-Expected: PASS if steps 1–6 were done correctly. If `REJECTS a second subject_request receipt` fails, the partial predicate was dropped — go back to step 6.1. If `the idle one is over the coalesce EXPRESSION` fails, go back to step 6.2.
+Expected: PASS. If `the subject_uq index carries the partial WHERE predicate` or `two retention rows may share a subject_contact_id` fails, the partial predicate was dropped — go back to step 6.1. If `the idle one is over the coalesce EXPRESSION` fails, go back to step 6.2.
+
+⚠ **`REJECTS a second subject_request receipt` is NOT the predicate's regression test**, despite reading like one. It passes with the `WHERE` clause stripped — see the comment on that test. The two tests added in Step 7b are what actually fail when the predicate goes.
 
 - [ ] **Step 9: Run the full suite — the migration touches every PGlite test**
 
@@ -1190,7 +1244,15 @@ describe('pageMessages', () => {
       { createdAt: first[1].createdAt, id: first[1].id },
       2,
     );
-    expect(second.map((m) => m.body)).toEqual(['terceira', 'empate A']);
+    // 'terceira' has a createdAt strictly between 'segunda' and the tied pair, so
+    // it is always next regardless of id. Which of 'empate A' / 'empate B' follows
+    // it depends on their id — gen_random_uuid(), NOT insertion order — so
+    // asserting a specific label pins the test to a coin flip rather than to the
+    // paging contract. Measured flaky 4/5 before this was corrected.
+    expect(second[0].body).toBe('terceira');
+    expect(second[1].body).toMatch(/^empate /);
+    const firstIds = first.map((m) => m.id);
+    expect(second.map((m) => m.id)).not.toEqual(expect.arrayContaining(firstIds));
   });
 
   it('splits rows that share a created_at to the millisecond', async () => {
@@ -1206,7 +1268,11 @@ describe('pageMessages', () => {
       { createdAt: tied[0].createdAt, id: tied[0].id },
       100,
     );
-    expect(afterFirstTie.map((m) => m.body)).toEqual(['empate B']);
+    // Exactly the OTHER tied row: not zero (a `>` on created_at alone would skip
+    // it), not both again (a `>=` alone would re-export tied[0]). Which literal
+    // label that is depends on the pair's random ids, so build the expectation from
+    // the query's own first tied row.
+    expect(afterFirstTie.map((m) => m.body)).toEqual([tied[1].body]);
   });
 
   it('returns the rows the export builder needs and nothing extra', async () => {
@@ -1262,7 +1328,7 @@ Expected: FAIL — `Failed to resolve import "@/lib/repo/member-data"`.
 - [ ] **Step 3: Write `src/lib/repo/member-data.ts`**
 
 ```ts
-import { and, asc, count, eq, gt, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, or, type AnyColumn } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { contact, message, prayerRequest } from '@/db/schema';
 import type { ExportMessageRow, ExportPrayerRow } from '@/lib/member-export';
@@ -1345,9 +1411,12 @@ export interface Cursor {
  *
  *  Covered by message_contact_keyset_idx (church_id, contact_id, created_at, id) —
  *  exactly these four columns, in this order. */
+// Typed STRUCTURALLY, not as `typeof message.createdAt`. Pinning to message's own
+// columns makes this helper reject prayerRequest's, which is a real tsc error — the
+// helper serves both tables.
 function keysetAfter(
-  createdAtCol: typeof message.createdAt,
-  idCol: typeof message.id,
+  createdAtCol: AnyColumn<{ data: Date }>,
+  idCol: AnyColumn<{ data: string }>,
   after: Cursor | null,
 ) {
   if (!after) return undefined;
@@ -1459,7 +1528,7 @@ import {
 } from '@/lib/repo/member-data';
 ```
 
-And append this describe block at the end of the file:
+**⚠ Place this block BEFORE the existing test that inserts a deliberately mis-paired `prayer_request` row** (`church_id = A`, `contact_id = B`, used for an unrelated purpose). That row legitimately matches the new predicates and produces a false failure if the new block runs after it. Reorder rather than weakening any assertion:
 
 ```ts
 describe('member-data repo tenant isolation', () => {
@@ -4274,6 +4343,14 @@ git commit -m "feat(lgpd): the page a secretary opens when someone asks what the
 
 **The continuation is a keyset cursor, never a date.** Truncation happens at a position `(created_at, id)` which is mid-second. Resuming at `>= date` re-exports everything earlier that day; resuming at `> date` skips the rest of it. There is no third option — a date cursor cannot be both gapless and overlap-free. Neither `created_at` nor a `defaultRandom()` row id is personal data; the excluded values are the phone, the name, the body and `wa_message_id`, and none of those is in the cursor.
 
+> ⚠ **The tests below were written against an earlier `start()`-based design and DO NOT all pass against the correct `pull()` implementation.** Three of them are wrong, and the failures look like implementation bugs — which is the dangerous part, because "fixing" them means reverting the memory bound. Correct these as you transcribe:
+>
+> 1. **Any test asserting `pageMessages` was called must read the response body first.** With `highWaterMark: 1` the producer is demand-driven: until something consumes the stream, the loader is legitimately called **zero** times. A test that asserts `toHaveBeenCalledWith(...)` without `await res.text()` is asserting the producer ran eagerly — i.e. it passes only against the bug. Two tests here have that shape.
+> 2. **The ceiling test cannot trip `ROW_CEILING` (50 000) with a 2 500-row fixture.** Force truncation by lowering the effective bound in the fixture, or assert the budget path instead.
+> 3. **Add a resume-mid-prayers test.** Both hand-traces the task requires should be grounded in a passing test rather than in an argument.
+>
+> Measured on the real implementation: the `pull()` producer called the loader **0** times under a "one read then settle" harness; a hand-built eager `start()` equivalent called it **50** times (`ROW_CEILING / PAGE_SIZE`). That contrast is the backpressure proof — a content-only test cannot see it, because both emit byte-identical JSON.
+
 - [ ] **Step 1: Write the failing route test**
 
 Create `tests/member-export-route.test.ts`:
@@ -4568,6 +4645,11 @@ export async function GET(
     countMemberRows(churchId, contactId),
     getChurchById(churchId),
   ]);
+
+  // Rebound to an explicitly-typed const: TypeScript's null-narrowing from the
+  // 404 guard above does not survive into the nested generator closure under this
+  // repo's strict config, so the generator would see `MemberSubject | null`.
+  const subject: MemberSubject = contact;
 
   const resume = parseCursor(new URL(request.url).searchParams.get('apos'));
   const startedAt = Date.now();
@@ -5758,6 +5840,84 @@ describe('the display rule: no filter', () => {
 });
 ```
 
+- [ ] **Step 4c: Add `phoneHashCandidates` to `src/lib/erasure-hash.ts`**
+
+Task 2 deliberately left `hashPhone` as a single, exact fingerprint and did not widen it — correct, because the erasure path must hash exactly one thing. The ambiguity lives at the *reading* end, where a human types the number, so the fan-out belongs here and not in `hashPhone`.
+
+```ts
+/** Every digit-form of a typed number worth testing against a stored hash.
+ *
+ *  Stored numbers come from Meta's `from` field: E.164 without the plus, country
+ *  code always present (5511999998888). Numbers in the verify box come from a
+ *  secretary's keyboard, and "(11) 99999-8888" is the normal way to write one in
+ *  Brazil. hashPhone strips punctuation but cannot invent a country code, so the
+ *  two hash differently and a single-hash lookup reports "not erased" for someone
+ *  who was — a false negative that reads exactly like a clean answer.
+ *
+ *  So: try what was typed, and if it looks like a Brazilian number missing its
+ *  country code, try it with 55 as well. Ordered most-likely-first; the caller
+ *  stops at the first hit.
+ *
+ *  Deliberately NOT a general E.164 parser. This product serves Brazilian churches
+ *  and every stored number begins 55; a library that guessed at forty country
+ *  conventions would add failure modes to buy nothing. It also never STRIPS a
+ *  leading 55, because 55 is also a valid area code prefix in other countries and
+ *  guessing wrong would silently widen a lookup keyed on an audit record.
+ *
+ *  Returns [] when the secret is unset — same reason hashPhone returns null. */
+export function phoneHashCandidates(typed: string): string[] {
+  const digits = typed.replace(/\D+/g, '');
+  if (!digits) return [];
+
+  const forms = [digits];
+  // 10 digits = landline + area code, 11 = mobile with the nono dígito. Either
+  // way, no country code — so the same line stored by the webhook carries 55.
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+    forms.push(`55${digits}`);
+  }
+
+  return forms.map(hashPhone).filter((h): h is string => h !== null);
+}
+```
+
+Add to `tests/erasure-hash.test.ts`:
+
+```ts
+describe('phoneHashCandidates', () => {
+  it('matches a stored webhook number when the secretary types a local one', () => {
+    // The whole point. Stored: 5511999998888 (Meta's `from`).
+    // Typed:  (11) 99999-8888. Without the 55 variant these never meet.
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    const stored = hashPhone('5511999998888');
+    expect(phoneHashCandidates('(11) 99999-8888')).toContain(stored);
+  });
+
+  it('still matches when the secretary types the full number', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('+55 11 99999-8888')).toContain(hashPhone('5511999998888'));
+  });
+
+  it('covers a 10-digit landline too', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('11 3333-4444')).toContain(hashPhone('551133334444'));
+  });
+
+  it('does not invent a 55 for a number that already has one', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('5511999998888')).toEqual([hashPhone('5511999998888')]);
+  });
+
+  it('returns [] with no secret, and [] for a number with no digits', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    expect(phoneHashCandidates('sem números')).toEqual([]);
+    vi.stubEnv('ERASURE_HASH_SECRET', '');
+    expect(phoneHashCandidates('5511999998888')).toEqual([]);
+  });
+});
+```
+
+**Known residual, not closed here:** the *nono dígito*. Brazilian mobiles gained a 9th digit between 2012 and 2016, so an old `11 9999-8888` and today's `11 99999-8888` are the same line with genuinely different digits — not a punctuation difference this can normalise away. Every number this product stores arrives from WhatsApp in current format, so the case is close to unreachable; it is recorded rather than fixed because the fix is number-plan inference and would guess.
+
 - [ ] **Step 5: Write the verification action**
 
 Create `src/app/admin/(protected)/configuracoes/verify-actions.ts`:
@@ -5766,7 +5926,7 @@ Create `src/app/admin/(protected)/configuracoes/verify-actions.ts`:
 'use server';
 
 import { requireReadableSession } from '@/lib/auth/writable';
-import { hashPhone } from '@/lib/erasure-hash';
+import { phoneHashCandidates } from '@/lib/erasure-hash';
 import { findErasureByPhoneHash } from '@/lib/repo/erasure';
 
 export type VerifyResult = { message: string };
@@ -5780,10 +5940,23 @@ export type VerifyResult = { message: string };
 export async function verifyErasure(_prev: VerifyResult, formData: FormData): Promise<VerifyResult> {
   const { churchId } = await requireReadableSession();
 
-  const hash = hashPhone(String(formData.get('phone') ?? ''));
-  if (!hash) return { message: 'A verificação não está disponível nesta instalação.' };
+  // NOT a single hash. The stored number came from Meta's `from` field, which is
+  // always E.164 without the plus — 5511999998888, country code included. The
+  // number in this box was TYPED by a secretary, who will very reasonably write
+  // (11) 99999-8888. Digit-stripping alone makes those two different strings, so a
+  // single hash would answer "nenhuma exclusão registrada" for a member whose data
+  // WAS erased — the one question this box exists to answer correctly, wrong, in
+  // the direction that looks like a clean bill of health.
+  const candidates = phoneHashCandidates(String(formData.get('phone') ?? ''));
+  if (candidates.length === 0) {
+    return { message: 'A verificação não está disponível nesta instalação.' };
+  }
 
-  const found = await findErasureByPhoneHash(churchId, hash);
+  let found = null;
+  for (const hash of candidates) {
+    found = await findErasureByPhoneHash(churchId, hash);
+    if (found) break;
+  }
   if (!found) return { message: 'Nenhuma exclusão registrada para este número.' };
 
   return {

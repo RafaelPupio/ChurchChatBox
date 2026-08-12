@@ -79,6 +79,10 @@ export default async function ConversationPage({
         {convo.contact.mode === 'human' && <EndHandoffButton contactId={contactId} />}
       </div>
 
+      <Link href={`/admin/caixa/${contactId}/dados`} className="btnlink">
+        Dados e privacidade
+      </Link>
+
       {/* A member's reply reaches the database through the webhook and nothing
           tells this browser about it. Without a poll the thread is a snapshot of
           whenever the page happened to load. */}

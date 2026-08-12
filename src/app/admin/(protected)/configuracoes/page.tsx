@@ -1,10 +1,17 @@
 import { requireReadableSession } from '@/lib/auth/writable';
 import { getChurchById } from '@/lib/repo/church-admin';
 import { listAdmins } from '@/lib/repo/admin';
+import { listErasureRecords } from '@/lib/repo/erasure';
+import { describeErasureRecord } from '@/lib/erasure-copy';
+import { retentionCutoff } from '@/lib/retention';
+import { EXPIRING_WINDOW_MS } from '@/lib/expiring-window';
+import { countExpiringPrayers } from '@/lib/repo/prayer-admin';
 import { TextsForm } from './TextsForm';
 import { ConnectionStatus } from './CredentialsForm';
 import { PasswordForm } from './PasswordForm';
 import { StaffManager, type StaffRow } from './StaffManager';
+import { RetentionPanel } from './RetentionPanel';
+import { ExpiringWarning } from '../oracao/ExpiringWarning';
 
 export default async function ConfiguracoesPage() {
   const { churchId, adminUserId } = await requireReadableSession();
@@ -15,6 +22,12 @@ export default async function ConfiguracoesPage() {
   const staff: StaffRow[] = admins.map((a) => ({ id: a.id, email: a.email, name: a.name, isSelf: a.id === adminUserId }));
   // Already church-scoped by listAdmins; this is the caller's own row.
   const me = admins.find((a) => a.id === adminUserId);
+
+  const records = await listErasureRecords(churchId, 50);
+  const lines = records.map(describeErasureRecord);
+
+  const expiringBefore = new Date(retentionCutoff(new Date()).getTime() + EXPIRING_WINDOW_MS);
+  const expiring = await countExpiringPrayers(churchId, expiringBefore);
 
   const textValues: Record<string, string> = {
     name: church.name,
@@ -43,6 +56,8 @@ export default async function ConfiguracoesPage() {
       />
       {me && <PasswordForm email={me.email} />}
       <StaffManager staff={staff} />
+      <ExpiringWarning count={expiring} />
+      <RetentionPanel lines={lines} />
     </div>
   );
 }

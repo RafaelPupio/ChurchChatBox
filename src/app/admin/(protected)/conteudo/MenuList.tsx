@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { BEHAVIOUR_ITEM, isBehaviourKind } from '@/lib/behaviour-items';
+import { PRIVACY_ITEM } from '@/lib/church-defaults';
 import { moveItem, setItemActive } from './actions';
 
 export interface MenuListItem {
@@ -97,6 +98,13 @@ export function MenuList({ items }: { items: MenuListItem[] }) {
                 Editar
               </Link>
             </div>
+            {item.label === PRIVACY_ITEM.label && (
+              <p className="hint">
+                O item 🔒 Privacidade é o aviso que os membros leem no WhatsApp. Você pode editá-lo, mas
+                mantenha o que é guardado, por quê, por quanto tempo, com quem é compartilhado e como
+                pedir cópia ou exclusão.
+              </p>
+            )}
             {error?.id === item.id && <p className="error" style={{ marginBottom: 0 }}>{error.message}</p>}
           </div>
         );
