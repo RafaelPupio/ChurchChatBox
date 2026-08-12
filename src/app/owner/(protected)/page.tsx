@@ -113,7 +113,6 @@ export default async function OwnerChurchesPage() {
                 so there is no unique value available — two erasures in one church
                 in the same millisecond would collide on any composite key. */}
             {signals.map((s, i) => (
-              // eslint-disable-next-line react/no-array-index-key -- see below
               <li key={i} className="grow">
                 {s.createdAt.toLocaleDateString('pt-BR')} · {s.churchName} ·{' '}
                 {s.reason === 'retention' ? 'Limpeza automática (12 meses)' : 'Pedido do titular'} ·{' '}
