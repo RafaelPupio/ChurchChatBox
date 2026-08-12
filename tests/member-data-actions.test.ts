@@ -187,11 +187,13 @@ describe('deleteMemberData — failures', () => {
   it('resolves to {error}, not a rejection, when findErasureByContact throws on the zero-rows path', async () => {
     // Reached when openSubjectErasure itself returns null (no contact, or a
     // conflict) — the branch that reads the existing record to decide which of
-    // the three zero-rows outcomes applies.
+    // the three zero-rows outcomes applies. This is a READ guard, not the write
+    // RECORD_FAILED describes, so it earns its own pt-BR message — see
+    // STATUS_CHECK_FAILED in actions.ts.
     openSubjectErasure.mockResolvedValue(null);
     findErasureByContact.mockRejectedValue(new Error('neon down'));
     await expect(deleteMemberData('ct1', {}, confirmed())).resolves.toEqual({
-      error: 'Não foi possível registrar o comprovante de exclusão. Nada foi apagado — tente novamente.',
+      error: 'Não foi possível verificar se já existe um comprovante de exclusão para este contato. Nada foi apagado — tente novamente.',
     });
   });
 

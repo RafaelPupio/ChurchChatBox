@@ -30,6 +30,15 @@ export type DeleteResult =
 
 const RECORD_FAILED =
   'Não foi possível registrar o comprovante de exclusão. Nada foi apagado — tente novamente.';
+// Distinct from RECORD_FAILED on purpose: this guards a READ (is there already a
+// receipt for this contact?), not the write RECORD_FAILED describes. Reusing that
+// string here was not wrong — nothing has been written on this branch either way,
+// so "nada foi apagado" stays true — but "não foi possível registrar" claims this
+// call was trying to register something, when it was trying to find out whether
+// one already existed. A secretary re-reading this after a failed retry deserves
+// the accurate half of that sentence.
+const STATUS_CHECK_FAILED =
+  'Não foi possível verificar se já existe um comprovante de exclusão para este contato. Nada foi apagado — tente novamente.';
 const DELETE_FAILED_AFTER_RECORD =
   'A exclusão foi iniciada mas não terminou. Ela ficou marcada como pendente e será concluída automaticamente; você também pode tentar de novo agora.';
 const NOT_FOUND = 'Conversa não encontrada.';
@@ -113,7 +122,7 @@ export async function deleteMemberData(
   try {
     existing = await findErasureByContact(churchId, contactId);
   } catch {
-    return { error: RECORD_FAILED };
+    return { error: STATUS_CHECK_FAILED };
   }
   if (!existing) return { error: NOT_FOUND };
 
