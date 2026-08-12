@@ -6,6 +6,9 @@ import { findErasureByPhoneHash } from '@/lib/repo/erasure';
 
 export type VerifyResult = { message: string };
 
+const NO_DIGITS_TYPED = 'Digite o número de WhatsApp que deseja verificar.';
+const UNAVAILABLE = 'A verificação não está disponível nesta instalação.';
+
 /** "Sim, o número X foi apagado em 12/03" — the proof that works for the returning
  *  member, not just for the regulator.
  *
@@ -15,6 +18,18 @@ export type VerifyResult = { message: string };
 export async function verifyErasure(_prev: VerifyResult, formData: FormData): Promise<VerifyResult> {
   const { churchId } = await requireReadableSession();
 
+  const typed = String(formData.get('phone') ?? '');
+
+  // phoneHashCandidates collapses two different failures to the same []: an
+  // empty/non-numeric box, and a missing ERASURE_HASH_SECRET. Those are not the
+  // same failure to the secretary reading the message. "Not available in this
+  // installation" on a blank field she just submitted tells her the feature does
+  // not exist, when she simply typed nothing — so the digit check happens here,
+  // before phoneHashCandidates, to tell the two apart.
+  if (!/\d/.test(typed)) {
+    return { message: NO_DIGITS_TYPED };
+  }
+
   // NOT a single hash. The stored number came from Meta's `from` field, which is
   // always E.164 without the plus — 5511999998888, country code included. The
   // number in this box was TYPED by a secretary, who will very reasonably write
@@ -22,9 +37,9 @@ export async function verifyErasure(_prev: VerifyResult, formData: FormData): Pr
   // single hash would answer "nenhuma exclusão registrada" for a member whose data
   // WAS erased — the one question this box exists to answer correctly, wrong, in
   // the direction that looks like a clean bill of health.
-  const candidates = phoneHashCandidates(String(formData.get('phone') ?? ''));
+  const candidates = phoneHashCandidates(typed);
   if (candidates.length === 0) {
-    return { message: 'A verificação não está disponível nesta instalação.' };
+    return { message: UNAVAILABLE };
   }
 
   let found = null;
