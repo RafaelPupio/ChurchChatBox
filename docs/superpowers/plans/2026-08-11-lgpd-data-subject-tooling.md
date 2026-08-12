@@ -4343,6 +4343,14 @@ git commit -m "feat(lgpd): the page a secretary opens when someone asks what the
 
 **The continuation is a keyset cursor, never a date.** Truncation happens at a position `(created_at, id)` which is mid-second. Resuming at `>= date` re-exports everything earlier that day; resuming at `> date` skips the rest of it. There is no third option — a date cursor cannot be both gapless and overlap-free. Neither `created_at` nor a `defaultRandom()` row id is personal data; the excluded values are the phone, the name, the body and `wa_message_id`, and none of those is in the cursor.
 
+> ⚠ **The tests below were written against an earlier `start()`-based design and DO NOT all pass against the correct `pull()` implementation.** Three of them are wrong, and the failures look like implementation bugs — which is the dangerous part, because "fixing" them means reverting the memory bound. Correct these as you transcribe:
+>
+> 1. **Any test asserting `pageMessages` was called must read the response body first.** With `highWaterMark: 1` the producer is demand-driven: until something consumes the stream, the loader is legitimately called **zero** times. A test that asserts `toHaveBeenCalledWith(...)` without `await res.text()` is asserting the producer ran eagerly — i.e. it passes only against the bug. Two tests here have that shape.
+> 2. **The ceiling test cannot trip `ROW_CEILING` (50 000) with a 2 500-row fixture.** Force truncation by lowering the effective bound in the fixture, or assert the budget path instead.
+> 3. **Add a resume-mid-prayers test.** Both hand-traces the task requires should be grounded in a passing test rather than in an argument.
+>
+> Measured on the real implementation: the `pull()` producer called the loader **0** times under a "one read then settle" harness; a hand-built eager `start()` equivalent called it **50** times (`ROW_CEILING / PAGE_SIZE`). That contrast is the backpressure proof — a content-only test cannot see it, because both emit byte-identical JSON.
+
 - [ ] **Step 1: Write the failing route test**
 
 Create `tests/member-export-route.test.ts`:
@@ -4637,6 +4645,11 @@ export async function GET(
     countMemberRows(churchId, contactId),
     getChurchById(churchId),
   ]);
+
+  // Rebound to an explicitly-typed const: TypeScript's null-narrowing from the
+  // 404 guard above does not survive into the nested generator closure under this
+  // repo's strict config, so the generator would see `MemberSubject | null`.
+  const subject: MemberSubject = contact;
 
   const resume = parseCursor(new URL(request.url).searchParams.get('apos'));
   const startedAt = Date.now();
