@@ -196,12 +196,10 @@ export async function requireReadableSession(): Promise<AdminIdentity> {
  *  EXACTLY THREE FILES may call these: the erasure action, the member export route,
  *  and the expiring-prayers export route.
  *
- *  ⚠ That set is NOT yet enforced by anything. The allowlist test lands with the
- *  third caller — it asserts the set is exactly three, so written earlier it would
- *  fail on day one against files that do not exist. Until then this paragraph is a
- *  design intention, not a guarantee, and it is written that way on purpose: this
- *  subsystem's spec was once revised for claiming "a test says so" when no such
- *  test existed. Do not upgrade this wording until the test is real. */
+ *  That set IS enforced: tests/privilege-boundary.test.ts's "data-rights guard
+ *  allowlist" describe block scans every file under src/app/admin, src/app/api and
+ *  src/lib, excludes this one definition site by exact path, and asserts the
+ *  remaining callers are exactly those three. A fourth caller fails that test. */
 export async function requireDataRightsSession(): Promise<
   DataRightsIdentity | { blocked: 'revoked' }
 > {

@@ -191,3 +191,43 @@ describe('admin read guard', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/** The claim "exactly three entry points may skip the suspension check", made
+ *  enforceable. Erasure is the ONE WRITE a suspended church can perform; that
+ *  exemption must not spread by copy-paste. */
+describe('data-rights guard allowlist', () => {
+  /** The module that DEFINES the two guards. Excluded because walk() scans
+   *  src/lib and the amendment removed walk()'s skip: the definition site names
+   *  both guards and is not a caller. ONE EXACT PATH, so a fourth caller placed
+   *  anywhere — including elsewhere in src/lib/auth/ — is still caught. */
+  const DATA_RIGHTS_GUARD_MODULE = join(SRC, 'lib/auth/writable.ts');
+
+  const DATA_RIGHTS_CALLERS = [
+    join(SRC, 'app/admin/(protected)/caixa/[contactId]/dados/actions.ts'),
+    join(SRC, 'app/api/dados/[contactId]/route.ts'),
+    join(SRC, 'app/api/dados/oracoes-expirando/route.ts'),
+  ];
+  const GUARD_RE = /\b(?:require|check)DataRightsSession\b/;
+
+  it('exactly three files call a data-rights guard', () => {
+    const referencing = CHURCH_FACING_ROOTS.flatMap((d) => walk(d))
+      .filter((f) => f !== DATA_RIGHTS_GUARD_MODULE)
+      .filter((f) => GUARD_RE.test(readFileSync(f, 'utf8')));
+    expect(referencing.slice().sort()).toEqual(DATA_RIGHTS_CALLERS.slice().sort());
+  });
+
+  it('the excluded file really is the definition site', () => {
+    // A one-path exemption that quietly stopped naming the definition site would
+    // silently exempt whatever real caller later sits at that path — the same
+    // failure shape as the ALLOWED skip this suite removed.
+    const src = readFileSync(DATA_RIGHTS_GUARD_MODULE, 'utf8');
+    expect(src).toMatch(/export\s+async\s+function\s+requireDataRightsSession\b/);
+    expect(src).toMatch(/export\s+async\s+function\s+checkDataRightsSession\b/);
+  });
+
+  it('the excluded file is genuinely scanned, and only filtered afterwards', () => {
+    // Keeps the exclusion a fact about THIS assertion rather than a hole in the
+    // scanner, so writable.ts is still checked for restricted imports.
+    expect(CHURCH_FACING_ROOTS.flatMap((d) => walk(d))).toContain(DATA_RIGHTS_GUARD_MODULE);
+  });
+});

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { setPrayerStatus } from './actions';
 
@@ -9,6 +10,7 @@ export interface PrayerRow {
   status: 'novo' | 'orado';
   who: string;
   when: string;
+  contactId: string;
 }
 
 export function PrayerList({ prayers }: { prayers: PrayerRow[] }) {
@@ -41,6 +43,9 @@ export function PrayerList({ prayers }: { prayers: PrayerRow[] }) {
             <span className={`chip ${p.status === 'orado' ? 'on' : 'off'}`}>
               {p.status === 'orado' ? 'Orado ✓' : 'Novo'}
             </span>
+            <Link href={`/admin/caixa/${p.contactId}/dados`} className="btnlink">
+              Ver dados desta pessoa
+            </Link>
             <span className="grow" />
             <button
               disabled={pending}
