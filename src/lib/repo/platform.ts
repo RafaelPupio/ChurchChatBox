@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gt, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { church, contact, menuItem, webhookFailure } from '@/db/schema';
+import { church, contact, erasureRecord, menuItem, webhookFailure } from '@/db/schema';
 import { GRACE_PERIOD_MS, type ChurchStatus } from '@/lib/church-status';
 import type { AppliedMigration } from '@/lib/migration-drift';
 
@@ -230,5 +230,66 @@ export async function listRecentWebhookFailures(
     .leftJoin(church, eq(church.id, webhookFailure.churchId))
     .where(gt(webhookFailure.lastSeenAt, since))
     .orderBy(desc(webhookFailure.lastSeenAt))
+    .limit(limit);
+}
+
+export interface ErasureSignal {
+  churchId: string;
+  churchName: string;
+  reason: 'subject_request' | 'retention';
+  status: 'pending' | 'done';
+  messagesDeleted: number;
+  prayersDeleted: number;
+  contactsDeleted: number;
+  createdAt: Date;
+  completedAt: Date | null;
+}
+
+/** The vendor's cross-church view of every erasure. OWNER-ONLY, like everything
+ *  else in this module.
+ *
+ *  This is the other half of "a suspended church keeps a working delete button":
+ *  blocking the delete is forbidden, so the control is that the destruction cannot
+ *  be INVISIBLE. One erasure is a member exercising Art. 18; forty in an afternoon
+ *  is a church on its way out.
+ *
+ *  ⚠ THE COLUMN LIST IS THE MECHANISM, NOT A STYLE CHOICE. listChurches above does
+ *  db.select() with no argument and returns every column; the same here would put
+ *  subject_phone_hash and subject_contact_id into the object the moment anyone
+ *  renders it, and NOTHING WOULD FAIL. Three columns are deliberately absent:
+ *
+ *   - subject_phone_hash — pseudonymised, hence still personal data, and testable
+ *     by anyone holding ERASURE_HASH_SECRET. The party most likely to hold that
+ *     secret is the operator reading this view. Giving them both the key and the
+ *     hash is exactly the "audit trail becomes a copy of what was deleted" outcome
+ *     the owner decision forbids.
+ *   - subject_contact_id — correlates to nothing WITHOUT a copy of the old
+ *     database, and the operator is the one party with database access and a Neon
+ *     point-in-time restore window.
+ *   - performed_by_email — staff rather than subject, so not "whose data it was";
+ *     but not needed for "an erasure occurred and for which church" either, and
+ *     whether a staff email may sit in a permanent audit log is still open.
+ *
+ *  A test asserts the returned object's KEYS, because an absence check passes for
+ *  any column nobody thought to name.
+ *
+ *  No WHERE on church_id: cross-church by design. `limit` is a display window, not
+ *  a retention rule. */
+export async function listErasureSignals(limit = 100): Promise<ErasureSignal[]> {
+  return db
+    .select({
+      churchId: erasureRecord.churchId,
+      churchName: church.name,
+      reason: erasureRecord.reason,
+      status: erasureRecord.status,
+      messagesDeleted: erasureRecord.messagesDeleted,
+      prayersDeleted: erasureRecord.prayersDeleted,
+      contactsDeleted: erasureRecord.contactsDeleted,
+      createdAt: erasureRecord.createdAt,
+      completedAt: erasureRecord.completedAt,
+    })
+    .from(erasureRecord)
+    .innerJoin(church, eq(church.id, erasureRecord.churchId))
+    .orderBy(desc(erasureRecord.createdAt))
     .limit(limit);
 }
