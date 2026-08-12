@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireOwnerSession } from '@/lib/auth/owner-session';
 import { setChurchCredentials, setChurchStatus } from '@/lib/repo/platform';
-import { countMenuItems, createMenuItem } from '@/lib/repo/menu-admin';
-import { PRIVACY_ITEM } from '@/lib/church-defaults';
+import { countMenuItems, createMenuItem, listMenuItemsForAdmin, updateMenuItem } from '@/lib/repo/menu-admin';
+import { PRIVACY_ITEM, PRIVACY_ITEM_PREVIOUS_BODIES } from '@/lib/church-defaults';
 import type { ChurchStatus } from '@/lib/church-status';
 
 export interface OwnerActionResult {
@@ -80,6 +80,35 @@ export async function seedPrivacyItem(churchId: string): Promise<OwnerActionResu
   revalidatePath(`/owner/${churchId}`);
   revalidatePath('/owner');
   return { ok: true };
+}
+
+/** Rewrites a church's 🔒 Privacidade body to the current default, and ONLY when
+ *  its current body is byte-identical to a body we once seeded.
+ *
+ *  A church that edited its own text is never overwritten: the vendor may replace
+ *  vendor-authored text, never the controller's own words. Churches whose text was
+ *  edited simply report "edited" so Rafael can call them. */
+export async function updatePrivacyText(churchId: string): Promise<{ ok?: string; error?: string }> {
+  await requireOwnerSession();
+
+  const items = await listMenuItemsForAdmin(churchId);
+  const item = items.find((i) => i.label === PRIVACY_ITEM.label);
+  if (!item) return { error: 'Esta igreja não tem o item de Privacidade. Use "Recriar item de Privacidade".' };
+
+  if (item.bodyText === PRIVACY_ITEM.bodyText) {
+    return { ok: 'Esta igreja já está com o texto mais recente.' };
+  }
+  if (!PRIVACY_ITEM_PREVIOUS_BODIES.includes(item.bodyText)) {
+    return { error: 'Esta igreja editou o próprio texto de Privacidade. Fale com ela antes de alterar.' };
+  }
+
+  try {
+    await updateMenuItem(item.id, churchId, { bodyText: PRIVACY_ITEM.bodyText });
+  } catch {
+    return { error: 'Não foi possível atualizar o texto. Tente novamente.' };
+  }
+  revalidatePath(`/owner/${churchId}`);
+  return { ok: 'Texto de Privacidade atualizado.' };
 }
 
 export async function changeStatus(churchId: string, status: ChurchStatus): Promise<OwnerActionResult> {

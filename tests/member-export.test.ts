@@ -120,9 +120,8 @@ describe('exportFooter', () => {
     const footer = exportFooter({ truncatedAt: null, continuation: null });
     expect(footer.compartilhamento).toEqual(SHARING_DISCLOSURE);
     expect(footer.retencao).toBe(RETENTION_NOTE);
-    // C7: until the purge exists this must NOT promise 12 months. Task 14 flips
-    // the constant and updates this assertion in the same commit.
-    expect(RETENTION_NOTE).not.toContain('12 meses');
+    // C7 is satisfied: the purge exists, so the promise may be made.
+    expect(RETENTION_NOTE).toContain('12 meses');
     expect(footer.observacoes).toEqual(EXPORT_NOTES);
     expect('aviso' in footer).toBe(false);
     expect('continuacao' in footer).toBe(false);

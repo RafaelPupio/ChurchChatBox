@@ -7,6 +7,7 @@ import { effectiveStatus } from '@/lib/church-status';
 import { CredentialsForm } from './CredentialsForm';
 import { PrivacyItemWarning } from './PrivacyItemWarning';
 import { StatusControls } from './StatusControls';
+import { UpdatePrivacyText } from './UpdatePrivacyText';
 
 const STATUS_LABEL: Record<string, string> = {
   active: 'Ativa',
@@ -33,6 +34,7 @@ export default async function OwnerChurchPage({ params }: { params: Promise<{ ch
       </div>
 
       {menuItemCount === 0 && <PrivacyItemWarning churchId={churchId} />}
+      {menuItemCount > 0 && <UpdatePrivacyText churchId={churchId} />}
 
       <StatusControls churchId={churchId} status={status} />
 

@@ -18,16 +18,11 @@ export const SHARING_DISCLOSURE: string[] = [
   'Não vendemos, alugamos nem cedemos estes dados a terceiros.',
 ];
 
-/** ⚠ C7. This sentence describes what the system does TODAY. Task 14 — which runs
- *  only after the purge exists (Task 8) — replaces it with the 12-month promise,
- *  in the SAME commit that flips PRIVACY_ITEM.bodyText.
- *
- *  Written this way so that no task order can ship the promise early: the member's
- *  export file reads this constant, so a promise here is a promise in the artifact
- *  the member actually receives. That is the defect the repo already fixed once —
- *  see src/lib/church-defaults.ts:51-57. */
+/** True as of the commit that shipped the nightly purge (Task 8). Before that this
+ *  constant carried the present-tense wording, because the member's export file
+ *  reads it and a promise here is a promise in the artifact the member receives. */
 export const RETENTION_NOTE =
-  'A igreja guarda estes dados enquanto precisar deles para te atender. Você pode pedir a exclusão a qualquer momento.';
+  'As conversas e os pedidos de oração são apagados automaticamente após 12 meses.';
 
 export const EXPORT_NOTES: string[] = [
   'Áudios, fotos e outros arquivos enviados não são guardados por nós — apenas o registro de que uma mídia chegou.',
