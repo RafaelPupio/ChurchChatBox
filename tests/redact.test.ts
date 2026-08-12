@@ -38,5 +38,10 @@ describe('redactError', () => {
     expect(redactError('só uma string 5511999998888')).not.toContain('5511999998888');
     expect(() => redactError(undefined)).not.toThrow();
     expect(() => redactError({ weird: true })).not.toThrow();
+    // null was verified during implementation but not committed — so the suite's
+    // coverage was narrower than the test's name promised. That is the exact defect
+    // this subsystem shipped once in hashPhone ("it never throws", one path tested).
+    expect(() => redactError(null)).not.toThrow();
+    expect(redactError(null)).toBe('null');
   });
 });
