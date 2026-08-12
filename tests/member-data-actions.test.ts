@@ -163,6 +163,38 @@ describe('deleteMemberData — failures', () => {
     expect(deleteMember).not.toHaveBeenCalled();
   });
 
+  it('resolves to {error}, not a rejection, when loadMemberSubject throws', async () => {
+    // The contract says deleteMemberData never throws. Before this fix the read
+    // at the top of the function was unguarded, so a database failure here
+    // rejected the promise instead — and with no error.tsx/global-error.tsx in
+    // src/app, that surfaces a framework error page on the erasure screen.
+    loadMemberSubject.mockRejectedValue(new Error('neon down'));
+    await expect(deleteMemberData('ct1', {}, confirmed())).resolves.toEqual({
+      error: 'Não foi possível registrar o comprovante de exclusão. Nada foi apagado — tente novamente.',
+    });
+    expect(openSubjectErasure).not.toHaveBeenCalled();
+    expect(deleteMember).not.toHaveBeenCalled();
+  });
+
+  it('resolves to {error}, not a rejection, when countMemberRows throws', async () => {
+    countMemberRows.mockRejectedValue(new Error('neon down'));
+    await expect(deleteMemberData('ct1', {}, confirmed())).resolves.toEqual({
+      error: 'Não foi possível registrar o comprovante de exclusão. Nada foi apagado — tente novamente.',
+    });
+    expect(openSubjectErasure).not.toHaveBeenCalled();
+  });
+
+  it('resolves to {error}, not a rejection, when findErasureByContact throws on the zero-rows path', async () => {
+    // Reached when openSubjectErasure itself returns null (no contact, or a
+    // conflict) — the branch that reads the existing record to decide which of
+    // the three zero-rows outcomes applies.
+    openSubjectErasure.mockResolvedValue(null);
+    findErasureByContact.mockRejectedValue(new Error('neon down'));
+    await expect(deleteMemberData('ct1', {}, confirmed())).resolves.toEqual({
+      error: 'Não foi possível registrar o comprovante de exclusão. Nada foi apagado — tente novamente.',
+    });
+  });
+
   it('reports the "started but did not finish" error when the delete throws after the receipt opened', async () => {
     deleteMember.mockRejectedValue(new Error('neon down'));
     expect(await deleteMemberData('ct1', {}, confirmed())).toEqual({
@@ -197,5 +229,17 @@ describe('renameMember', () => {
     const fd = new FormData();
     fd.set('name', 'Invadido');
     expect(await renameMember('ct1', {}, fd)).toEqual({ error: 'Conversa não encontrada.' });
+  });
+
+  it('resolves to {error}, not a rejection, when renameContact throws', async () => {
+    // Same contract gap as deleteMemberData: renameContact was the one call in
+    // this file left unguarded while every other failure path returns a pt-BR
+    // string.
+    renameContact.mockRejectedValue(new Error('neon down'));
+    const fd = new FormData();
+    fd.set('name', 'Maria de Souza');
+    await expect(renameMember('ct1', {}, fd)).resolves.toEqual({
+      error: 'Não foi possível atualizar o nome. Tente novamente.',
+    });
   });
 });

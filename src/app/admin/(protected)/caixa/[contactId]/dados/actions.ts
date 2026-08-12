@@ -13,6 +13,8 @@ import {
   deleteMember,
   loadMemberSubject,
   renameContact,
+  type MemberCounts,
+  type MemberSubject,
 } from '@/lib/repo/member-data';
 
 /** Art. 18 III and VI. Both actions use requireDataRightsSession, which
@@ -31,6 +33,7 @@ const RECORD_FAILED =
 const DELETE_FAILED_AFTER_RECORD =
   'A exclusão foi iniciada mas não terminou. Ela ficou marcada como pendente e será concluída automaticamente; você também pode tentar de novo agora.';
 const NOT_FOUND = 'Conversa não encontrada.';
+const RENAME_FAILED = 'Não foi possível atualizar o nome. Tente novamente.';
 
 export async function deleteMemberData(
   contactId: string,
@@ -49,10 +52,23 @@ export async function deleteMemberData(
     return { error: 'Escreva APAGAR para confirmar.' };
   }
 
-  const contact = await loadMemberSubject(churchId, contactId);
-  const counts = contact
-    ? await countMemberRows(churchId, contactId)
-    : { messages: 0, prayers: 0, prayersNovo: 0 };
+  // Guarded together: both are reads that must succeed before anything is
+  // written, and the contract says this function never throws. Left unguarded, a
+  // database hiccup here would surface a framework error page on the erasure
+  // screen instead of a pt-BR message — there is no error.tsx or
+  // global-error.tsx anywhere in src/app to catch it. Nothing has been recorded
+  // or deleted yet at this point, so this earns the same message as the receipt
+  // insert failing below: nothing happened, safe to retry.
+  let contact: MemberSubject | null;
+  let counts: MemberCounts;
+  try {
+    contact = await loadMemberSubject(churchId, contactId);
+    counts = contact
+      ? await countMemberRows(churchId, contactId)
+      : { messages: 0, prayers: 0, prayersNovo: 0 };
+  } catch {
+    return { error: RECORD_FAILED };
+  }
 
   let opened: { id: string; createdAt: Date } | null = null;
   if (contact) {
@@ -90,7 +106,15 @@ export async function deleteMemberData(
   }
 
   // --- Zero rows inserted. Three possibilities, and the existing record says which.
-  const existing = await findErasureByContact(churchId, contactId);
+  // Same reasoning as the guard above: nothing has been deleted on this branch
+  // yet, so a failed read here is "nothing happened, try again", not a thrown
+  // error reaching the framework's default error page.
+  let existing: Awaited<ReturnType<typeof findErasureByContact>>;
+  try {
+    existing = await findErasureByContact(churchId, contactId);
+  } catch {
+    return { error: RECORD_FAILED };
+  }
   if (!existing) return { error: NOT_FOUND };
 
   if (existing.status === 'done') {
@@ -129,7 +153,15 @@ export async function renameMember(
   const name = String(formData.get('name') ?? '').trim();
   if (!name) return { error: 'O nome não pode ficar em branco.' };
 
-  const updated = await renameContact(session.churchId, contactId, name);
+  // Every other failure path in this file returns a pt-BR string; an unguarded
+  // throw here would be the odd one out, reaching the framework's default error
+  // page instead.
+  let updated: number;
+  try {
+    updated = await renameContact(session.churchId, contactId, name);
+  } catch {
+    return { error: RENAME_FAILED };
+  }
   if (updated === 0) return { error: NOT_FOUND };
 
   revalidatePath(`/admin/caixa/${contactId}`);
