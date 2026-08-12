@@ -62,8 +62,17 @@ export function phoneHashCandidates(typed: string): string[] {
 
   const forms = [digits];
   // 10 digits = landline + area code, 11 = mobile with the nono dígito. Either
-  // way, no country code — so the same line stored by the webhook carries 55.
-  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+  // way, that length is only reachable WITHOUT a country code — Brazilian E.164
+  // is 12 digits (landline) or 13 (mobile) — so length alone is sufficient here.
+  //
+  // An earlier version additionally required !digits.startsWith('55'), on the
+  // theory that a leading 55 meant a country code was already present. That
+  // confused a country code with an area code: 55 is also the DDD for Santa
+  // Maria/Uruguaiana/Bagé (Rio Grande do Sul). At 10-11 digits, digits.startsWith
+  // ('55') just as often means "this IS area code 55", and the guard silently
+  // produced zero candidates for every DDD-55 number — a false negative in the
+  // one box that must never give one. Deleted; see tests/erasure-hash.test.ts.
+  if (digits.length === 10 || digits.length === 11) {
     forms.push(`55${digits}`);
   }
 

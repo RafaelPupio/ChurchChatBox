@@ -87,6 +87,22 @@ describe('phoneHashCandidates', () => {
     expect(phoneHashCandidates('5511999998888')).toEqual([hashPhone('5511999998888')]);
   });
 
+  it('matches a DDD 55 mobile number — 55 is a real area code (Santa Maria/RS), not just a country code', () => {
+    // Regression for the false negative: a guard that also required
+    // !digits.startsWith('55') read a DDD-55 number as "already has a country
+    // code" and produced zero candidates, so a member erased in area code 55
+    // could never be matched in the verify box.
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    const stored = hashPhone('5555999998888'); // 55 (country) + 55 (DDD) + 999998888 (mobile)
+    expect(phoneHashCandidates('(55) 99999-8888')).toContain(stored);
+  });
+
+  it('matches a DDD 55 landline too', () => {
+    vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
+    const stored = hashPhone('555533334444'); // 55 (country) + 55 (DDD) + 33334444 (landline)
+    expect(phoneHashCandidates('55 3333-4444')).toContain(stored);
+  });
+
   it('returns [] with no secret, and [] for a number with no digits', () => {
     vi.stubEnv('ERASURE_HASH_SECRET', 'segredo-de-teste');
     expect(phoneHashCandidates('sem números')).toEqual([]);
