@@ -34,3 +34,50 @@ One line per decision, newest last. Format: **what** — *why*.
 - **The nota fiscal design stops at four experiments rather than a finished answer** (2026-08-07) — seven adversarial passes drove the findings from ten to zero, but the ones that kept coming back all lived in one seam: *we do not know what the emitter did.* Does a lookup return not-found for an in-flight document? Can a rejected reference be reused? What comes back when you submit a reference that already carries a nota? None is answerable on paper, so the first implementation task is running them against a homologação account — not writing code. The recurring defect class was worth more than any single fix: **an arm that declines to act by writing nothing is invisible, because nothing written is what success looks like too.** Three revisions each closed one instance and left the rule unstated, so the next revision recreated it. Stating it once and walking all 49 arms against it ended the recurrence.
 - **Boleto alongside card** (Rafael, 2026-08-08) — reverses the card-only call from two days earlier, on evidence rather than taste. The first framing was "churches *prefer* PIX"; the grounding research found that many small and mid-size churches **have no credit card on the CNPJ at all**, so card-only would have excluded them rather than merely annoyed them — and the workaround everyone suggests, the pastor's personal card plus a reimbursement, recreates precisely the mismatch the nota fiscal exists to prevent. The cost is real and must be designed for: an unpaid boleto is not retried, so the automatic dunning that the whole `past_due` lifecycle leaned on becomes something Rafael has to notice. See [[Whats Left]].
 - **The bot stopped promising a 12-month deletion it could not perform** (2026-08-08) — the seeded 🔒 Privacidade text told members *"as conversas são apagadas após 12 meses"* while nothing deleted anything, which put the product's only false statement inside the one menu item whose entire job is telling members the truth about their data. Under LGPD a promise you do not keep is worse than one you never made. The wording now describes what actually happens; the 12-month sentence returns in the same commit that ships the retention purge.
+
+## 2026-08-12 — LGPD Art. 18 data-subject tooling (34 commits, 978 tests)
+
+**A deletion must leave proof that is not a copy of what it deleted.** `erasure_record`
+holds counts, timestamps, the acting staff email and an HMAC of the phone — never the
+number, the name, or any body text. A record that stored the number would be a
+phone-number list of exactly the people who asked to be erased.
+
+**Evidence before destruction, always.** Both erasure and the nightly purge open a
+`pending` receipt *before* deleting and flip it to `done` after. The reverse ordering
+would destroy a year of message bodies with zero Art. 6 X evidence if the insert
+failed, and nothing anywhere would notice.
+
+**Children first, guarded parent last — the counting model.** `DELETE … RETURNING`
+does not report rows removed by a cascade. Deleting idle contacts first and letting
+their messages cascade away reports "340 mensagens" for a run that destroyed 1 240.
+The fix is not careful counting; it is deleting children first and then contacts under
+a `NOT EXISTS` guard, so **a cascade can never fire during a purge.** Proven by
+inverting the order and observing exactly `expected 340 to be 1240`.
+
+**Erasure is the one write a suspended church can perform.** An Art. 18 deadline runs
+against the *church* and the fine lands on the church; withholding the delete button
+over an unpaid invoice would make the vendor the proximate cause of a member's legal
+request going unanswered. The control that replaces the block is **visibility** — every
+erasure is readable by the vendor at `/owner`, with the phone hash, the contact id and
+the staff email deliberately *not* in that projection, so the audit trail never becomes
+a copy of what was just deleted.
+
+**C7 — no artifact may promise the purge until the purge exists.** This product once
+shipped "apagadas após 12 meses" before anything deleted anything, making the one menu
+item whose job is telling members the truth the place it lied. The promise now lives in
+two constants that flip in a single commit, so the bot notice and the member's export
+file can never disagree.
+
+**The statute is no longer named in member-facing text.** "Tratados de acordo com a
+LGPD" is a distinction real to a lawyer and invisible to a member reading it on a phone
+— it reads as *this is compliant*, which the bot must never claim. Plain language
+backed by a real button is more use than a law's number.
+
+**What this build actually taught.** Fourteen reviews each found a test whose name
+claimed a guarantee its body did not check: one guarding a database constraint it
+provably never exercised; assertions hardcoding an order that depends on
+`gen_random_uuid()`; a boundary map that passed green while enforcing nothing because a
+key had the wrong shape; a display-rule test that tested `Array.prototype.map` instead
+of the page. **Every defect that mattered was found by breaking the thing and watching
+what happened — none by reading.** A test nobody has watched fail is not a regression
+test.
