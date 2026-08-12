@@ -193,8 +193,15 @@ export async function requireReadableSession(): Promise<AdminIdentity> {
  *  never the control preventing it. The control that replaces it is visibility:
  *  every erasure is readable by the vendor in /owner. See listErasureSignals.
  *
- *  EXACTLY THREE FILES may call these. tests/privilege-boundary.test.ts asserts
- *  that set, so a fourth caller fails the suite rather than passing review. */
+ *  EXACTLY THREE FILES may call these: the erasure action, the member export route,
+ *  and the expiring-prayers export route.
+ *
+ *  ⚠ That set is NOT yet enforced by anything. The allowlist test lands with the
+ *  third caller — it asserts the set is exactly three, so written earlier it would
+ *  fail on day one against files that do not exist. Until then this paragraph is a
+ *  design intention, not a guarantee, and it is written that way on purpose: this
+ *  subsystem's spec was once revised for claiming "a test says so" when no such
+ *  test existed. Do not upgrade this wording until the test is real. */
 export async function requireDataRightsSession(): Promise<
   DataRightsIdentity | { blocked: 'revoked' }
 > {
