@@ -7,6 +7,7 @@ import { getChurchById } from '@/lib/repo/church-admin';
 import { recordOutboundMessage } from '@/lib/repo/message';
 import { sendText } from '@/lib/whatsapp';
 import { isReplyWindowOpen } from '@/lib/reply-window';
+import { redactError } from '@/lib/redact';
 
 export interface ReplyState {
   error?: string;
@@ -48,7 +49,11 @@ export async function sendReplyToContact(
   try {
     await sendText({ phoneNumberId: church.phoneNumberId, accessToken: church.accessToken }, convo.contact.phone, body);
   } catch (error) {
-    console.error('Reply send failed', error);
+    // Wrapped in redactError, not logged raw — sendText's Graph API errors carry
+    // Meta's raw response body, and the recipient's number is plausibly in it.
+    // The message string itself stays byte-identical ('Reply send failed') so the
+    // log stays greppable; only the value is wrapped. See redact.ts.
+    console.error('Reply send failed', redactError(error));
     return { error: 'Não foi possível enviar a mensagem. Tente novamente.' };
   }
 
