@@ -20,8 +20,13 @@ export function RetentionPanel({ lines }: { lines: string[] }) {
         <p className="hint">Nenhuma exclusão registrada ainda.</p>
       ) : (
         <ul>
-          {lines.map((line) => (
-            <li key={line} className="grow">{line}</li>
+          {/* Index key, not the rendered string: two interrupted retention rows
+              (see describeErasureRecord's "all-zero done" case) can render
+              byte-identical text on the same date, and there is no other
+              unique field in this projection to key on — same reasoning as
+              src/app/owner/(protected)/page.tsx's erasure-signal list. */}
+          {lines.map((line, i) => (
+            <li key={i} className="grow">{line}</li>
           ))}
         </ul>
       )}

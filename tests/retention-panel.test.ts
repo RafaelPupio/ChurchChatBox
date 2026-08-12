@@ -49,6 +49,37 @@ describe('describeErasureRecord', () => {
   });
 });
 
+/** Finding B2: RetentionPanel.tsx keyed its rendered lines by `key={line}`. Two
+ *  interrupted retention rows ("a execução foi interrompida antes de registrar
+ *  a contagem" — see describeErasureRecord above) landing on the same date
+ *  render BYTE-IDENTICAL strings, and there is no other unique field in this
+ *  projection to key on instead — so two such rows collide on the rendered text
+ *  itself. src/app/owner/(protected)/page.tsx already hit the same shape of
+ *  problem for its erasure-signal list and resolved it with an index key and a
+ *  comment; RetentionPanel did not.
+ *
+ *  RetentionPanel.tsx is a 'use client' component using useActionState, and
+ *  this repo's test tooling has no DOM environment to mount it in and trigger
+ *  React's reconciler (which is where a duplicate-key warning would actually
+ *  fire — a static/string render does not validate key uniqueness at all, only
+ *  the client fiber reconciler does). So, like the "display rule: no filter"
+ *  tests below — which read page.tsx's own source for the same reason — this
+ *  reads RetentionPanel.tsx's source directly. */
+describe('RetentionPanel — list keys (B2)', () => {
+  it('keys retention lines by their position, not by the rendered text', () => {
+    const src = readFileSync(
+      join(process.cwd(), 'src/app/admin/(protected)/configuracoes/RetentionPanel.tsx'),
+      'utf8',
+    );
+    const mapCall = src.match(/lines\.map\(\(line,\s*(\w+)\)\s*=>/);
+    expect(mapCall, 'lines.map must take an index parameter').not.toBeNull();
+    const indexName = mapCall![1];
+    expect(src).toMatch(new RegExp(`key=\\{${indexName}\\}`));
+    // The exact bug: keying by the string that two rows can share.
+    expect(src).not.toMatch(/key=\{line\}/);
+  });
+});
+
 /** The page under test never renders in this file — it is a Server Component
  *  that awaits requireReadableSession, getChurchById, listAdmins and
  *  countExpiringPrayers before it ever reaches the erasure records, which would
