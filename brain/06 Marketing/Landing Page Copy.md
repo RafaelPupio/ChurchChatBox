@@ -20,10 +20,32 @@ Breaking any of these makes the asset unusable, not just weaker.
 4. **The new chip is in step 1**, not the FAQ. Buried, it becomes a betrayal; upfront, it is proof of honesty.
 5. **No feature that isn't built** is described in the present tense. Everything on the not-built list
    is labelled out loud, on the page, in the reader's words. As of 2026-08-08 that list is:
-   **notificação, monitoramento/alerta, troca e recuperação de senha, cobrança (Stripe), nota fiscal,
-   exportar/apagar dados a pedido, expurgo automático, submenus, offboarding de igreja, redesenho mobile
-   do painel.**
-   ([[Whats Left]] — re-read it before adding any capability sentence to this page.)
+   **UPDATED 2026-08-12 — six of the ten items on the old list now ship.** Verified against the
+   codebase, not recalled:
+
+   | Was listed as missing | Status now |
+   |---|---|
+   | exportar dados a pedido | ✅ built — `/api/dados/[contactId]`, streams a JSON copy |
+   | apagar dados a pedido | ✅ built — erasure with a receipt, from the member's page |
+   | expurgo automático | ✅ built — nightly cron, 12 months |
+   | troca e recuperação de senha | ✅ built |
+   | monitoramento/alerta | ✅ built — webhook failures surface in `/owner` |
+   | redesenho mobile do painel | ✅ built |
+   | **cobrança (Stripe)** | ⬜ still not built |
+   | **nota fiscal** | ⬜ still not built |
+   | **submenus** | ⬜ still not built |
+   | **offboarding de igreja** | ⬜ still not built |
+
+   So the not-built list this page must label out loud is now just those last four, plus
+   **notificação**. ([[Whats Left]] — re-read before adding any capability sentence.)
+
+   **This changes the page's argument, not just its footnotes.** Data rights were an admission;
+   they are now the strongest thing this product can say to a church. A church handling member
+   data can show a member exactly what is held, hand over a copy, and delete it with proof —
+   and the bot's Privacidade notice tells members so in their own words. Under LGPD a church's
+   membership is *sensitive* personal data (Art. 5 II, religious conviction), so this is not a
+   compliance checkbox for the buyer — it is the part of the job they are least equipped to do
+   themselves. Rule 2 still binds: describe what the system **does**; never claim conformity.
 6. **No price.** The CTA is a conversation, which is what makes the missing price survivable.
 7. **Every external fact carries a source and a date read, or it is marked unverified.** Meta's pricing,
    Meta's list limits, Meta's verification requirements and any operator's chip price change without
