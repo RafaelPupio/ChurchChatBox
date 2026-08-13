@@ -1,0 +1,566 @@
+/* Marketing page styles. SCOPED — a CSS Module, so nothing here can reach the
+   panel's globals.css vocabulary and nothing there leaks in. The panel and this
+   page share a codebase and a domain; they share no styles on purpose.
+
+   Design constraints this file obeys, all from the audience rather than taste:
+
+   - The reader is a church secretary or pastor on a mid-range Android, in Brazil,
+     often at night. Everything is mobile-first and reads at arm's length.
+   - SYSTEM FONTS ONLY. No next/font, no webfont. A display serif is available on
+     every device that will load this page, costs zero bytes, and cannot shift the
+     layout when it arrives — because it is already there. A downloaded font would
+     buy a little polish and pay for it in the exact place this audience is worst
+     served.
+   - LIGHT ONLY, no dark-mode variant. Dark-first is a developer-tool convention;
+     this reader is not a developer and the church context reads as institutional,
+     not nocturnal.
+   - No shadows-on-shadows, no gradient meshes, no glassmorphism. The page has to
+     feel like something a serious person made, not like a template. */
+
+.page {
+  --ink: #16211f;
+  --ink-soft: #4a5754;
+  --ink-faint: #77837f;
+  --rule: #dfe4e2;
+  --paper: #ffffff;
+  --paper-warm: #f7f6f2;
+  --green: #075e54;
+  --green-deep: #054740;
+  --green-wash: #eef4f2;
+  /* One measure for prose, everywhere. Long lines are the single most common way
+     a text-heavy page becomes unreadable on a wide screen. */
+  --measure: 34rem;
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The display face. Georgia ships on effectively every device this page will
+   meet; the stack behind it covers the rest. A serif here is doing real work —
+   it separates this from the flat sans of every SaaS landing page, and it reads
+   as considered rather than launched. */
+.page h1,
+.page h2,
+.page h3 {
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  text-wrap: balance;
+  margin: 0;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.prose {
+  max-width: var(--measure);
+}
+
+/* ---------- header ---------- */
+
+.header {
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.headerInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 64px;
+}
+
+.brand {
+  font-family: Georgia, "Iowan Old Style", serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.brandMark {
+  color: var(--green);
+}
+
+.headerLink {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.95rem;
+  /* 44px minimum touch target, same floor the panel uses. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.25rem;
+}
+
+.headerLink:hover {
+  color: var(--green);
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  padding: clamp(2.5rem, 7vw, 5rem) 0 clamp(2rem, 5vw, 3.5rem);
+}
+
+.heroGrid {
+  display: grid;
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: center;
+}
+
+@media (min-width: 60rem) {
+  .heroGrid {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+}
+
+.h1 {
+  font-size: clamp(1.9rem, 5.2vw, 3rem);
+}
+
+.h1 em {
+  font-style: normal;
+  display: block;
+  color: var(--green);
+}
+
+.heroSub {
+  margin: 1.25rem 0 0;
+  font-size: clamp(1.02rem, 2.2vw, 1.15rem);
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+.ctaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 1.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 120ms ease;
+}
+
+.btn:hover {
+  background: var(--green-deep);
+}
+
+.btnGhost {
+  background: transparent;
+  color: var(--green);
+}
+
+.btnGhost:hover {
+  background: var(--green-wash);
+}
+
+/* The honesty line, directly under the buttons. Deliberately NOT hidden in a
+   footnote: with nothing live anywhere, a reader who discovers that later feels
+   sold to. Discovering it here is the whole argument of the page. */
+.heroHonesty {
+  margin: 1.1rem 0 0;
+  font-size: 0.92rem;
+  color: var(--ink-faint);
+  max-width: var(--measure);
+}
+
+/* ---------- the illustrated phone ----------
+   An ILLUSTRATION, not a screenshot, and that is a hard product rule rather than
+   an art direction: no outbound WhatsApp message from this product has ever
+   succeeded, so a photo-realistic capture would be a fabrication of a thing that
+   has not happened. Flat shapes, obviously drawn. It gets replaced by a real
+   capture the day the first real message sends. */
+
+.phone {
+  justify-self: center;
+  width: min(280px, 78vw);
+  border: 1px solid var(--rule);
+  border-radius: 24px;
+  background: #e9e4dc;
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(22, 33, 31, 0.06), 0 12px 28px rgba(22, 33, 31, 0.08);
+}
+
+.phoneBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--green);
+  color: #fff;
+  border-radius: 14px 14px 0 0;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.phoneAvatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+}
+
+.phoneBody {
+  background: #efeae2;
+  border-radius: 0 0 14px 14px;
+  padding: 12px 10px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.bubble {
+  background: #fff;
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  max-width: 92%;
+  box-shadow: 0 1px 1px rgba(22, 33, 31, 0.08);
+}
+
+.bubbleMine {
+  background: #d9fdd3;
+  justify-self: end;
+}
+
+.menuCard {
+  background: #fff;
+  border-radius: 10px;
+  padding: 4px 0 0;
+  box-shadow: 0 1px 1px rgba(22, 33, 31, 0.08);
+  font-size: 0.84rem;
+}
+
+.menuItem {
+  padding: 9px 12px;
+  border-top: 1px solid #eceae5;
+  color: var(--ink-soft);
+}
+
+.menuItem:first-child {
+  border-top: 0;
+}
+
+.menuCta {
+  padding: 9px 12px;
+  border-top: 1px solid #eceae5;
+  color: var(--green);
+  font-weight: 600;
+  text-align: center;
+}
+
+.phoneCaption {
+  margin: 0.85rem 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+  text-align: center;
+  max-width: 280px;
+}
+
+/* ---------- generic sections ---------- */
+
+.section {
+  padding: clamp(2.5rem, 6vw, 4.5rem) 0;
+  border-top: 1px solid var(--rule);
+}
+
+.sectionWarm {
+  background: var(--paper-warm);
+}
+
+.h2 {
+  font-size: clamp(1.45rem, 3.4vw, 2rem);
+  max-width: 24ch;
+}
+
+.lede {
+  margin: 1rem 0 0;
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+.p {
+  margin: 1rem 0 0;
+  max-width: var(--measure);
+}
+
+.pTight {
+  margin: 0.5rem 0 0;
+  max-width: var(--measure);
+}
+
+/* ---------- steps ---------- */
+
+.steps {
+  display: grid;
+  gap: 1.25rem;
+  margin: 2rem 0 0;
+  counter-reset: step;
+}
+
+@media (min-width: 48rem) {
+  .steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.75rem;
+  }
+}
+
+.step {
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--paper);
+  padding: 1.4rem;
+}
+
+.stepNum {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--green-wash);
+  color: var(--green);
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 0.85rem;
+}
+
+.stepTitle {
+  font-size: 1.08rem;
+  margin: 0 0 0.4rem;
+}
+
+.stepBody {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.96rem;
+}
+
+/* The chip warning lives INSIDE step 1, not in a FAQ. Research found no
+   competitor states this honestly anywhere — so this is a deliberate bet, not a
+   copied pattern. Buried, it becomes a betrayal on the church's first day. */
+.stepWarn {
+  margin: 0.85rem 0 0;
+  padding: 0.75rem 0.85rem;
+  border-left: 3px solid #b45309;
+  background: #fffaf0;
+  color: #7c4a09;
+  font-size: 0.9rem;
+  border-radius: 0 6px 6px 0;
+}
+
+/* ---------- answer list ---------- */
+
+.answers {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 46rem;
+}
+
+@media (min-width: 40rem) {
+  .answers {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.answer {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: var(--paper);
+  font-size: 0.97rem;
+}
+
+.answerIcon {
+  flex: none;
+}
+
+/* ---------- "what it is not" ---------- */
+
+.notList {
+  margin: 1.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: var(--measure);
+  display: grid;
+  gap: 0.9rem;
+}
+
+.notItem {
+  padding-left: 1.6rem;
+  position: relative;
+  color: var(--ink-soft);
+}
+
+.notItem::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--ink-faint);
+}
+
+.notItem strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---------- data section ----------
+   Narrower measure, no icons, no padlocks, no shields. Security iconography
+   reads as marketing and undercuts the one section whose entire value is that it
+   does not sound like marketing. */
+
+.dataBlock {
+  max-width: 36rem;
+}
+
+.dataPoint {
+  margin: 1.5rem 0 0;
+}
+
+.dataPoint strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.dataPoint span {
+  color: var(--ink-soft);
+}
+
+.refusal {
+  margin: 1.5rem 0 0;
+  padding: 1.1rem 1.25rem;
+  background: var(--green-wash);
+  border-radius: 10px;
+  max-width: 36rem;
+}
+
+.refusal p {
+  margin: 0;
+}
+
+.refusal p + p {
+  margin-top: 0.7rem;
+}
+
+/* ---------- honest limits ---------- */
+
+.limits {
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: var(--measure);
+  display: grid;
+  gap: 0.7rem;
+}
+
+.limit {
+  display: flex;
+  gap: 0.65rem;
+  align-items: baseline;
+  color: var(--ink-soft);
+  font-size: 0.97rem;
+}
+
+.limitMark {
+  flex: none;
+  color: var(--ink-faint);
+}
+
+/* ---------- CTA ---------- */
+
+.cta {
+  background: var(--green);
+  color: #fff;
+  padding: clamp(2.75rem, 7vw, 4.5rem) 0;
+}
+
+.cta h2 {
+  color: #fff;
+}
+
+.ctaBody {
+  margin: 1rem 0 0;
+  color: rgba(255, 255, 255, 0.88);
+  max-width: var(--measure);
+}
+
+.ctaBtn {
+  background: #fff;
+  color: var(--green-deep);
+  border-color: #fff;
+  margin-top: 1.75rem;
+}
+
+.ctaBtn:hover {
+  background: #eef4f2;
+}
+
+.ctaFine {
+  margin: 1.1rem 0 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.75);
+  max-width: var(--measure);
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  border-top: 1px solid var(--rule);
+  padding: 2.5rem 0;
+  font-size: 0.9rem;
+  color: var(--ink-faint);
+}
+
+.footerGrid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 40rem) {
+  .footerGrid {
+    grid-template-columns: 1fr auto;
+    align-items: end;
+  }
+}
+
+.footer a {
+  color: var(--ink-soft);
+}
+
+.footerLegal {
+  margin: 0.4rem 0 0;
+}
